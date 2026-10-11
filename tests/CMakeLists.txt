@@ -73,3 +73,7 @@ endif()
 add_executable(replay_disk_test replay_disk.cpp)
 target_link_libraries(replay_disk_test PRIVATE opencmr2_platform)
 add_test(NAME replay_disk COMMAND replay_disk_test)
+
+add_executable(sector_culling_test sector_culling.cpp)
+target_link_libraries(sector_culling_test PRIVATE opencmr2_platform)
+add_test(NAME sector_culling COMMAND sector_culling_test)

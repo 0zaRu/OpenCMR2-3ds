@@ -2262,7 +2262,7 @@ int __cdecl Game_CompareTransparentDrawEntries(const void *a, const void *b)
     return depthA < depthB ? 1 : -1;
 }
 
-extern unsigned short g_unk0x006ed5f0[];
+extern unsigned short g_visibleSectorIndices[];
 // GLOBAL: CMR2 0x0059be6c
 SceneNode *g_unk0x0059be6c;
 // GLOBAL: CMR2 0x00597cc0
@@ -2281,7 +2281,7 @@ void Game_DrawStaticStageObjects(void)
     FixVector delta;
 
     for (i = 0; i < (unsigned int)g_sectorCullEnabled; i++) {
-        pObject = (StageObjectDraw *)g_sectors[g_unk0x006ed5f0[i]]->pObjects;
+        pObject = (StageObjectDraw *)g_sectors[g_visibleSectorIndices[i]]->pObjects;
         while (pObject != NULL) {
             if (pObject->field_0x14 != 0) {
                 if ((pObject->pMesh->flags & 2) != 0) {
@@ -2387,7 +2387,7 @@ void Game_DrawUnsortedNodes(int bit)
     CGraphics::SetZEnable(0);
     CGraphics::SetZWriteEnable(0);
     for (i = 0; i < (unsigned int)g_sectorCullEnabled; i++) {
-        pNode = g_sectors[g_unk0x006ed5f0[i]]->pFirstNode;
+        pNode = g_sectors[g_visibleSectorIndices[i]]->pFirstNode;
         while (pNode != NULL) {
             if (pNode->visible == 0)
                 Game_DrawViewMaskNode(pNode, bit);
@@ -2432,7 +2432,7 @@ void Game_DrawCulledSectorMeshes(void)
     g_sectorFramePrevious = CMain::GetFrameDelta();
     Gfx_SetTransform(GFX_TRANSFORM_WORLD, &g_unk0x005207b8);
     for (i = 0; i < (unsigned int)g_sectorCullEnabled; i++) {
-        pMesh = (Mesh *)g_sectors[g_unk0x006ed5f0[i]]->pMesh;
+        pMesh = (Mesh *)g_sectors[g_visibleSectorIndices[i]]->pMesh;
         if (pMesh != NULL) {
             if ((pMesh->flags & 0x1000) != 0)
                 Graphics_DrawMeshLOD(pMesh, 0, 1, 0);
@@ -2464,7 +2464,7 @@ void Game_DrawCulledSectorShadows(void)
     if (g_sceneShadowMeshes != NULL) {
         CGraphics::SetZWriteEnable(0);
         for (i = 0; i < (unsigned int)g_sectorCullEnabled; i++) {
-            pMesh = g_sceneShadowMeshes[g_unk0x006ed5f0[i]];
+            pMesh = g_sceneShadowMeshes[g_visibleSectorIndices[i]];
             if (pMesh != NULL)
                 Graphics_DrawMeshLOD(pMesh, 1, 0, 1);
         }
@@ -2484,7 +2484,7 @@ void Game_QueueVisibleSectorNodes(int param1)
 
     i = 0;
     if ((unsigned int)g_sectorCullEnabled > 0) {
-        pIndex = (unsigned short *)g_unk0x006ed5f0;
+        pIndex = (unsigned short *)g_visibleSectorIndices;
         do {
             pNode = g_sectors[*pIndex]->pFirstNode;
             while (pNode != NULL) {
@@ -2576,7 +2576,7 @@ int Game_DrawSceneViewport(SceneNode *pRoot, SceneNode *pCamera, void *pRect, in
             Gfx_SetTransform(GFX_TRANSFORM_WORLD, &g_unk0x005207b8);
             Sector_CullGridAroundViewNode(pCamera, pRect);
             for (i = 0; i < (unsigned int)g_sectorCullEnabled; i++)
-                Scene_RelightSector(((unsigned short *)g_unk0x006ed5f0)[i]);
+                Scene_RelightSector(((unsigned short *)g_visibleSectorIndices)[i]);
         }
         CGraphics::SetCullMode(CGame::GetSectorDrawState());
         FixMatrix_GetPosition(&cameraPosition, &pCamera->world);
