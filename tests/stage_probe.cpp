@@ -325,6 +325,8 @@ int main(int argc, char **argv) {
     unsigned raceFrame = 0;
     Menu *lastMenu = nullptr;
     int lastMode = -1;
+    DWORD serviceOrigin = 0;
+    bool mapOpening = false, mapExpanded = false;
     for (unsigned frame = 0; frame < 200000 && probe.tick < ticks && !CGame::m_shouldExit; ++frame) {
         SDL_PumpEvents();
         // The dummy driver does not focus windows. This test dispatches frames
@@ -337,6 +339,7 @@ int main(int argc, char **argv) {
         }
         if (mode != lastMode) { fprintf(stderr, "probe: resource mode %d at %u ms\n", mode, virtualTime); lastMode = mode; }
         memset(keys, 0, sizeof(keys));
+        bool holdMap = false;
         if (mode != 3) {
             Menu *menu = mode == 2 ? g_pMenu0x00831778 : FrontendMenu_GetActiveMenu();
             if (menu && menu != lastMenu) {
@@ -347,9 +350,24 @@ int main(int argc, char **argv) {
                                 : menu->items[item].id >= 0 ? CFrontend::GetTextString(menu->items[item].id) : "");
                 lastMenu = menu;
             }
-            if (mode == 2 && menu && menu->itemCount >= 4) menu->cursor = 3;
+            if (mode == 2 && getenv("OPENCMR2_PROBE_EXPAND_MAP")) {
+                if (!serviceOrigin) serviceOrigin = virtualTime;
+                if (g_selectedOptionPreviewPanel != 0xff) {
+                    const FixInterp &panel = g_optionPreviewPanels[g_selectedOptionPreviewPanel];
+                    if (panel.current > 0) mapOpening = true;
+                    if (!mapExpanded && panel.current == 0x10000 && panel.phase2 == 0x10000) {
+                        mapExpanded = true;
+                        fprintf(stderr, "probe: preliminary map fully expanded at %u ms\n", virtualTime);
+                    }
+                }
+                holdMap = !mapExpanded || virtualTime - serviceOrigin < 5000;
+            }
+            if (mode == 2 && menu && menu->itemCount >= 4) {
+                int forced = ForcedCursor(menu->field_0x4);
+                menu->cursor = holdMap ? 0 : forced >= 0 ? forced : 3;
+            }
             else ConfigureMenu(menu);
-            if (frame % 12 == 6 || !menu) {
+            if ((frame % 12 == 6 || !menu) && !(holdMap && mapOpening)) {
                 keys[INPUT_KEY_RETURN] = 0x80;
                 // Blocking movie playback consumes SDL events itself.
                 SDL_Event event{};
@@ -373,7 +391,8 @@ int main(int argc, char **argv) {
     }
     Diagnostics::observer = nullptr;
     if (!probe.Write((std::string(argv[2]) + ".frames.csv").c_str())) return 1;
-    const bool ok = probe.tick == ticks && probe.drivingTick > 0 && probe.scenarioCorrect && probe.playbackCorrect && !ferror(file);
+    const bool ok = probe.tick == ticks && probe.drivingTick > 0 && probe.scenarioCorrect && probe.playbackCorrect && !ferror(file) &&
+        (!getenv("OPENCMR2_PROBE_EXPAND_MAP") || mapExpanded);
     fprintf(stderr, "probe: RNG changed in %u race frames without a simulation step\n", probe.renderOnlyRngChanges);
     fprintf(stderr, "probe: %u ticks, %u driving ticks, %u ms; %s\n", probe.tick, probe.drivingTick, virtualTime, ok ? "complete" : "FAILED");
     CMain::UnwindGameCallbacks();

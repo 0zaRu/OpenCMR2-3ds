@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Exercise the real host, arcade ghost and recorded replay paths."""
+"""Exercise the real host, arcade ghost, replay and enlarged preliminary map paths."""
 import argparse
 import json
 import os
@@ -9,6 +9,7 @@ import subprocess
 import tempfile
 
 SCENARIOS = {
+    'preliminary-map': (500, {'OPENCMR2_PROBE_EXPAND_MAP': '1'}),
     'arcade-time-trial': (500, {'OPENCMR2_PROBE_CURSORS': '0:2,88:2,29:0',
                               'OPENCMR2_PROBE_EXPECT_CARS': '2',
                               'OPENCMR2_PROBE_EXPECT_MODE': '7'}),
@@ -54,6 +55,8 @@ def verify(probe, data, output):
         if len(records) != count or records[-1]['tick'] != count - 1:
             raise ValueError(f'{name}: incomplete trace')
         report[name] = {'ticks': count, 'driving_ticks': records[-1]['driving_tick']}
+        if name == 'preliminary-map' and 'probe: preliminary map fully expanded' not in log:
+            raise ValueError('preliminary map never fully expanded')
         if name == 'recorded-replay':
             report[name]['replay'] = verify_replay(log)
         print(f'{name}: PASS ({count} ticks)', flush=True)
