@@ -4,6 +4,7 @@
 #include "FixedPoint.h"
 #include "Car.h"
 #include "Mesh.h"
+#include "MeshVertex.h"
 #include "CarParts.h"
 #include "FinRecord.h"
 #include "FileBuffer.h"
@@ -464,7 +465,7 @@ void StageObject_GetSkyNode(SceneNode **pOut);
 void StageObject_GetGroundNode(SceneNode **pOut);
 void StageObject_GetCloudNodes(SceneNode **pOut1, SceneNode **pOut2);
 extern Mesh *g_groundReferenceMesh;
-extern FixVector g_unk0x00592114;
+extern FixVector g_lightMeshReferencePoint;
 
 // GLOBAL: CMR2 0x00591c80
 int g_stageHeightSamples[200];
@@ -525,7 +526,7 @@ short g_stageMesh5Count;
 // GLOBAL: CMR2 0x00592144
 short g_stageMesh6Count;
 // GLOBAL: CMR2 0x00592146
-BYTE g_unk0x00592146;
+BYTE g_groundColourAlpha;
 // GLOBAL: CMR2 0x00592147
 BYTE g_stageColourAlpha;
 // GLOBAL: CMR2 0x00592148
@@ -637,9 +638,9 @@ void Stage_InitLightMeshes(void)
                     minimum = value;
             }
             if (i == 0x68) {
-                g_unk0x00592114.y = value;
-                g_unk0x00592114.x = (int)llrint(((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[0] * CGraphics::m_65536);
-                g_unk0x00592114.z = (int)llrint(((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[2] * CGraphics::m_65536);
+                g_lightMeshReferencePoint.y = value;
+                g_lightMeshReferencePoint.x = (int)llrint(((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[0] * CGraphics::m_65536);
+                g_lightMeshReferencePoint.z = (int)llrint(((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[2] * CGraphics::m_65536);
             }
             g_stageHeightSamples[i] = value;
         }
@@ -696,7 +697,7 @@ void Stage_SetHeightColours(BYTE *pLow, BYTE *pHigh, BYTE *pReference, int refer
     delta.y = colour.y - low.y;
     delta.z = colour.z - low.z;
 
-    t = FixMul(g_unk0x00592114.y - g_stageHeightMin, g_stageHeightScale);
+    t = FixMul(g_lightMeshReferencePoint.y - g_stageHeightMin, g_stageHeightScale);
     if (t < 0)
         t = 0;
     else if (t > 0x10000)
@@ -727,11 +728,11 @@ void Stage_SetHeightColours(BYTE *pLow, BYTE *pHigh, BYTE *pReference, int refer
         height = (int)llrint((double)vy * CGraphics::m_65536);
         float vx = vertex[0];
         float vz = vertex[2];
-        if (height == g_unk0x00592114.y &&
-            g_unk0x00592114.x == (int)llrint((double)vx * CGraphics::m_65536) &&
-            g_unk0x00592114.z == (int)llrint((double)vz * CGraphics::m_65536)) {
-            *(DWORD *)((BYTE *)g_stageMesh0Copy->pVertexData + i * 0x30 + 0x18) = ((0xffffff00 | refColour[0]) << 8 | refColour[1]) << 8 | refColour[2];
-            *(DWORD *)((BYTE *)g_stageMesh0Copy->pVertexData + i * 0x30 + 0x1c) = (DWORD)*pAlpha << 24;
+        if (height == g_lightMeshReferencePoint.y &&
+            g_lightMeshReferencePoint.x == (int)llrint((double)vx * CGraphics::m_65536) &&
+            g_lightMeshReferencePoint.z == (int)llrint((double)vz * CGraphics::m_65536)) {
+            ((MeshVertexF *)g_stageMesh0Copy->pVertexData)[i].diffuseColour = ((0xffffff00 | refColour[0]) << 8 | refColour[1]) << 8 | refColour[2];
+            ((MeshVertexF *)g_stageMesh0Copy->pVertexData)[i].specularColour = (DWORD)*pAlpha << 24;
         } else {
             t = FixMul(height - g_stageHeightMin, g_stageHeightScale);
             if (t < 0)
@@ -753,9 +754,9 @@ void Stage_SetHeightColours(BYTE *pLow, BYTE *pHigh, BYTE *pReference, int refer
             value = colour.z >> 16;
             if (value > 255) value = 255;
             else if (value < 0) value = 0;
-            *(DWORD *)((BYTE *)g_stageMesh0Copy->pVertexData + i * 0x30 + 0x18) =
+            ((MeshVertexF *)g_stageMesh0Copy->pVertexData)[i].diffuseColour =
                 ((0xffffff00 | rgb[0]) << 8 | rgb[1]) << 8 | (BYTE)value;
-            *(DWORD *)((BYTE *)g_stageMesh0Copy->pVertexData + i * 0x30 + 0x1c) = (DWORD)*pAlpha << 24;
+            ((MeshVertexF *)g_stageMesh0Copy->pVertexData)[i].specularColour = (DWORD)*pAlpha << 24;
         }
     }
     g_stageColourDirty = 1;
@@ -900,7 +901,7 @@ void Track_SetFogAndSkyAlpha(DWORD *pColour, int start, int end)
         t = distance - start;
         range = end - start;
         if (range == 0)
-            g_unk0x00592146 = 0;
+            g_groundColourAlpha = 0;
         else
             t = FixDiv(t, range);
         alpha = FixMul(t, 0xff0000) >> 16;
@@ -910,7 +911,7 @@ void Track_SetFogAndSkyAlpha(DWORD *pColour, int start, int end)
             alpha = 0;
         a = -1 - alpha;
     }
-    g_unk0x00592146 = a;
+    g_groundColourAlpha = a;
     g_stageColourAlpha = a;
 }
 
@@ -1082,9 +1083,9 @@ void Track_ShiftMeshAndAmbientHeights(int oldHeight, int newHeight, int mode)
             float vx = vertex[0];
             float vy = vertex[1];
             float vz = vertex[2];
-            if (g_unk0x00592114.x != (int)llrint((double)vx * CGraphics::m_65536) ||
-                g_unk0x00592114.y != (int)llrint((double)vy * CGraphics::m_65536) ||
-                g_unk0x00592114.z != (int)llrint((double)vz * CGraphics::m_65536))
+            if (g_lightMeshReferencePoint.x != (int)llrint((double)vx * CGraphics::m_65536) ||
+                g_lightMeshReferencePoint.y != (int)llrint((double)vy * CGraphics::m_65536) ||
+                g_lightMeshReferencePoint.z != (int)llrint((double)vz * CGraphics::m_65536))
                 vertex[1] = (float)((double)height * CGraphics::m_oneOver65536);
         }
     }
@@ -1093,7 +1094,7 @@ void Track_ShiftMeshAndAmbientHeights(int oldHeight, int newHeight, int mode)
     g_unk0x00592130 = newHeight;
     g_unk0x0059212c = oldHeight;
     StageObject_GetSkyNode(&object);
-    FixMatrix_RotateVector(&position, &g_unk0x00592114, &object->current);
+    FixMatrix_RotateVector(&position, &g_lightMeshReferencePoint, &object->current);
     position.y += g_unk0x0059212c;
     Scene_SetLightPosition(g_stageAmbientNode, position.x, position.y, position.z);
 }
