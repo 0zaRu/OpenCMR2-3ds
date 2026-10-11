@@ -1,4 +1,18 @@
+#include "RaceCallbackStorage.h"
+#include <windows.h>
 #include "Car.h"
+#include "Collision2D.h"
+#include "TrackCollisionData.h"
+#include "Sprite.h"
+#include "NetPlayers.h"
+#include "Particle.h"
+#include "RaceRecord.h"
+#include "RallyRouteNode.h"
+#include "MovingObject.h"
+#include "MeshCollisionRecord.h"
+#include "SoundCurve.h"
+#include "CallbackState.h"
+#include "AIReferenceRoute.h"
 #include "Sector.h"
 #include "CarResources.h"
 #include "CarPhysics.h"
@@ -7,11 +21,13 @@
 #include "OptionPreviewGeometry.h"
 #include "StageTiming.h"
 #include "StageWeather.h"
+#include "StageTimingSpread.h"
 #include "Stage.h"
 #include "StageBlock.h"
 #include "CarLightState.h"
 #include "Glow.h"
 #include "CarExhaust.h"
+#include "Menu.h"
 #include <stddef.h>
 #include "LayoutChecks.h"
 
@@ -19,8 +35,28 @@
 // and packed callback tables. Keep these checks out of shared headers:
 // extra declarations there can alter MSVC6 code generation in unrelated TUs.
 CMR2_LAYOUT_CHECK(CarSizeCheck, sizeof(Car) == 0xc24);
+CMR2_LAYOUT_CHECK(RallyRouteNode_SizeCheck, sizeof(RallyRouteNode) == 0x2c);
+CMR2_LAYOUT_CHECK(RallyRouteNode_position_Check, offsetof(RallyRouteNode, position) == 0);
+CMR2_LAYOUT_CHECK(RallyRouteNode_field_0xc_Check, offsetof(RallyRouteNode, field_0xc) == 0xc);
+CMR2_LAYOUT_CHECK(RallyRouteNode_flags_Check, offsetof(RallyRouteNode, flags) == 0x18);
+CMR2_LAYOUT_CHECK(RallyRouteNode_callId_Check, offsetof(RallyRouteNode, callId) == 0x19);
+CMR2_LAYOUT_CHECK(RallyRouteNode_field_0x1a_Check, offsetof(RallyRouteNode, field_0x1a) == 0x1a);
+CMR2_LAYOUT_CHECK(RallyRouteNode_backwardNearLimit_Check, offsetof(RallyRouteNode, backwardNearLimit) == 0x1c);
+CMR2_LAYOUT_CHECK(RallyRouteNode_backwardFarLimit_Check, offsetof(RallyRouteNode, backwardFarLimit) == 0x20);
+CMR2_LAYOUT_CHECK(RallyRouteNode_forwardNearLimit_Check, offsetof(RallyRouteNode, forwardNearLimit) == 0x24);
+CMR2_LAYOUT_CHECK(RallyRouteNode_forwardFarLimit_Check, offsetof(RallyRouteNode, forwardFarLimit) == 0x28);
 CMR2_LAYOUT_CHECK(CarPositionOffsetCheck, offsetof(Car, position) == 0x2d0);
 CMR2_LAYOUT_CHECK(CarWheelNodesOffsetCheck, offsetof(Car, pWheelNodes) == 0x738);
+CMR2_LAYOUT_CHECK(Car_contactSurfaces_Check, offsetof(Car, contactSurfaces) == 0xad6);
+CMR2_LAYOUT_CHECK(Car_field_0xaea_Check, offsetof(Car, field_0xaea) == 0xaea);
+CMR2_LAYOUT_CHECK(Car_field_0xb35Prefix_Check, offsetof(Car, field_0xb35Prefix) == 0xb35);
+CMR2_LAYOUT_CHECK(Car_previousContactCount_Check, offsetof(Car, previousContactCount) == 0xb3e);
+CMR2_LAYOUT_CHECK(Car_pendingContactCount_Check, offsetof(Car, pendingContactCount) == 0xb3f);
+CMR2_LAYOUT_CHECK(Car_field_0xb40_Check, offsetof(Car, field_0xb40) == 0xb40);
+CMR2_LAYOUT_CHECK(Car_objectContactState_Check, offsetof(Car, objectContactState) == 0xbbc);
+CMR2_LAYOUT_CHECK(Car_field_0xbcc_Check, offsetof(Car, field_0xbcc) == 0xbcc);
+CMR2_LAYOUT_CHECK(CarContactSurfaceSizeCheck, sizeof(((Car *)0)->contactSurfaces) == 20);
+CMR2_LAYOUT_CHECK(CarObjectContactSizeCheck, sizeof(((Car *)0)->objectContactState) == 32);
 CMR2_LAYOUT_CHECK(CarWheelLoadOffsetCheck, offsetof(Car, wheelLoad) == 0x860);
 CMR2_LAYOUT_CHECK(CarIndexOffsetCheck, offsetof(Car, index) == 0xb1a);
 CMR2_LAYOUT_CHECK(CarCameraRejectionOffsetCheck, offsetof(Car, firstCameraBlocked) == 0xb68);
@@ -324,6 +360,7 @@ CMR2_LAYOUT_CHECK(CarPartFloatVertex_pos_GeometryOffsetCheck, offsetof(DeformFlo
 CMR2_LAYOUT_CHECK(CarPartFloatVertex_normal_GeometryOffsetCheck, offsetof(DeformFloatVertex, normal) == 0xc);
 CMR2_LAYOUT_CHECK(CarPartFloatVertex_colour_GeometryOffsetCheck, offsetof(DeformFloatVertex, colour) == 0x18);
 CMR2_LAYOUT_CHECK(MeshTriangle_vertexIndex_GeometryOffsetCheck, offsetof(MeshTriangle, vertexIndex) == 0x40);
+CMR2_LAYOUT_CHECK(MeshTriangle_textureIndex_OffsetCheck, offsetof(MeshTriangle, textureIndex) == 0x4);
 CMR2_LAYOUT_CHECK(Mesh_pVertexData_GeometryOffsetCheck, offsetof(Mesh, pVertexData) == 0xc);
 CMR2_LAYOUT_CHECK(Mesh_pTriangles_GeometryOffsetCheck, offsetof(Mesh, pTriangles) == 0x24);
 CMR2_LAYOUT_CHECK(Mesh_triangleCount_GeometryOffsetCheck, offsetof(Mesh, triangleCount) == 0x28);
@@ -677,6 +714,66 @@ CMR2_LAYOUT_CHECK(StageObjectDiskSizeCheck, sizeof(StageObject) == 0xa0);
 CMR2_LAYOUT_CHECK(StageObjectMeshOffsetCheck, offsetof(StageObject, pMesh) == 0xc);
 CMR2_LAYOUT_CHECK(StageObjectFlagsPrefixCheck, offsetof(StageObject, field_0x10) == 0x10);
 CMR2_LAYOUT_CHECK(StageObjectNextOffsetCheck, offsetof(StageObject, pNext) == 0x98);
+CMR2_LAYOUT_CHECK(SectorObjectEntry_SizeCheck, sizeof(SectorObjectEntry) == 8);
+CMR2_LAYOUT_CHECK(SectorObjectEntry_pObject_Check, offsetof(SectorObjectEntry, pObject) == 0);
+CMR2_LAYOUT_CHECK(SectorObjectEntry_pBounds_Check, offsetof(SectorObjectEntry, pBounds) == 4);
+CMR2_LAYOUT_CHECK(SectorObjectBounds_SizeCheck, sizeof(SectorObjectBounds) == 8);
+CMR2_LAYOUT_CHECK(SectorObjectBounds_radius_Check, offsetof(SectorObjectBounds, radius) == 0);
+CMR2_LAYOUT_CHECK(SectorObjectBounds_pProjection_Check, offsetof(SectorObjectBounds, pProjection) == 4);
+CMR2_LAYOUT_CHECK(ObjectPointBounds_SizeCheck, sizeof(ObjectPointBounds) == 0xc);
+CMR2_LAYOUT_CHECK(ObjectPointBounds_directionX_Check, offsetof(ObjectPointBounds, directionX) == 0);
+CMR2_LAYOUT_CHECK(ObjectPointBounds_directionZ_Check, offsetof(ObjectPointBounds, directionZ) == 2);
+CMR2_LAYOUT_CHECK(ObjectPointBounds_top_Check, offsetof(ObjectPointBounds, top) == 4);
+CMR2_LAYOUT_CHECK(ObjectPointBounds_bottom_Check, offsetof(ObjectPointBounds, bottom) == 6);
+CMR2_LAYOUT_CHECK(ObjectPointBounds_halfWidth_Check, offsetof(ObjectPointBounds, halfWidth) == 8);
+CMR2_LAYOUT_CHECK(ObjectPointBounds_halfLength_Check, offsetof(ObjectPointBounds, halfLength) == 10);
+CMR2_LAYOUT_CHECK(MovingObject_SizeCheck, sizeof(MovingObject) == 0x128);
+CMR2_LAYOUT_CHECK(MovingObject_pEntry_Check, offsetof(MovingObject, pEntry) == 0);
+CMR2_LAYOUT_CHECK(MovingObject_pObject_Check, offsetof(MovingObject, pObject) == 4);
+CMR2_LAYOUT_CHECK(MovingObject_keyB_Check, offsetof(MovingObject, keyB) == 8);
+CMR2_LAYOUT_CHECK(MovingObject_keyA_Check, offsetof(MovingObject, keyA) == 0x48);
+CMR2_LAYOUT_CHECK(MovingObject_current_Check, offsetof(MovingObject, current) == 0x88);
+CMR2_LAYOUT_CHECK(MovingObject_pMatrix_Check, offsetof(MovingObject, pMatrix) == 0xc8);
+CMR2_LAYOUT_CHECK(MovingObject_mode_Check, offsetof(MovingObject, mode) == 0xcc);
+CMR2_LAYOUT_CHECK(MovingObject_objectType_Check, offsetof(MovingObject, objectType) == 0xd0);
+CMR2_LAYOUT_CHECK(MovingObject_groundNormal_Check, offsetof(MovingObject, groundNormal) == 0xd4);
+CMR2_LAYOUT_CHECK(MovingObject_spin_Check, offsetof(MovingObject, spin) == 0xe0);
+CMR2_LAYOUT_CHECK(MovingObject_velocity_Check, offsetof(MovingObject, velocity) == 0xec);
+CMR2_LAYOUT_CHECK(MovingObject_field_0xf8_Check, offsetof(MovingObject, field_0xf8) == 0xf8);
+CMR2_LAYOUT_CHECK(MovingObject_probe_Check, offsetof(MovingObject, probe) == 0x104);
+CMR2_LAYOUT_CHECK(MovingObject_groundHeight_Check, offsetof(MovingObject, groundHeight) == 0x110);
+CMR2_LAYOUT_CHECK(MovingObject_actionState_Check, offsetof(MovingObject, actionState) == 0x114);
+CMR2_LAYOUT_CHECK(MovingObject_sectorIndex_Check, offsetof(MovingObject, sectorIndex) == 0x118);
+CMR2_LAYOUT_CHECK(MovingObject_groundTriangle_Check, offsetof(MovingObject, groundTriangle) == 0x11c);
+CMR2_LAYOUT_CHECK(MovingObject_field_0x11e_Check, offsetof(MovingObject, field_0x11e) == 0x11e);
+CMR2_LAYOUT_CHECK(MovingObject_field_0x120_Check, offsetof(MovingObject, field_0x120) == 0x120);
+CMR2_LAYOUT_CHECK(MovingObject_moved_Check, offsetof(MovingObject, moved) == 0x124);
+CMR2_LAYOUT_CHECK(MovingObjects_SizeCheck, sizeof(MovingObjects) == 0x3448);
+CMR2_LAYOUT_CHECK(MovingObjects_entries_Check, offsetof(MovingObjects, entries) == 0);
+CMR2_LAYOUT_CHECK(MovingObjects_meshCount_Check, offsetof(MovingObjects, meshCount) == 0x2e40);
+CMR2_LAYOUT_CHECK(MovingObjects_field_0x2e41_Check, offsetof(MovingObjects, field_0x2e41) == 0x2e41);
+CMR2_LAYOUT_CHECK(MovingObjects_carDistance_Check, offsetof(MovingObjects, carDistance) == 0x2f44);
+CMR2_LAYOUT_CHECK(MovingObjects_count_Check, offsetof(MovingObjects, count) == 0x3444);
+CMR2_LAYOUT_CHECK(MeshCollisionRecord_SizeCheck, sizeof(MeshCollisionRecord) == 0x5c);
+CMR2_LAYOUT_CHECK(MeshCollisionRecord_type_Check, offsetof(MeshCollisionRecord, type) == 0);
+CMR2_LAYOUT_CHECK(MeshCollisionRecord_field_0x1_Check, offsetof(MeshCollisionRecord, field_0x1) == 1);
+CMR2_LAYOUT_CHECK(MeshCollisionRecord_matrix_Check, offsetof(MeshCollisionRecord, matrix) == 4);
+CMR2_LAYOUT_CHECK(MeshCollisionRecord_width_Check, offsetof(MeshCollisionRecord, width) == 0x44);
+CMR2_LAYOUT_CHECK(MeshCollisionRecord_length_Check, offsetof(MeshCollisionRecord, length) == 0x48);
+CMR2_LAYOUT_CHECK(MeshCollisionRecord_height_Check, offsetof(MeshCollisionRecord, height) == 0x4c);
+CMR2_LAYOUT_CHECK(MeshCollisionRecord_field_0x50_Check, offsetof(MeshCollisionRecord, field_0x50) == 0x50);
+CMR2_LAYOUT_CHECK(MeshCollisionRecord_pNext_Check, offsetof(MeshCollisionRecord, pNext) == 0x58);
+CMR2_LAYOUT_CHECK(Mesh_SizeCheck, sizeof(Mesh) == 0x120);
+CMR2_LAYOUT_CHECK(Mesh_field_0x104_Check, offsetof(Mesh, field_0x104) == 0x104);
+CMR2_LAYOUT_CHECK(Mesh_pCollisionRecords_Check, offsetof(Mesh, pCollisionRecords) == 0x10c);
+CMR2_LAYOUT_CHECK(Mesh_sizeUnits_Check, offsetof(Mesh, sizeUnits) == 0x110);
+CMR2_LAYOUT_CHECK(StageObject_position_Check, offsetof(StageObject, position) == 0);
+CMR2_LAYOUT_CHECK(StageObject_flags_Check, offsetof(StageObject, flags) == 0x10);
+CMR2_LAYOUT_CHECK(StageObject_visible_Check, offsetof(StageObject, visible) == 0x14);
+CMR2_LAYOUT_CHECK(StageObject_field_0x15_Check, offsetof(StageObject, field_0x15) == 0x15);
+CMR2_LAYOUT_CHECK(StageObject_matrix_Check, offsetof(StageObject, matrix) == 0x18);
+CMR2_LAYOUT_CHECK(StageObject_field_0x58_Check, offsetof(StageObject, field_0x58) == 0x58);
+CMR2_LAYOUT_CHECK(StageObject_lightLevel_Check, offsetof(StageObject, lightLevel) == 0x9c);
 
 // Runtime Texture fields used by option-menu sprites; original Win32 offsets.
 CMR2_LAYOUT_CHECK(TextureRuntimeSizeCheck, sizeof(Texture) == 0x130);
@@ -695,3 +792,281 @@ CMR2_LAYOUT_CHECK(BestTimeCursorIndexOffsetCheck, offsetof(BestTimeCursor, index
 CMR2_LAYOUT_CHECK(BestTimeCursorPointerOffsetCheck, offsetof(BestTimeCursor, bytes) == 0);
 CMR2_LAYOUT_CHECK(BestTimeCursorWordOffsetCheck, offsetof(BestTimeCursor, word) == 0);
 CMR2_LAYOUT_CHECK(BestTimeCursorRallyOffsetCheck, offsetof(BestTimeCursor, rally) == 0);
+
+#include "Graphics.h"
+CMR2_LAYOUT_CHECK(GraphicsSizeCheck, sizeof(Graphics) == 0x3cc);
+CMR2_LAYOUT_CHECK(GraphicsRectContextCheck, offsetof(Graphics, field309_0x150) == 0x150);
+CMR2_LAYOUT_CHECK(GraphicsRectWidthCheck, offsetof(Graphics, resX) == 0);
+CMR2_LAYOUT_CHECK(GraphicsRectHeightCheck, offsetof(Graphics, resY) == 4);
+
+// Car runtime basis overlays and start/reset fields (original Win32 offsets).
+CMR2_LAYOUT_CHECK(CarState_bodyAxes_Check, offsetof(Car, bodyAxes) == 0x360);
+CMR2_LAYOUT_CHECK(CarState_right_Check, offsetof(Car, right) == 0x360);
+CMR2_LAYOUT_CHECK(CarState_up_Check, offsetof(Car, up) == 0x36c);
+CMR2_LAYOUT_CHECK(CarState_forward_Check, offsetof(Car, forward) == 0x378);
+CMR2_LAYOUT_CHECK(CarState_targetAxes_Check, offsetof(Car, targetAxes) == 0x384);
+CMR2_LAYOUT_CHECK(CarState_targetRight_Check, offsetof(Car, targetRight) == 0x384);
+CMR2_LAYOUT_CHECK(CarState_targetUp_Check, offsetof(Car, targetUp) == 0x390);
+CMR2_LAYOUT_CHECK(CarState_targetForward_Check, offsetof(Car, targetForward) == 0x39c);
+CMR2_LAYOUT_CHECK(CarState_corners_Check, offsetof(Car, corners) == 0x270);
+CMR2_LAYOUT_CHECK(CarState_cornerPrev_Check, offsetof(Car, cornerPrev) == 0x300);
+CMR2_LAYOUT_CHECK(CarState_cornerPrev2_Check, offsetof(Car, cornerPrev2) == 0x330);
+CMR2_LAYOUT_CHECK(CarState_cornerAxis_Check, offsetof(Car, cornerAxis) == 0x4a4);
+CMR2_LAYOUT_CHECK(CarState_cornerNormal_Check, offsetof(Car, cornerNormal) == 0x504);
+CMR2_LAYOUT_CHECK(CarState_steepTime_Check, offsetof(Car, steepTime) == 0xa9c);
+CMR2_LAYOUT_CHECK(CarState_cornerTriangle_Check, offsetof(Car, cornerTriangle) == 0xa9e);
+CMR2_LAYOUT_CHECK(CarState_tipAngle_Check, offsetof(Car, tipAngle) == 0xb18);
+CMR2_LAYOUT_CHECK(CarState_field_0xb45_Check, offsetof(Car, field_0xb45) == 0xb45);
+CMR2_LAYOUT_CHECK(CarState_field_0xb28_Check, offsetof(Car, field_0xb28) == 0xb28);
+CMR2_LAYOUT_CHECK(CarState_wheelSteeringAngle_Check, offsetof(Car, wheelSteeringAngle) == 0xb10);
+CMR2_LAYOUT_CHECK(CarState_targetSteeringAngle_Check, offsetof(Car, targetSteeringAngle) == 0xb12);
+CMR2_LAYOUT_CHECK(CarState_gear_Check, offsetof(Car, gear) == 0xb1e);
+CMR2_LAYOUT_CHECK(CarState_surfaceNoise_Check, offsetof(Car, surfaceNoise) == 0xa74);
+CMR2_LAYOUT_CHECK(CarState_surfaceNoiseTarget_Check, offsetof(Car, surfaceNoiseTarget) == 0xa78);
+CMR2_LAYOUT_CHECK(CarBodyAxesSizeCheck, sizeof(((Car *)0)->bodyAxes) == 0x24);
+CMR2_LAYOUT_CHECK(CarTargetAxesSizeCheck, sizeof(((Car *)0)->targetAxes) == 0x24);
+CMR2_LAYOUT_CHECK(CarNoiseTargetWidthCheck, sizeof(((Car *)0)->surfaceNoiseTarget) == 4);
+// Menus: items are walked by index; the action follows four 32-bit words.
+CMR2_LAYOUT_CHECK(MenuItemSizeCheck, sizeof(MenuItem) == 0x14);
+CMR2_LAYOUT_CHECK(MenuItemActionOffsetCheck, offsetof(MenuItem, action) == 0x10);
+CMR2_LAYOUT_CHECK(MenuItemsOffsetCheck, offsetof(Menu, items) == 0x14);
+CMR2_LAYOUT_CHECK(MenuSizeCheck, sizeof(Menu) == 0x1e0);
+
+// Contiguous fixed-word surface inputs and typed output cursor (Win32).
+CMR2_LAYOUT_CHECK(CarSurfaceCompression_Check, offsetof(Car, surfaceCompressionWords) == 0x880);
+CMR2_LAYOUT_CHECK(CarSurfaceCompressionSize_Check, sizeof(((Car *)0)->surfaceCompressionWords) == 0x58);
+CMR2_LAYOUT_CHECK(CarSurfaceWheelLean_Check, offsetof(Car, wheelSpinForWheelLean) == 0x890);
+CMR2_LAYOUT_CHECK(CarSurfaceBodyLean_Check, offsetof(Car, wheelSpinForBodyLean) == 0x8a0);
+CMR2_LAYOUT_CHECK(CarSurfaceCornerMass_Check, offsetof(Car, cornerMass) == 0x8b0);
+CMR2_LAYOUT_CHECK(CarSurfaceTyreGrip_Check, offsetof(Car, tyreGrip) == 0x8b4);
+CMR2_LAYOUT_CHECK(CarSurfaceNextInputs_Check, offsetof(Car, field_0x8b8) == 0x8b8);
+CMR2_LAYOUT_CHECK(CarSurfaceOutputWords_Check, offsetof(Car, surfaceOutputWords) == 0);
+CMR2_LAYOUT_CHECK(CarSurfaceOutputBytes_Check, offsetof(Car, surfaceOutputBytes) == 0);
+CMR2_LAYOUT_CHECK(CarSurfaceOutputWordsSize_Check, sizeof(((Car *)0)->surfaceOutputWords) == 0x1d0);
+CMR2_LAYOUT_CHECK(CarSurfaceOutputBytesSize_Check, sizeof(((Car *)0)->surfaceOutputBytes) == 0x1d0);
+CMR2_LAYOUT_CHECK(CarSurfaceGripB_Check, offsetof(CarCornerGrip, gripB) == 4);
+CMR2_LAYOUT_CHECK(CarSurfaceGrip2B_Check, offsetof(CarCornerGrip, grip2B) == 0xc);
+CMR2_LAYOUT_CHECK(CarSurfaceWheelDrag_Check, offsetof(CarWheelSurface, drag) == 4);
+CMR2_LAYOUT_CHECK(CarSurfaceWheelEffect_Check, offsetof(CarWheelSurface, effect) == 0);
+
+// Runtime local collision-corner overlay and spawn field widths (Win32).
+CMR2_LAYOUT_CHECK(CarSpawnLocalCorners_Check, offsetof(Car, collisionCornersLocal) == 0x210);
+CMR2_LAYOUT_CHECK(CarSpawnLocalCornersSize_Check, sizeof(((Car *)0)->collisionCornersLocal) == 0x60);
+CMR2_LAYOUT_CHECK(CarSpawnLowerCorners_Check, offsetof(Car, wheelPos) == 0x210);
+CMR2_LAYOUT_CHECK(CarSpawnUpperCorners_Check, offsetof(Car, upperCornersLocal) == 0x240);
+CMR2_LAYOUT_CHECK(CarSpawnFlags_Check, offsetof(Car, flags) == 0xb1c);
+CMR2_LAYOUT_CHECK(CarSpawnSteerLimit_Check, offsetof(Car, maxSteeringAngleDegrees) == 0xb16);
+CMR2_LAYOUT_CHECK(CarSpawnEngineStart_Check, offsetof(Car, engineStartTimer) == 0xafe);
+CMR2_LAYOUT_CHECK(CarSpawnFlagsWidth_Check, sizeof(((Car *)0)->flags) == 1);
+CMR2_LAYOUT_CHECK(CarSpawnSteerLimitWidth_Check, sizeof(((Car *)0)->maxSteeringAngleDegrees) == 2);
+CMR2_LAYOUT_CHECK(CarSpawnEngineStartWidth_Check, sizeof(((Car *)0)->engineStartTimer) == 2);
+
+CMR2_LAYOUT_CHECK(CarSurfaceDragLevel_Check, offsetof(Car, surfaceDragLevel) == 0xb29);
+CMR2_LAYOUT_CHECK(CarSurfaceDragLevelWidth_Check, sizeof(((Car *)0)->surfaceDragLevel) == 1);
+
+// Runtime collision box; two native geometry pointers follow the fixed span.
+CMR2_LAYOUT_CHECK(CollisionBox_halfWidth_Check, offsetof(CollisionBox, halfWidth) == 0x0);
+CMR2_LAYOUT_CHECK(CollisionBox_halfLength_Check, offsetof(CollisionBox, halfLength) == 0x4);
+CMR2_LAYOUT_CHECK(CollisionBox_top_Check, offsetof(CollisionBox, top) == 0x8);
+CMR2_LAYOUT_CHECK(CollisionBox_bottom_Check, offsetof(CollisionBox, bottom) == 0xc);
+CMR2_LAYOUT_CHECK(CollisionBox_axisA_Check, offsetof(CollisionBox, axisA) == 0x10);
+CMR2_LAYOUT_CHECK(CollisionBox_axisB_Check, offsetof(CollisionBox, axisB) == 0x1c);
+CMR2_LAYOUT_CHECK(CollisionBox_pad_0x28_Check, offsetof(CollisionBox, pad_0x28) == 0x28);
+CMR2_LAYOUT_CHECK(CollisionBox_points_Check, offsetof(CollisionBox, points) == 0x30);
+CMR2_LAYOUT_CHECK(CollisionBox_pArray_Check, offsetof(CollisionBox, pArray) == 0x90);
+CMR2_LAYOUT_CHECK(CollisionBox_pVertex_Check, offsetof(CollisionBox, pVertex) == 0x94);
+CMR2_LAYOUT_CHECK(CollisionBoxSizeCheck, sizeof(CollisionBox) == 0x98);
+CMR2_LAYOUT_CHECK(CollisionBoxPointsSizeCheck, sizeof(((CollisionBox *)0)->points) == 0x60);
+CMR2_LAYOUT_CHECK(CollisionBoxPointWordsCheck, offsetof(CollisionBox, pointWords) == 0x30);
+CMR2_LAYOUT_CHECK(CollisionBoxPointWordsSizeCheck, sizeof(((CollisionBox *)0)->pointWords) == 0x60);
+
+// Fixed disk records and native runtime pointer-slot views (Win32 layout).
+CMR2_LAYOUT_CHECK(TrackCollisionHeaderSizeCheck, sizeof(TrackCollisionHeader) == 0x14);
+CMR2_LAYOUT_CHECK(TrackCollisionHeader_x_Check, offsetof(TrackCollisionHeader, x) == 0x0);
+CMR2_LAYOUT_CHECK(TrackCollisionHeader_z_Check, offsetof(TrackCollisionHeader, z) == 0x4);
+CMR2_LAYOUT_CHECK(TrackCollisionHeader_levelCounts_Check, offsetof(TrackCollisionHeader, levelCounts) == 0x8);
+CMR2_LAYOUT_CHECK(TrackCollisionHeader_field_0x12_Check, offsetof(TrackCollisionHeader, field_0x12) == 0x12);
+CMR2_LAYOUT_CHECK(TrackTriangleSizeCheck, sizeof(TrackTriangle) == 0x8);
+CMR2_LAYOUT_CHECK(TrackTriangle_v_Check, offsetof(TrackTriangle, v) == 0x0);
+CMR2_LAYOUT_CHECK(TrackQuadNodeSizeCheck, sizeof(TrackQuadNode) == 0x8);
+CMR2_LAYOUT_CHECK(TrackQuadNode_triangleCount_Check, offsetof(TrackQuadNode, triangleCount) == 0x0);
+CMR2_LAYOUT_CHECK(TrackQuadNode_field_0x2_Check, offsetof(TrackQuadNode, field_0x2) == 0x2);
+CMR2_LAYOUT_CHECK(TrackQuadNode_firstIndex_Check, offsetof(TrackQuadNode, firstIndex) == 0x4);
+CMR2_LAYOUT_CHECK(TrackCollisionCountSizeCheck, sizeof(TrackCollisionCount) == 0x4);
+CMR2_LAYOUT_CHECK(TrackCollisionCount_count_Check, offsetof(TrackCollisionCount, count) == 0x0);
+CMR2_LAYOUT_CHECK(TrackCollisionCount_field_0x2_Check, offsetof(TrackCollisionCount, field_0x2) == 0x2);
+CMR2_LAYOUT_CHECK(TrackCollisionTablesSizeCheck, sizeof(TrackCollisionTables) == 0x18);
+CMR2_LAYOUT_CHECK(TrackCollisionTables_levels_Check, offsetof(TrackCollisionTables, levels) == 0x0);
+CMR2_LAYOUT_CHECK(TrackCollisionTables_vertices_Check, offsetof(TrackCollisionTables, vertices) == 0x14);
+CMR2_LAYOUT_CHECK(TrackCollisionTables_traversalLevels_Check, offsetof(TrackCollisionTables, traversalLevels) == 0x0);
+CMR2_LAYOUT_CHECK(TrackCollisionTablesLevelsSizeCheck, sizeof(((TrackCollisionTables *)0)->levels) == 0x14);
+CMR2_LAYOUT_CHECK(TrackCollisionTablesTraversalSizeCheck, sizeof(((TrackCollisionTables *)0)->traversalLevels) == 0x18);
+CMR2_LAYOUT_CHECK(TrackTriangleIndicesSizeCheck, sizeof(((TrackTriangle *)0)->v) == 6);
+
+// Runtime queued triangle records and fixed render/input vertices (Win32).
+CMR2_LAYOUT_CHECK(Quad2DRenderVertexSizeCheck, sizeof(Quad2DRenderVertex) == 0x30);
+CMR2_LAYOUT_CHECK(Quad2DRenderVertex_x_Check, offsetof(Quad2DRenderVertex, x) == 0x0);
+CMR2_LAYOUT_CHECK(Quad2DRenderVertex_y_Check, offsetof(Quad2DRenderVertex, y) == 0x4);
+CMR2_LAYOUT_CHECK(Quad2DRenderVertex_z_Check, offsetof(Quad2DRenderVertex, z) == 0x8);
+CMR2_LAYOUT_CHECK(Quad2DRenderVertex_pad0x0c_Check, offsetof(Quad2DRenderVertex, pad0x0c) == 0xc);
+CMR2_LAYOUT_CHECK(Quad2DRenderVertex_colour_Check, offsetof(Quad2DRenderVertex, colour) == 0x18);
+CMR2_LAYOUT_CHECK(Quad2DRenderVertex_specular_Check, offsetof(Quad2DRenderVertex, specular) == 0x1c);
+CMR2_LAYOUT_CHECK(Quad2DRenderVertex_u_Check, offsetof(Quad2DRenderVertex, u) == 0x20);
+CMR2_LAYOUT_CHECK(Quad2DRenderVertex_v_Check, offsetof(Quad2DRenderVertex, v) == 0x24);
+CMR2_LAYOUT_CHECK(Quad2DRenderVertex_pad0x28_Check, offsetof(Quad2DRenderVertex, pad0x28) == 0x28);
+CMR2_LAYOUT_CHECK(Quad2DVerticesSizeCheck, sizeof(Quad2DVertices) == 0x90);
+CMR2_LAYOUT_CHECK(Quad2DVertices_v_Check, offsetof(Quad2DVertices, v) == 0x0);
+CMR2_LAYOUT_CHECK(Quad2DSizeCheck, sizeof(Quad2D) == 0x98);
+CMR2_LAYOUT_CHECK(Quad2D_verts_Check, offsetof(Quad2D, verts) == 0x0);
+CMR2_LAYOUT_CHECK(Quad2D_pTexture_Check, offsetof(Quad2D, pTexture) == 0x90);
+CMR2_LAYOUT_CHECK(Quad2D_flags_Check, offsetof(Quad2D, flags) == 0x94);
+CMR2_LAYOUT_CHECK(Quad2DInputVertexSizeCheck, sizeof(Quad2DInputVertex) == 0x18);
+CMR2_LAYOUT_CHECK(Quad2DInputVertex_x_Check, offsetof(Quad2DInputVertex, x) == 0x0);
+CMR2_LAYOUT_CHECK(Quad2DInputVertex_y_Check, offsetof(Quad2DInputVertex, y) == 0x4);
+CMR2_LAYOUT_CHECK(Quad2DInputVertex_z_Check, offsetof(Quad2DInputVertex, z) == 0x8);
+CMR2_LAYOUT_CHECK(Quad2DInputVertex_colour_Check, offsetof(Quad2DInputVertex, colour) == 0xc);
+CMR2_LAYOUT_CHECK(Quad2DInputVertex_u_Check, offsetof(Quad2DInputVertex, u) == 0x10);
+CMR2_LAYOUT_CHECK(Quad2DInputVertex_v_Check, offsetof(Quad2DInputVertex, v) == 0x14);
+
+// Optional literal text pointers of runtime menus (localized ids remain shorts).
+CMR2_LAYOUT_CHECK(MenuItem_text_Check, offsetof(MenuItem, text) == 0x0);
+CMR2_LAYOUT_CHECK(MenuItem_id_Check, offsetof(MenuItem, id) == 0x4);
+CMR2_LAYOUT_CHECK(MenuItem_type_Check, offsetof(MenuItem, type) == 0x7);
+CMR2_LAYOUT_CHECK(MenuItem_value_Check, offsetof(MenuItem, value) == 0x8);
+CMR2_LAYOUT_CHECK(MenuItem_min_Check, offsetof(MenuItem, min) == 0xa);
+CMR2_LAYOUT_CHECK(MenuItem_max_Check, offsetof(MenuItem, max) == 0xb);
+CMR2_LAYOUT_CHECK(MenuItem_pSubMenu_Check, offsetof(MenuItem, pSubMenu) == 0xc);
+CMR2_LAYOUT_CHECK(Menu_text_Check, offsetof(Menu, text) == 0x0);
+CMR2_LAYOUT_CHECK(Menu_field_0x4_Check, offsetof(Menu, field_0x4) == 0x4);
+CMR2_LAYOUT_CHECK(Menu_itemCount_Check, offsetof(Menu, itemCount) == 0x6);
+CMR2_LAYOUT_CHECK(Menu_cursor_Check, offsetof(Menu, cursor) == 0x7);
+CMR2_LAYOUT_CHECK(Menu_pParent_Check, offsetof(Menu, pParent) == 0x8);
+CMR2_LAYOUT_CHECK(Menu_defaultCursor_Check, offsetof(Menu, defaultCursor) == 0xc);
+CMR2_LAYOUT_CHECK(Menu_layout_Check, offsetof(Menu, layout) == 0xd);
+CMR2_LAYOUT_CHECK(Menu_moveFlags_Check, offsetof(Menu, moveFlags) == 0xf);
+CMR2_LAYOUT_CHECK(Menu_value_Check, offsetof(Menu, value) == 0x10);
+CMR2_LAYOUT_CHECK(Menu_pfnCallback0_Check, offsetof(Menu, pfnCallback0) == 0x1cc);
+CMR2_LAYOUT_CHECK(Menu_pfnCallback1_Check, offsetof(Menu, pfnCallback1) == 0x1d0);
+CMR2_LAYOUT_CHECK(Menu_pfnCallback2_Check, offsetof(Menu, pfnCallback2) == 0x1d4);
+CMR2_LAYOUT_CHECK(Menu_pfnCallback3_Check, offsetof(Menu, pfnCallback3) == 0x1d8);
+CMR2_LAYOUT_CHECK(Menu_pItemCallbacks_Check, offsetof(Menu, pItemCallbacks) == 0x1dc);
+
+// Primitive network player records used by the flags-member cursor.
+CMR2_LAYOUT_CHECK(NetPlayerSizeCheck, sizeof(NetPlayer) == 0x80);
+CMR2_LAYOUT_CHECK(NetPlayer_id_Check, offsetof(NetPlayer, id) == 0x0);
+CMR2_LAYOUT_CHECK(NetPlayer_flags_Check, offsetof(NetPlayer, flags) == 0x4);
+CMR2_LAYOUT_CHECK(NetPlayer_field_0x8_Check, offsetof(NetPlayer, field_0x8) == 0x8);
+CMR2_LAYOUT_CHECK(NetPlayer_field_0xc_Check, offsetof(NetPlayer, field_0xc) == 0xc);
+CMR2_LAYOUT_CHECK(NetPlayer_stats_Check, offsetof(NetPlayer, stats) == 0x10);
+CMR2_LAYOUT_CHECK(NetPlayer_statsNew_Check, offsetof(NetPlayer, statsNew) == 0x2e);
+CMR2_LAYOUT_CHECK(NetPlayer_splits_Check, offsetof(NetPlayer, splits) == 0x30);
+CMR2_LAYOUT_CHECK(NetPlayer_stageTimes_Check, offsetof(NetPlayer, stageTimes) == 0x4c);
+CMR2_LAYOUT_CHECK(NetPlayer_time_Check, offsetof(NetPlayer, time) == 0x74);
+CMR2_LAYOUT_CHECK(NetPlayer_bestTime_Check, offsetof(NetPlayer, bestTime) == 0x78);
+CMR2_LAYOUT_CHECK(NetPlayer_field_0x7c_Check, offsetof(NetPlayer, field_0x7c) == 0x7c);
+
+CMR2_LAYOUT_CHECK(ParticleType_SizeCheck, sizeof(ParticleType) == 0x70);
+CMR2_LAYOUT_CHECK(ParticleType_lifetime_OffsetCheck, offsetof(ParticleType, lifetime) == 0x0);
+CMR2_LAYOUT_CHECK(ParticleType_spread_OffsetCheck, offsetof(ParticleType, spread) == 0x4);
+CMR2_LAYOUT_CHECK(ParticleType_gravity_OffsetCheck, offsetof(ParticleType, gravity) == 0x10);
+CMR2_LAYOUT_CHECK(ParticleType_drag_OffsetCheck, offsetof(ParticleType, drag) == 0x14);
+CMR2_LAYOUT_CHECK(ParticleType_bounce_OffsetCheck, offsetof(ParticleType, bounce) == 0x18);
+CMR2_LAYOUT_CHECK(ParticleType_friction_OffsetCheck, offsetof(ParticleType, friction) == 0x1c);
+CMR2_LAYOUT_CHECK(ParticleType_size_OffsetCheck, offsetof(ParticleType, size) == 0x20);
+CMR2_LAYOUT_CHECK(ParticleType_sizeVariation_OffsetCheck, offsetof(ParticleType, sizeVariation) == 0x24);
+CMR2_LAYOUT_CHECK(ParticleType_sizeStep_OffsetCheck, offsetof(ParticleType, sizeStep) == 0x28);
+CMR2_LAYOUT_CHECK(ParticleType_field0x2c_OffsetCheck, offsetof(ParticleType, field0x2c) == 0x2c);
+CMR2_LAYOUT_CHECK(ParticleType_type_OffsetCheck, offsetof(ParticleType, type) == 0x2e);
+CMR2_LAYOUT_CHECK(ParticleType_alphaEnd_OffsetCheck, offsetof(ParticleType, alphaEnd) == 0x2f);
+CMR2_LAYOUT_CHECK(ParticleType_alphaStep_OffsetCheck, offsetof(ParticleType, alphaStep) == 0x30);
+CMR2_LAYOUT_CHECK(ParticleType_colour_OffsetCheck, offsetof(ParticleType, colour) == 0x31);
+CMR2_LAYOUT_CHECK(ParticleType_pad0x34_OffsetCheck, offsetof(ParticleType, pad0x34) == 0x34);
+CMR2_LAYOUT_CHECK(ParticleType_flags_OffsetCheck, offsetof(ParticleType, flags) == 0x35);
+CMR2_LAYOUT_CHECK(ParticleType_directionFlags_OffsetCheck, offsetof(ParticleType, directionFlags) == 0x36);
+CMR2_LAYOUT_CHECK(ParticleType_pad0x37_OffsetCheck, offsetof(ParticleType, pad0x37) == 0x37);
+CMR2_LAYOUT_CHECK(ParticleType_texture_OffsetCheck, offsetof(ParticleType, texture) == 0x38);
+CMR2_LAYOUT_CHECK(ParticleType_field0x3c_OffsetCheck, offsetof(ParticleType, field0x3c) == 0x3c);
+CMR2_LAYOUT_CHECK(ParticleType_field0x40_OffsetCheck, offsetof(ParticleType, field0x40) == 0x40);
+CMR2_LAYOUT_CHECK(ParticleType_field0x44_OffsetCheck, offsetof(ParticleType, field0x44) == 0x44);
+CMR2_LAYOUT_CHECK(ParticleType_field0x48_OffsetCheck, offsetof(ParticleType, field0x48) == 0x48);
+CMR2_LAYOUT_CHECK(ParticleType_frames_OffsetCheck, offsetof(ParticleType, frames) == 0x4c);
+CMR2_LAYOUT_CHECK(ParticleType_field0x50_OffsetCheck, offsetof(ParticleType, field0x50) == 0x50);
+CMR2_LAYOUT_CHECK(ParticleType_field0x54_OffsetCheck, offsetof(ParticleType, field0x54) == 0x54);
+CMR2_LAYOUT_CHECK(ParticleType_field0x58_OffsetCheck, offsetof(ParticleType, field0x58) == 0x58);
+CMR2_LAYOUT_CHECK(ParticleType_draw_OffsetCheck, offsetof(ParticleType, draw) == 0x5c);
+CMR2_LAYOUT_CHECK(ParticleType_update_OffsetCheck, offsetof(ParticleType, update) == 0x60);
+CMR2_LAYOUT_CHECK(ParticleType_postUpdate_OffsetCheck, offsetof(ParticleType, postUpdate) == 0x64);
+CMR2_LAYOUT_CHECK(ParticleType_callback_OffsetCheck, offsetof(ParticleType, callback) == 0x68);
+CMR2_LAYOUT_CHECK(ParticleType_field0x6c_OffsetCheck, offsetof(ParticleType, field0x6c) == 0x6c);
+
+CMR2_LAYOUT_CHECK(Particle_SizeCheck, sizeof(Particle) == 0x68);
+CMR2_LAYOUT_CHECK(Particle_pType_OffsetCheck, offsetof(Particle, pType) == 0x0);
+CMR2_LAYOUT_CHECK(Particle_position_OffsetCheck, offsetof(Particle, position) == 0x4);
+CMR2_LAYOUT_CHECK(Particle_vector0x10_OffsetCheck, offsetof(Particle, vector0x10) == 0x10);
+CMR2_LAYOUT_CHECK(Particle_vector0x1c_OffsetCheck, offsetof(Particle, vector0x1c) == 0x1c);
+CMR2_LAYOUT_CHECK(Particle_vector0x28_OffsetCheck, offsetof(Particle, vector0x28) == 0x28);
+CMR2_LAYOUT_CHECK(Particle_sourceVector_OffsetCheck, offsetof(Particle, sourceVector) == 0x34);
+CMR2_LAYOUT_CHECK(Particle_attachmentMatrix_OffsetCheck, offsetof(Particle, attachmentMatrix) == 0x40);
+CMR2_LAYOUT_CHECK(Particle_age_OffsetCheck, offsetof(Particle, age) == 0x44);
+CMR2_LAYOUT_CHECK(Particle_field0x48_OffsetCheck, offsetof(Particle, field0x48) == 0x48);
+CMR2_LAYOUT_CHECK(Particle_size_OffsetCheck, offsetof(Particle, size) == 0x4c);
+CMR2_LAYOUT_CHECK(Particle_field0x50_OffsetCheck, offsetof(Particle, field0x50) == 0x50);
+CMR2_LAYOUT_CHECK(Particle_type0x52_OffsetCheck, offsetof(Particle, type0x52) == 0x52);
+CMR2_LAYOUT_CHECK(Particle_type0x53_OffsetCheck, offsetof(Particle, type0x53) == 0x53);
+CMR2_LAYOUT_CHECK(Particle_field0x54_OffsetCheck, offsetof(Particle, field0x54) == 0x54);
+CMR2_LAYOUT_CHECK(Particle_field0x55_OffsetCheck, offsetof(Particle, field0x55) == 0x55);
+CMR2_LAYOUT_CHECK(Particle_type0x56_OffsetCheck, offsetof(Particle, type0x56) == 0x56);
+CMR2_LAYOUT_CHECK(Particle_active_OffsetCheck, offsetof(Particle, active) == 0x57);
+CMR2_LAYOUT_CHECK(Particle_field0x58_OffsetCheck, offsetof(Particle, field0x58) == 0x58);
+CMR2_LAYOUT_CHECK(Particle_colour_OffsetCheck, offsetof(Particle, colour) == 0x59);
+CMR2_LAYOUT_CHECK(Particle_pad0x5c_OffsetCheck, offsetof(Particle, pad0x5c) == 0x5c);
+CMR2_LAYOUT_CHECK(Particle_texture_OffsetCheck, offsetof(Particle, texture) == 0x60);
+CMR2_LAYOUT_CHECK(Particle_field0x64_OffsetCheck, offsetof(Particle, field0x64) == 0x64);
+CMR2_LAYOUT_CHECK(Particle_field0x66_OffsetCheck, offsetof(Particle, field0x66) == 0x66);
+
+CMR2_LAYOUT_CHECK(RaceRecord_SizeCheck, sizeof(RaceRecord) == 0x18);
+CMR2_LAYOUT_CHECK(RaceRecord_routeNodeIndex_Check, offsetof(RaceRecord, routeNodeIndex) == 0x0);
+CMR2_LAYOUT_CHECK(RaceRecord_resetRouteNodeIndex_Check, offsetof(RaceRecord, resetRouteNodeIndex) == 0x4);
+CMR2_LAYOUT_CHECK(RaceRecord_field_0x8_Check, offsetof(RaceRecord, field_0x8) == 0x8);
+CMR2_LAYOUT_CHECK(RaceRecord_field_0xc_Check, offsetof(RaceRecord, field_0xc) == 0xc);
+CMR2_LAYOUT_CHECK(RaceRecord_field_0x10_Check, offsetof(RaceRecord, field_0x10) == 0x10);
+CMR2_LAYOUT_CHECK(RaceRecord_field_0x14_Check, offsetof(RaceRecord, field_0x14) == 0x14);
+CMR2_LAYOUT_CHECK(RaceRecord_field_0x16_Check, offsetof(RaceRecord, field_0x16) == 0x16);
+
+CMR2_LAYOUT_CHECK(RaceCallbackStorage_SizeCheck, sizeof(RaceCallbackStorage) == 0x20);
+CMR2_LAYOUT_CHECK(RaceCallbackStorage_machine_Check, offsetof(RaceCallbackStorage, machine) == 0x0);
+CMR2_LAYOUT_CHECK(RaceCallbackStorage_records_Check, offsetof(RaceCallbackStorage, records) == 0x10);
+CMR2_LAYOUT_CHECK(AIReferenceRoute_SizeCheck, sizeof(AIReferenceRoute) == 0x1720);
+CMR2_LAYOUT_CHECK(AIReferenceRoute_headingDegrees_Check, offsetof(AIReferenceRoute, headingDegrees) == 0);
+CMR2_LAYOUT_CHECK(AIReferenceRoute_speedSamples_Check, offsetof(AIReferenceRoute, speedSamples) == 0x5c8);
+CMR2_LAYOUT_CHECK(AIReferenceRoute_positionX_Check, offsetof(AIReferenceRoute, positionX) == 0xb90);
+CMR2_LAYOUT_CHECK(AIReferenceRoute_positionZ_Check, offsetof(AIReferenceRoute, positionZ) == 0x1158);
+
+CMR2_LAYOUT_CHECK(CallbackStateRecord_packedState_Check, offsetof(CallbackStateRecord, packedState) == 0);
+CMR2_LAYOUT_CHECK(CallbackStateRecord_bits_Check, offsetof(CallbackStateRecord, bits) == 0);
+CMR2_LAYOUT_CHECK(CallbackStateRecord_elapsedTicks_Check, offsetof(CallbackStateRecord, elapsedTicks) == 4);
+CMR2_LAYOUT_CHECK(StateCallbackPair_update_Check, offsetof(StateCallbackPair, update) == 0);
+CMR2_LAYOUT_CHECK(StateCallbackPair_render_Check, offsetof(StateCallbackPair, render) == 4);
+CMR2_LAYOUT_CHECK(SoundCurve_SizeCheck, sizeof(SoundCurve) == 0x14);
+CMR2_LAYOUT_CHECK(SoundCurve_count_Check, offsetof(SoundCurve, count) == 0);
+CMR2_LAYOUT_CHECK(SoundCurve_min_Check, offsetof(SoundCurve, min) == 4);
+CMR2_LAYOUT_CHECK(SoundCurve_max_Check, offsetof(SoundCurve, max) == 8);
+CMR2_LAYOUT_CHECK(SoundCurve_pSamples_Check, offsetof(SoundCurve, pSamples) == 12);
+CMR2_LAYOUT_CHECK(SoundCurve_pBytes_Check, offsetof(SoundCurve, pBytes) == 16);
+CMR2_LAYOUT_CHECK(CallbackIndex_SizeCheck, sizeof(CallbackIndex) == 4);
+CMR2_LAYOUT_CHECK(CallbackIndex_index_Check, offsetof(CallbackIndex, index) == 0);
+CMR2_LAYOUT_CHECK(CallbackIndex_packed_Check, offsetof(CallbackIndex, packed) == 0);
+CMR2_LAYOUT_CHECK(CallbackStateMachine_count_Check, offsetof(CallbackStateMachine, count) == 0);
+CMR2_LAYOUT_CHECK(CallbackStateMachine_pad_Check, offsetof(CallbackStateMachine, pad) == 1);
+CMR2_LAYOUT_CHECK(CallbackStateMachine_callbacks_Check, offsetof(CallbackStateMachine, callbacks) == 8);
+CMR2_LAYOUT_CHECK(CallbackStateMachine_rules_Check, offsetof(CallbackStateMachine, rules) == 12);
+CMR2_LAYOUT_CHECK(StageTimingSpread_SizeCheck, sizeof(StageTimingSpread) == 0xb0);
+CMR2_LAYOUT_CHECK(StageTimingSpread_sampleWords_Check, offsetof(StageTimingSpread, sampleWords) == 0);
+CMR2_LAYOUT_CHECK(StageTimingSpread_progress_Check, offsetof(StageTimingSpread, progress) == 0);
+CMR2_LAYOUT_CHECK(StageTimingSpread_startWeight_Check, offsetof(StageTimingSpread, startWeight) == 0x28);
+CMR2_LAYOUT_CHECK(StageTimingSpread_middleWeight_Check, offsetof(StageTimingSpread, middleWeight) == 0x50);
+CMR2_LAYOUT_CHECK(StageTimingSpread_endWeight_Check, offsetof(StageTimingSpread, endWeight) == 0x78);
+CMR2_LAYOUT_CHECK(StageTimingSpread_startPositionFixed_Check, offsetof(StageTimingSpread, startPositionFixed) == 0xa0);
+CMR2_LAYOUT_CHECK(StageTimingSpread_endPositionFixed_Check, offsetof(StageTimingSpread, endPositionFixed) == 0xa4);
+CMR2_LAYOUT_CHECK(StageTimingSpread_startBlendFixed_Check, offsetof(StageTimingSpread, startBlendFixed) == 0xa8);
+CMR2_LAYOUT_CHECK(StageTimingSpread_endBlendFixed_Check, offsetof(StageTimingSpread, endBlendFixed) == 0xac);

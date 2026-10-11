@@ -1,12 +1,16 @@
+#include "AIReferenceRoute.h"
 #include "StageObjectCount.h"
+#include "StageTimingSpread.h"
 #include "StageBlock.h"
 #include "StageTiming.h"
+#include "TrackCollisionData.h"
 #include "StageWeather.h"
 #include <stdio.h>
 #include <stddef.h>
 #include "Frontend.h"
 #include "GenericFileLoader.h"
 #include "Car.h"
+#include "RallyRouteNode.h"
 #include "CarResources.h"
 #include "CarPhysics.h"
 #include "Stage.h"
@@ -610,7 +614,7 @@ unsigned int NetPlayers_IsPlayerPresent(int index);
 // Builds the per-split interpolation factors between the first and last split
 // time of the stage.
 // FUNCTION: CMR2 0x00456330
-void StageTiming_BuildSplitInterpolationFactors(int *param_1)
+void StageTiming_BuildSplitInterpolationFactors(StageTimingSpread *param_1)
 {
     int local_20;
     int local_24;
@@ -629,19 +633,19 @@ void StageTiming_BuildSplitInterpolationFactors(int *param_1)
 
     iVar1 = GetStageSplitCount();
     for (iVar5 = 1; iVar5 <= iVar1; iVar5++) {
-        if (param_1[0x28] >= Stage_GetSplitPositionFixed(iVar5 - 1) && param_1[0x28] < Stage_GetSplitPositionFixed(iVar5))
+        if (param_1->startPositionFixed >= Stage_GetSplitPositionFixed(iVar5 - 1) && param_1->startPositionFixed < Stage_GetSplitPositionFixed(iVar5))
             local_20 = iVar5;
-        if (param_1[0x29] > Stage_GetSplitPositionFixed(iVar5 - 1) && param_1[0x29] <= Stage_GetSplitPositionFixed(iVar5))
+        if (param_1->endPositionFixed > Stage_GetSplitPositionFixed(iVar5 - 1) && param_1->endPositionFixed <= Stage_GetSplitPositionFixed(iVar5))
             local_24 = iVar5;
     }
-    iVar5 = param_1[0x29];
-    iVar2 = param_1[0x28];
+    iVar5 = param_1->endPositionFixed;
+    iVar2 = param_1->startPositionFixed;
     iVar7 = iVar5 - iVar2;
     local_14 = 0;
-    *param_1 = 0;
+    param_1->sampleWords[0] = 0;
     iVar6 = 1;
     if (iVar1 >= 1) {
-        piVar8 = param_1 + 0xb;
+        piVar8 = param_1->sampleWords + 0xb;
         do {
             iVar3 = Stage_GetSplitPositionFixed(iVar6);
             iVar4 = Stage_GetSplitPositionFixed(iVar6 - 1);
@@ -649,13 +653,13 @@ void StageTiming_BuildSplitInterpolationFactors(int *param_1)
             if (iVar6 < local_20)
                 local_c = uVar7;
             if (iVar6 == local_20)
-                local_c = param_1[0x28] - Stage_GetSplitPositionFixed(iVar6 - 1);
+                local_c = param_1->startPositionFixed - Stage_GetSplitPositionFixed(iVar6 - 1);
             if (iVar6 > local_20)
                 local_c = 0;
             if (iVar6 < local_24)
                 local_8 = 0;
             if (iVar6 == local_24)
-                local_8 = Stage_GetSplitPositionFixed(iVar6) - param_1[0x29];
+                local_8 = Stage_GetSplitPositionFixed(iVar6) - param_1->endPositionFixed;
             if (iVar6 > local_24)
                 local_8 = uVar7;
             *piVar8 = FixDiv(local_c, uVar7);
@@ -719,8 +723,9 @@ void StageTiming_SetNodeTreeVertexGrey(SceneNode *pNode, BYTE colour)
     }
 }
 
+// Replay streams of the eight cars (ReplayStream), reached through g_replaySlots.
 // GLOBAL: CMR2 0x00588e80
-void *g_unk0x00588e80[8];
+void *g_replayStreams[8];
 extern void *g_unk0x00588ea0[8];
 // GLOBAL: CMR2 0x00588d3c
 int g_unk0x00588d3c;
@@ -732,7 +737,7 @@ BOOL Replay_ReleaseStageBuffers(void)
 {
     void **p;
 
-    p = g_unk0x00588e80;
+    p = g_replayStreams;
     do {
         if (*p != NULL) {
             CFileBuffer::FreeGenericFileBuffer(*p);
@@ -740,7 +745,7 @@ BOOL Replay_ReleaseStageBuffers(void)
         }
         p++;
     // 0x588ea0 in the original (g_unk0x00588ea0, the next global).
-    } while ((int)p < (int)(g_unk0x00588e80 + 8));
+    } while ((INT_PTR)p < (INT_PTR)(g_replayStreams + 8));
     g_unk0x00588d3c = 0;
     g_unk0x00588d14 = 0;
     return TRUE;
@@ -1214,7 +1219,7 @@ void StageTiming_SetNodeMeshAlpha(SceneNode *pNode, int alpha, BYTE checkFlag)
 // Interpolates 16 fixed-point samples per row from the car's 0x7c table into
 // pOut, weighting the two corner rows by the car's 0xa8/0xac offsets.
 // FUNCTION: CMR2 0x004564d0
-void StageTiming_InterpolateCarFixedSampleRows(int pCar, int *pOut)
+void StageTiming_InterpolateCarFixedSampleRows(StageTimingSpread *pCar, int *pOut)
 {
     int f;
     int n;
@@ -1237,15 +1242,15 @@ void StageTiming_InterpolateCarFixedSampleRows(int pCar, int *pOut)
     int v6;
     int v1b;
 
-    f = *(int *)(pCar + 0xac);
-    n = *(int *)(pCar + 0xa8);
+    f = pCar->endBlendFixed;
+    n = pCar->startBlendFixed;
     rf = f - n;
     rn = 0x10000 - n;
     rc = 0x10000 - f;
     count = GetStageSplitCount();
     if (count >= 1) {
         off = 0x310;
-        pIn = (int *)(pCar + 0x7c);
+        pIn = &pCar->sampleWords[31];
         pRow = pOut;
         do {
             p = pRow;
@@ -1259,8 +1264,8 @@ void StageTiming_InterpolateCarFixedSampleRows(int pCar, int *pOut)
                 v5 = FixMul(pIn[-10], *(int *)(g_unk0x0054241c + off - 0x280));
                 v6 = FixMul(pIn[-10], *(int *)(g_unk0x0054241c + off));
                 // the original re-reads pCar+0xa8 here instead of using n
-                v1b = *(int *)(pCar + 0xa8) + FixMul(rf, pIn[-0x1f]);
-                sum = *(int *)(pCar + 0xa8) + FixMul(rf, pIn[-0x1e]) + v1b;
+                v1b = pCar->startBlendFixed + FixMul(rf, pIn[-0x1f]);
+                sum = pCar->startBlendFixed + FixMul(rf, pIn[-0x1e]) + v1b;
                 t = FixDiv(sum, 0x20000);
                 // 0x456697 weights the second table by t, the first by 1-t
                 *p = FixMul(t, v6) + FixMul(0x10000 - t, v5) + v4 + v3 + v2 + v1;
@@ -1315,7 +1320,7 @@ int StageTiming_FreeCarPartNodeTables(void)
             *p = NULL;
         }
         p++;
-    } while ((int)p < (int)&g_carPartStateTables.parts[4]);
+    } while ((INT_PTR)p < (INT_PTR)&g_carPartStateTables.parts[4]);
     if (g_carLineStates != NULL) {
         for (i = 0; i < g_carPartTableCarCount; i++) {
             if (g_carLineStates[i] != NULL) {
@@ -1655,44 +1660,39 @@ void ForceFeedback_CreateEffects(void)
 }
 
 // GLOBAL: CMR2 0x00591af0
-int g_unk0x00591af0;
+TrackTriangle *g_trackTriangles;
 // GLOBAL: CMR2 0x00591af8
-int g_unk0x00591af8;
+TrackCollisionHeader *g_trackCollisionHeader;
 // GLOBAL: CMR2 0x00591afc
-int g_unk0x00591afc;
+TrackCollisionCount *g_trackTriangleCountRecord;
 // GLOBAL: CMR2 0x00591b00
-int g_unk0x00591b00[5];
+TrackCollisionTables g_trackCollisionTables;
 // GLOBAL: CMR2 0x00591b14
-int g_unk0x00591b14;
+#define g_trackVertices g_trackCollisionTables.vertices
 // GLOBAL: CMR2 0x00591b18
-int g_unk0x00591b18;
+short *g_trackTriangleIndices;
 // GLOBAL: CMR2 0x00591b1c
-int g_unk0x00591b1c;
+short *g_trackGridRows;
 // GLOBAL: CMR2 0x00591b20
-int g_unk0x00591b20;
+short *g_trackGridColumns;
 // GLOBAL: CMR2 0x00591b24
-int g_unk0x00591b24;
+TrackCollisionCount *g_trackVertexCountRecord;
 // GLOBAL: CMR2 0x00591b30
-int g_unk0x00591b30;
+BYTE *g_trackCollisionBlock;
 // GLOBAL: CMR2 0x00591b34
-int g_unk0x00591b34;
+int *g_trackTriangleListCount;
 // GLOBAL: CMR2 0x00591b38
-int g_unk0x00591b38[5];
-// 8-byte record of the triangle table at g_unk0x00591af0.
-struct TrackTriangle {
-    short v[3];
-    unsigned short surface : 7;
-    unsigned short flags : 9;
-};
+int g_trackLevelNodeCounts[5];
+// 8-byte record of the triangle table at g_trackTriangles.
 
-// Reads entry index of the 8-byte table at g_unk0x00591af0.
+// Reads entry index of the 8-byte table at g_trackTriangles.
 // FUNCTION: CMR2 0x00491790
 void StageTiming_ReadStageFaceRecord(short index, short *pA, short *pB, short *pC, short *pD, unsigned short *pFlags)
 {
-    *pA = ((TrackTriangle *)g_unk0x00591af0)[index].v[0];
-    *pB = ((TrackTriangle *)g_unk0x00591af0)[index].v[1];
-    *pC = ((TrackTriangle *)g_unk0x00591af0)[index].v[2];
-    *pFlags = ((TrackTriangle *)g_unk0x00591af0)[index].surface;
+    *pA = g_trackTriangles[index].v[0];
+    *pB = g_trackTriangles[index].v[1];
+    *pC = g_trackTriangles[index].v[2];
+    *pFlags = g_trackTriangles[index].surface;
     *pD = 0;
 }
 
@@ -1711,37 +1711,37 @@ void StageTiming_IndexSerializedStageTables(BYTE *pData)
     BYTE *p;
     int i;
 
-    g_unk0x00591b30 = (int)pData;
-    g_unk0x00591af8 = (int)pData;
-    p = pData + 8;
+    g_trackCollisionBlock = pData;
+    g_trackCollisionHeader = (TrackCollisionHeader *)pData;
+    p = pData + offsetof(TrackCollisionHeader, levelCounts);
     for (i = 0; i < 5; i++) {
-        g_unk0x00591b38[i] = *(short *)p;
-        p += 2;
+        g_trackLevelNodeCounts[i] = *(short *)p;
+        p += sizeof(short);
     }
-    p += 2;
+    p += sizeof(short);
     for (i = 0; i < 5; i++) {
-        g_unk0x00591b00[i] = (int)p;
-        p += g_unk0x00591b38[i] * 8;
+        g_trackCollisionTables.levels[i] = (TrackQuadNode *)p;
+        p += g_trackLevelNodeCounts[i] * (int)sizeof(TrackQuadNode);
     }
-    g_unk0x00591b24 = (int)p;
-    p += 4;
-    g_unk0x00591b14 = (int)p;
-    i = *(unsigned short *)g_unk0x00591b24;
-    p = p + i * 12;
-    g_unk0x00591afc = (int)p;
-    p += 4;
-    g_unk0x00591af0 = (int)p;
-    i = *(unsigned short *)g_unk0x00591afc;
-    p = p + i * 8;
+    g_trackVertexCountRecord = (TrackCollisionCount *)p;
+    p += sizeof(TrackCollisionCount);
+    g_trackVertices = (FixVector *)p;
+    i = g_trackVertexCountRecord->count;
+    p = p + i * sizeof(FixVector);
+    g_trackTriangleCountRecord = (TrackCollisionCount *)p;
+    p += sizeof(TrackCollisionCount);
+    g_trackTriangles = (TrackTriangle *)p;
+    i = g_trackTriangleCountRecord->count;
+    p = p + i * sizeof(TrackTriangle);
     BYTE *pCount = p;
-    p += 4;
-    g_unk0x00591b34 = (int)pCount;
-    g_unk0x00591b18 = (int)p;
+    p += sizeof(TrackCollisionCount);
+    g_trackTriangleListCount = (int *)pCount;
+    g_trackTriangleIndices = (short *)p;
     i = *(int *)pCount;
-    p = p + i * 2;
-    g_unk0x00591b20 = (int)p;
-    p += 2;
-    g_unk0x00591b1c = (int)p;
+    p = p + i * (int)sizeof(short);
+    g_trackGridColumns = (short *)p;
+    p += sizeof(short);
+    g_trackGridRows = (short *)p;
     CGame::RegisterCallback(StageTiming_NoOpLightRelease, NULL);
 }
 
@@ -2022,7 +2022,7 @@ void StageObject_InitCarSceneTables(void)
         pTexture += sizeof(CarInteriorDashTextures) / sizeof(*pTexture);
         pState += sizeof(CarWiperState) / sizeof(*pState);
         pTiming += sizeof(CarDriverPoseState);
-    } while ((int)pPosition < (int)(g_stageBlock + 0x2d0));
+    } while ((INT_PTR)pPosition < (INT_PTR)(g_stageBlock + 0x2d0));
     p = (int *)&g_carInteriorArchives[0].fileSize;
     do {
         INTERIOR_ARCHIVE.buffer = NULL;
@@ -2563,7 +2563,7 @@ void StageTiming_InitStageFileTable(void)
             ((GenericFile *)((BYTE *)p - sizeof(g_carModelArchives[0].buffer)))->didFileLoad = FALSE;
             p += sizeof(GenericFile) / sizeof(*p);
         } while (--count);
-    } while ((int)p < (int)&g_stageArchiveTables.secondaryCount);
+    } while ((INT_PTR)p < (INT_PTR)&g_stageArchiveTables.secondaryCount);
     CGame::RegisterCallback(StageTiming_ReleaseStartArchiveBuffers, 0);
 }
 
@@ -2695,7 +2695,7 @@ void StageTiming_DrawClockAndCountdown(void)
     colour[2] = 0xff;
     colour[3] = 0xff;
     g_unk0x00543098 = 0;
-    if ((**(unsigned int **)(StageUI_GetRaceResultTable() + 4) & 0xff) >= 10)
+    if (((unsigned int)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[0].packedState & 0xff) >= 10)
         return;
     if (CGameInfo::GetConfiguredGameMode() == '\n' || CGameInfo::GetConfiguredGameMode() == '\f') {
         if (GameInfo_GetSessionField397C() != 0) {
@@ -2730,7 +2730,7 @@ void StageTiming_DrawClockAndCountdown(void)
         return;
     x = (int)g_pGraphics->resX * 0xaf30 >> 16;
     x2 = (int)g_pGraphics->resX * 0xf06b >> 16;
-    if ((**(unsigned int **)(StageUI_GetRaceResultTable() + 4) & 0xff) < 10) {
+    if (((unsigned int)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[0].packedState & 0xff) < 10) {
         if ((BYTE)RallyData_GetFlag24() == 0 && (BYTE)RallyData_GetFlag25() == 0)
             y = (int)g_pGraphics->resY * 0x14 / 0x1e0 + ((int)g_pGraphics->resY * 0x3000 >> 16);
         else
@@ -3010,7 +3010,7 @@ int StageTiming_FreeSceneAndFinishResources(void)
         }
         pNodeList++;
         pRecord++;
-    } while ((int)pNodeList < (int)(g_carAlternateBodyScenes + 16));
+    } while ((INT_PTR)pNodeList < (INT_PTR)(g_carAlternateBodyScenes + 16));
     for (i = 0; i < 16; i++) {
         if (g_carModelBuffers[i] != NULL) {
             CFileBuffer::FreeGenericFileBuffer(g_carModelBuffers[i]);
@@ -3036,7 +3036,7 @@ int StageTiming_FreeSceneAndFinishResources(void)
             *pBuffer = NULL;
         }
         pBuffer++;
-    } while ((int)pBuffer < (int)(g_carInfoBuffers + 8));
+    } while ((INT_PTR)pBuffer < (INT_PTR)(g_carInfoBuffers + 8));
     CGraphics::ReleaseCachedTextureSurfaces();
     Scene_FreeShadowCasters();
     return 1;
@@ -3228,7 +3228,7 @@ int g_unk0x0051bfac[8] = { 0x3333, 0x3333, 0x3333, 0x3333, 0x1999, 0x1999, 0x199
 // GLOBAL: CMR2 0x0051bfcc
 int g_unk0x0051bfcc[8] = { 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999, 0x1999 };
 
-void StageObject_SetModelSubmeshVisibility(int param_1, int param_2, char param_3);
+void StageObject_SetModelSubmeshVisibility(Car *pCar, int param_2, char param_3);
 void Race_PlayHornSound(unsigned int view, int kind, int listener);
 void Car_QueueWindowBreak(CarPartSet *pParts, Car *pCar, unsigned int part);
 
@@ -3250,7 +3250,7 @@ void StageTiming_FlagCarPartBreaks(Car *pCar, int param_2)
             part = pRecord->breakPartIndex[i];
             if (pRecord->partBroken[i] == 0 || pRecord->partDamaged[i] == 0) {
                 if (pRecord->damageValues[i + 26] > g_unk0x0051bfac[i] && pRecord->partBroken[i] == 0) {
-                    StageObject_SetModelSubmeshVisibility((int)pCar, 2, i);
+                    StageObject_SetModelSubmeshVisibility(pCar, 2, i);
                     pRecord->partBroken[i] = 1;
                     pRecord->partDamaged[i] = 1;
                     if (param_2 == 0) {
@@ -3276,7 +3276,7 @@ void StageTiming_FlagCarPartBreaks(Car *pCar, int param_2)
                     }
                 }
                 else if (pRecord->damageValues[i + 26] > g_unk0x0051bfcc[i] && pRecord->partDamaged[i] == 0 && pRecord->partBroken[i] == 0) {
-                    StageObject_SetModelSubmeshVisibility((int)pCar, 1, i);
+                    StageObject_SetModelSubmeshVisibility(pCar, 1, i);
                     pRecord->partDamaged[i] = 1;
                     if (param_2 == 0) {
                         carIndex = pCar->index;
@@ -3480,7 +3480,7 @@ void StageTiming_ResetCarPartRecordsAndSlots(void)
     int i;
     int offset;
 
-    for (pp = g_carPartStateTables.parts; (int)pp < (int)(g_carPartStateTables.parts + 4); pp++) {
+    for (pp = g_carPartStateTables.parts; (INT_PTR)pp < (INT_PTR)(g_carPartStateTables.parts + 4); pp++) {
         i = 0;
         if (g_carPartTableCarCount > 0) {
             offset = 0;
@@ -3604,8 +3604,7 @@ void CarPart_IntegrateVerticalAxisTurn(void)
 // One table: 0x592744 is slot 0 and the eight per-variant entries follow
 // (callers index it with a 1-based variant).
 // GLOBAL: CMR2 0x00592744
-int g_unk0x00592744[9];
-#define g_unk0x00592748 (g_unk0x00592744 + 1)
+AIReferenceRoute *g_aiReferenceRoutes[9];
 
 void RallyData_GetRouteNodeGroundPosition(int index, int *pOut);
 int RallyData_GetRouteAvailabilityState(void);
@@ -3614,21 +3613,21 @@ int RallyData_GetRouteAvailabilityState(void);
 // points by the route origin; returns the end of the records.
 // match 67%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x00498590
-BYTE *StageTiming_RelocateCarRecordRoutePoints(BYTE *p, int unused, int count)
+BYTE *StageTiming_RelocateCarRecordRoutePoints(BYTE *p, BYTE **unused, int count)
 {
     int origin[3];
     short points;
-    int *pp;
+    AIReferenceRoute **pp;
     int i;
 
     RallyData_GetRouteNodeGroundPosition(0, origin);
     points = RallyData_GetRouteAvailabilityState();
-    for (pp = g_unk0x00592748; count > 0; count--, pp++) {
-        *pp = (int)p;
-        p += 0x1720;
+    for (pp = g_aiReferenceRoutes + 1; count > 0; count--, pp++) {
+        *pp = (AIReferenceRoute *)p;
+        p += sizeof(AIReferenceRoute);
         for (i = 0; i < points; i++) {
-            *(int *)(*pp + 0xb90 + i * 4) += origin[0];
-            *(int *)(*pp + 0x1158 + i * 4) += origin[2];
+            (*pp)->positionX[i] += origin[0];
+            (*pp)->positionZ[i] += origin[2];
         }
     }
     return p;
@@ -3933,7 +3932,7 @@ void StageTiming_InterpolateMovingPartMatrices(int t)
     count++;
     do {
         index = (signed char)Car_Get(*p)->index;
-        for (pp = &g_carPartStateTables.parts[3]; (int)pp >= (int)g_carPartStateTables.parts; pp--) {
+        for (pp = &g_carPartStateTables.parts[3]; (INT_PTR)pp >= (INT_PTR)g_carPartStateTables.parts; pp--) {
             pPart = *pp + index;
             g_partState = pPart;
             if (pPart->pNode != NULL && (pPart->flags & 1) != 0) {
@@ -4212,7 +4211,7 @@ int StageTiming_EstimateElapsedStageTime(void)
     return (g_unk0x0053d1b8[0] = g_unk0x0053d1b0 * 2);
 }
 
-BYTE *RallyData_GetAvailableRouteNodeRecord(int index);
+RallyRouteNode *RallyData_GetAvailableRouteNodeRecord(int index);
 void View_SetDistanceOverride(BYTE index, int value);
 int Render_GetDetailDistanceScale(void);
 int Race_IsMultiplayerRecordMode10(void);
@@ -4222,7 +4221,7 @@ int Race_IsMultiplayerRecordMode10(void);
 // FUNCTION: CMR2 0x00459250
 void StageTiming_SetViewRouteDistanceLimit(BYTE player, unsigned int node, int dir)
 {
-    BYTE *pNode;
+    RallyRouteNode *pNode;
     int nearDist;
     int farDist;
     int distance;
@@ -4237,14 +4236,14 @@ void StageTiming_SetViewRouteDistanceLimit(BYTE player, unsigned int node, int d
             CGameInfo::IsConfiguredMultiplayer();
         pNode = RallyData_GetAvailableRouteNodeRecord(node);
         if (dir < 0) {
-            nearDist = *(int *)(pNode + 0x1c);
+            nearDist = pNode->backwardNearLimit;
         } else {
-            nearDist = *(int *)(pNode + 0x24);
+            nearDist = pNode->forwardNearLimit;
         }
         if (dir < 0)
-            farDist = *(int *)(pNode + 0x20);
+            farDist = pNode->backwardFarLimit;
         else
-            farDist = *(int *)(pNode + 0x28);
+            farDist = pNode->forwardFarLimit;
         if (farDist > 0) {
             *(int *)((BYTE *)g_pGraphics + 0x3c8) = farDist;
             distance = Render_GetDetailDistanceScale();
@@ -4276,7 +4275,7 @@ struct FixAngles;
 SceneNode *Scene_CreateLight(int type, int r, int g, int b, FixVector *pPosition, FixAngles *pAngles, SceneNode *pParent);
 void Scene_SetAmbient(BYTE *pColour, int boost);
 void Scene_SetLight(FixVector *pLight, int boost);
-int RallyData_GetChallengeRenderState(void);
+SceneNode *RallyData_GetChallengeRenderState(void);
 extern SceneNode *g_stageAmbientNode;
 extern BYTE g_unk0x00592146;
 extern BYTE g_stageColourAlpha;
@@ -4307,7 +4306,7 @@ void StageTiming_CreateWhiteStageLight(void)
     angles[2] = 0;
     angles[3] = 0;
     g_stageAmbientNode = Scene_CreateLight(2, 0x10000, 0x10000, 0x10000, &position, (FixAngles *)angles,
-                                           (SceneNode *)RallyData_GetChallengeRenderState());
+                                           RallyData_GetChallengeRenderState());
     country = (char)RallyDataCountryIndex();
     if (country == 3) {
         Scene_SetAmbient(ambient, 0);
@@ -4322,7 +4321,7 @@ void StageTiming_CreateWhiteStageLight(void)
 
 extern int g_carDamageModelEnabled[8];
 
-void StageObject_SetModelSubmeshVisibility(int param_1, int param_2, char param_3);
+void StageObject_SetModelSubmeshVisibility(Car *pCar, int param_2, char param_3);
 void Mesh_Rebuild(Mesh *pMesh);
 void RallyData_ValidateIndex(int index);
 void CarLight_SetChannelMasks(int index, char set0, char set1, BYTE mask);
@@ -4330,7 +4329,7 @@ void CarLight_SetChannelMasks(int index, char set0, char set1, BYTE mask);
 // Rebuilds the part meshes of a damaged car from its packed vertices, then
 // clears the part set's damage state.
 // FUNCTION: CMR2 0x004698a0
-void StageTiming_RebuildDamagedPartMeshes(int pCar)
+void StageTiming_RebuildDamagedPartMeshes(Car *pCar)
 {
     CarPartSet *set;
     int i;
@@ -4339,8 +4338,8 @@ void StageTiming_RebuildDamagedPartMeshes(int pCar)
     FixVector pos;
     FixVector normal;
 
-    if (g_carDamageModelEnabled[*(char *)(pCar + 0xb1a)] != 0) {
-        set = g_carPartSets + *(char *)(pCar + 0xb1a);
+    if (g_carDamageModelEnabled[pCar->index] != 0) {
+        set = g_carPartSets + pCar->index;
         for (i = 0; i < set->count; i++) {
             for (j = 0; j < set->vertexCount[i]; j++) {
                 pos = set->geometry.vertices[i][j].pos;
@@ -4356,7 +4355,7 @@ void StageTiming_RebuildDamagedPartMeshes(int pCar)
             if (pMesh != NULL) {
                 Mesh_Rebuild(pMesh);
                 RallyData_ValidateIndex((int)pMesh);
-                Scene_MarkShadowPartDirty(*(SceneNode **)(pCar + 0x720), pMesh);
+                Scene_MarkShadowPartDirty(pCar->pBodyNode, pMesh);
             }
         }
         for (i = 0; i < 9; i++)
@@ -4370,7 +4369,7 @@ void StageTiming_RebuildDamagedPartMeshes(int pCar)
             set->partDamaged[i] = 0;
             StageObject_SetModelSubmeshVisibility(pCar, 0, i);
         }
-        CarLight_SetChannelMasks(*(char *)(pCar + 0xb1a), 0, 0, 4);
+        CarLight_SetChannelMasks(pCar->index, 0, 0, 4);
     }
 }
 
@@ -4443,7 +4442,7 @@ extern double g_minus65536;
 // Bilinear blend of a car's 5-byte-wide paint-decal rows (0x54241c) into 16
 // fixed-point samples, weighted by the car's two paint offsets (0xa8/0xac).
 // FUNCTION: CMR2 0x00455f00
-void StageTiming_BlendCarPaintDecalRows(int pCar, int *pOut)
+void StageTiming_BlendCarPaintDecalRows(StageTimingSpread *pCar, int *pOut)
 {
     __int64 v;
     int t;
@@ -4478,8 +4477,8 @@ void StageTiming_BlendCarPaintDecalRows(int pCar, int *pOut)
     // The original computes this and discards it (inline __asm FixMul is opaque
     // to MSVC6, so it cannot be eliminated); reproduced to match the codegen.
     FixMul(0x20000, t);
-    a8 = *(int *)(pCar + 0xa8);
-    ac = *(int *)(pCar + 0xac);
+    a8 = pCar->startBlendFixed;
+    ac = pCar->endBlendFixed;
     r8 = 0x10000 - a8;
     rc = 0x10000 - ac;
     sum = r8 + rc;
@@ -4487,8 +4486,8 @@ void StageTiming_BlendCarPaintDecalRows(int pCar, int *pOut)
         d3 = (int)(__int64)(g_unk0x0054241c[i + 3] * CGraphics::m_65536);
         d4 = (int)(__int64)(g_unk0x0054241c[i + 4] * CGraphics::m_65536);
         d0 = (int)(__int64)(g_unk0x0054241c[i] * CGraphics::m_65536);
-        t1 = FixDiv(*(int *)(pCar + 0xa0), t);
-        t2 = FixDiv(t - *(int *)(pCar + 0xa4), t);
+        t1 = FixDiv(pCar->startPositionFixed, t);
+        t2 = FixDiv(t - pCar->endPositionFixed, t);
         t3 = 0x10000 - t2 - t1;
         m1 = FixMul(r8, d3);
         m2 = FixMul(t1, m1);
@@ -4557,17 +4556,17 @@ void StageTiming_AdvanceTimedLapCheckpoint(int car, int time)
 
 // Copies the three vertices of a triangle (indices in pIndices).
 // FUNCTION: CMR2 0x004917f0
-void StageTiming_CopyTriangleVertices(int *pOut, unsigned short *pIndices, int unused)
+void StageTiming_CopyTriangleVertices(FixVector *pOut, unsigned short *pIndices, unsigned short *unused)
 {
-    pOut[0] = *(int *)(g_unk0x00591b14 + pIndices[0] * 0xc);
-    pOut[1] = *(int *)(g_unk0x00591b14 + 4 + pIndices[0] * 0xc);
-    pOut[2] = *(int *)(g_unk0x00591b14 + 8 + pIndices[0] * 0xc);
-    pOut[3] = *(int *)(g_unk0x00591b14 + pIndices[1] * 0xc);
-    pOut[4] = *(int *)(g_unk0x00591b14 + 4 + pIndices[1] * 0xc);
-    pOut[5] = *(int *)(g_unk0x00591b14 + 8 + pIndices[1] * 0xc);
-    pOut[6] = *(int *)(g_unk0x00591b14 + pIndices[2] * 0xc);
-    pOut[7] = *(int *)(g_unk0x00591b14 + 4 + pIndices[2] * 0xc);
-    pOut[8] = *(int *)(g_unk0x00591b14 + 8 + pIndices[2] * 0xc);
+    pOut[0].x = g_trackVertices[pIndices[0]].x;
+    pOut[0].y = g_trackVertices[pIndices[0]].y;
+    pOut[0].z = g_trackVertices[pIndices[0]].z;
+    pOut[1].x = g_trackVertices[pIndices[1]].x;
+    pOut[1].y = g_trackVertices[pIndices[1]].y;
+    pOut[1].z = g_trackVertices[pIndices[1]].z;
+    pOut[2].x = g_trackVertices[pIndices[2]].x;
+    pOut[2].y = g_trackVertices[pIndices[2]].y;
+    pOut[2].z = g_trackVertices[pIndices[2]].z;
 }
 
 int RallyData_GetCarRaceRecordField10(BYTE *p);
@@ -4610,9 +4609,9 @@ void StageObject_UpdateThirdRouteRamp(ViewLightingRamp *pRecord, int view)
     }
 }
 
-int StageObject_GetCarWeatherRampValue(BYTE *pCar);
+int StageObject_GetCarWeatherRampValue(Car *pCar);
 void Car_UpdateSurfaceParams(Car *pCar, int blend);
-void StageObject_CopyCarSurfaceNoiseTarget(BYTE *pCar);
+void StageObject_CopyCarSurfaceNoiseTarget(Car *pCar);
 
 // Sets the third object ramp and resets every car's record and surface.
 // FUNCTION: CMR2 0x0045e710
@@ -4636,8 +4635,8 @@ void StageTiming_SetThirdObjectRamp(int v1, int v2, int from, int to)
         p->lastRoutePosition = 0;
         p->routePosition = 0;
         p->blend = g_surfaceBlendFrom;
-        Car_UpdateSurfaceParams(Car_Get(i), StageObject_GetCarWeatherRampValue((BYTE *)Car_Get(i)));
-        StageObject_CopyCarSurfaceNoiseTarget((BYTE *)Car_Get(i));
+        Car_UpdateSurfaceParams(Car_Get(i), StageObject_GetCarWeatherRampValue(Car_Get(i)));
+        StageObject_CopyCarSurfaceNoiseTarget(Car_Get(i));
         i++;
     } while (i < (int)(g_stageObjectCount.packed & 0xff));
     }
@@ -5149,7 +5148,7 @@ extern BYTE StageObject_GetViewWeatherStateByte(int);
 extern int StageObject_GetViewWeatherField54(int);
 extern int Race_GetPlayerRecordField4(BYTE);
 extern void Tyre_AddWear(int, int, int, int);
-extern void Particle_Spawn(int, FixVector *, FixVector *, int, int, BYTE *, BYTE, int, BYTE);
+extern void Particle_Spawn(int, FixVector *, FixVector *, int, FixMatrix *, BYTE *, BYTE, void *, BYTE);
 
 #define TRAIL_RANDOM(scale) ((int)(__int64)(rand() * g_oneOverRandMax * (scale)))
 
@@ -5274,7 +5273,7 @@ void StageTiming_SpawnWheelParticles(int carIndex)
         velocity.z = rolling.z + cornerMotion.z + lateral.z;
         if ((slipA > 0 || slipB > 0) && FixDiv(slipA, 0x20000) + FixDiv(slipB, 0x8000) > 0x8000)
             intensity = (intensity * 3) / 2;
-        if (Race_GetPlayerRecordField4((BYTE)carIndex) || (*(BYTE **)(StageUI_GetRaceResultTable() + 4))[carIndex * 8] == 9) {
+        if (Race_GetPlayerRecordField4((BYTE)carIndex) || (BYTE)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[carIndex].packedState == 9) {
             type = 7;
             uniform = 1;
         }
@@ -5312,7 +5311,7 @@ void StageTiming_SpawnWheelParticles(int carIndex)
             freeSource.y = position.y - cornerVelocity->y;
             freeSource.z = position.z - cornerVelocity->z;
             Particle_Spawn(type, &freeSource, cornerVelocity, position.y - 0x10000, 0, colour,
-                           g_trailLevel[carIndex][wheel], (int)&carIndex, *((BYTE *)car->pBodyNode + 0x17c));
+                           g_trailLevel[carIndex][wheel], &carIndex, *((BYTE *)car->pBodyNode + 0x17c));
         } else {
             source.x = position.x - car->position.x + jitter.x;
             source.y = position.y - car->position.y + jitter.y;
@@ -5343,7 +5342,7 @@ void StageTiming_SpawnWheelParticles(int carIndex)
                 particleVelocity.x += offset.x; particleVelocity.y += offset.y; particleVelocity.z += offset.z;
             }
             Particle_Spawn(type, &source, &particleVelocity, source.y - 0x10000, 0, colour,
-                           g_trailLevel[carIndex][wheel], (int)&carIndex, *((BYTE *)car->pBodyNode + 0x17c));
+                           g_trailLevel[carIndex][wheel], &carIndex, *((BYTE *)car->pBodyNode + 0x17c));
 
         }
     }
@@ -5583,19 +5582,18 @@ char g_strRainTga[] = "\\NEWIMAGE\\rain.tga";
 
 extern char g_strPathConcat[];
 
-struct Unk0x004a3e20;
-void Frontend_SetObjectField118(Unk0x004a3e20 *pObject, int value);
+void Frontend_SetObjectField118(struct Texture *pTexture, int value);
 
 // GLOBAL: CMR2 0x00543e90
-int g_unk0x00543e90;
+Texture *g_unk0x00543e90;
 // GLOBAL: CMR2 0x00543ea4
-int g_unk0x00543ea4;
+Texture *g_unk0x00543ea4;
 // GLOBAL: CMR2 0x00543ea8
-int g_unk0x00543ea8[3];
+Texture *g_unk0x00543ea8[3];
 // GLOBAL: CMR2 0x005477f0
-int g_unk0x005477f0;
+Texture *g_unk0x005477f0;
 // GLOBAL: CMR2 0x00547ad0
-int g_unk0x00547ad0;
+Texture *g_unk0x00547ad0;
 
 // Loads the weather particle textures (rain, splats, snow, sunglow).
 // FUNCTION: CMR2 0x0045eb50
@@ -5605,23 +5603,23 @@ void StageTiming_LoadWeatherParticleTextures(void)
     int i;
 
     sprintf(CFrontend::m_stringDest, g_strPathConcat, CInstallInfo::GetTexturesDirectory(), g_strRainTga);
-    g_unk0x00543e90 = (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
+    g_unk0x00543e90 = CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
                                                      CFrontend::m_stringDest, &didLoad, NULL, 0, 0);
     sprintf(CFrontend::m_stringDest, g_strPathConcat, CInstallInfo::GetTexturesDirectory(), g_strSplatTga);
-    g_unk0x00543ea4 = (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
+    g_unk0x00543ea4 = CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
                                                      CFrontend::m_stringDest, &didLoad, NULL, 0, 0);
     sprintf(CFrontend::m_stringDest, g_strPathConcat, CInstallInfo::GetTexturesDirectory(), g_strSplat2Tga);
-    g_unk0x005477f0 = (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
+    g_unk0x005477f0 = CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
                                                      CFrontend::m_stringDest, &didLoad, NULL, 0, 0);
     for (i = 0; i < 3; i++) {
         sprintf(CFrontend::m_stringDest, g_strSnowTga, CInstallInfo::GetTexturesDirectory(), i + 1);
-        g_unk0x00543ea8[i] = (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
+        g_unk0x00543ea8[i] = CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
                                                             CFrontend::m_stringDest, &didLoad, NULL, 0, 0);
     }
     sprintf(CFrontend::m_stringDest, g_strPathConcat, CInstallInfo::GetTexturesDirectory(), g_strSunGlowTga);
-    g_unk0x00547ad0 = (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
+    g_unk0x00547ad0 = CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
                                                      CFrontend::m_stringDest, &didLoad, NULL, 0, 0);
-    Frontend_SetObjectField118((Unk0x004a3e20 *)g_unk0x00547ad0, 1);
+    Frontend_SetObjectField118(g_unk0x00547ad0, 1);
 }
 
 // File name formats of the three "team" model archives.
@@ -5678,7 +5676,7 @@ void StageTiming_LoadSelectedTeamArchive(void)
 }
 
 extern char g_stageSplitCount;
-BYTE *RallyData_GetAvailableRouteNodeRecord(int index);
+RallyRouteNode *RallyData_GetAvailableRouteNodeRecord(int index);
 unsigned int RallyData_GetSelectionFlag27(void);
 
 // Estimates the remaining stage time of every driver slot from the progress
@@ -5751,7 +5749,7 @@ void StageTiming_BuildCheckpointSplitPositions(void)
     if (g_stageCheckpointCount == 0)
         return;
     for (i = 0; i < g_stageCheckpointCount; i++) {
-        if ((*(BYTE *)(RallyData_GetAvailableRouteNodeRecord(i) + 0x18) & 1) != 0) {
+        if ((RallyData_GetAvailableRouteNodeRecord(i)->flags & 1) != 0) {
             g_unk0x00542c7c[count] = (int)(__int64)((double)i * CGraphics::m_65536);
             count++;
         }
@@ -5893,7 +5891,7 @@ void StageTiming_RecordAndReorderSplitTime(int car)
 // Refreshes the paint-decal samples of one car and applies the resulting time
 // spread to the current timing record.
 // FUNCTION: CMR2 0x00455ed0
-void StageTiming_RefreshPaintSamplesAndTimeSpread(int pCar)
+void StageTiming_RefreshPaintSamplesAndTimeSpread(StageTimingSpread *pCar)
 {
     int samples[16];
 
@@ -6107,48 +6105,48 @@ void StageTiming_PlaceEventStartingGrid(char param_1)
 
 // Per-particle-kind texture handles for the wheel spray / smoke effects.
 // GLOBAL: CMR2 0x005435c8
-int g_unk0x005435c8;
+Texture *g_unk0x005435c8;
 // GLOBAL: CMR2 0x00543650
-int g_unk0x00543650;
+Texture *g_unk0x00543650;
 // GLOBAL: CMR2 0x00543654
-int g_unk0x00543654;
+Texture *g_unk0x00543654;
 // GLOBAL: CMR2 0x00543658
-int g_unk0x00543658;
+Texture *g_unk0x00543658;
 // GLOBAL: CMR2 0x0054365c
-int g_unk0x0054365c;
+Texture *g_unk0x0054365c;
 // GLOBAL: CMR2 0x00543660
-int g_unk0x00543660;
+Texture *g_unk0x00543660;
 // GLOBAL: CMR2 0x00543664
-int g_unk0x00543664;
+Texture *g_unk0x00543664;
 // GLOBAL: CMR2 0x00543668
-int g_unk0x00543668;
+Texture *g_unk0x00543668;
 // GLOBAL: CMR2 0x0054366c
-int g_unk0x0054366c;
+Texture *g_unk0x0054366c;
 // GLOBAL: CMR2 0x00543670
-int g_unk0x00543670;
+Texture *g_unk0x00543670;
 // GLOBAL: CMR2 0x00543674
-int g_unk0x00543674;
+Texture *g_unk0x00543674;
 // GLOBAL: CMR2 0x00543678
-int g_unk0x00543678;
+Texture *g_unk0x00543678;
 // GLOBAL: CMR2 0x0054367c
-int g_unk0x0054367c[5];
+Texture *g_unk0x0054367c[5];
 // GLOBAL: CMR2 0x00543690
-int g_unk0x00543690[2];
+Texture *g_unk0x00543690[2];
 // GLOBAL: CMR2 0x00543698
-int g_unk0x00543698[2];
+Texture *g_unk0x00543698[2];
 // GLOBAL: CMR2 0x005436a0
-int g_unk0x005436a0[5];
+Texture *g_unk0x005436a0[5];
 // GLOBAL: CMR2 0x005436b8
-int g_unk0x005436b8[8];
+Texture *g_unk0x005436b8[8];
 // GLOBAL: CMR2 0x005436d8
-int g_unk0x005436d8[4];
+Texture *g_unk0x005436d8[4];
 // GLOBAL: CMR2 0x00547fb4
-int g_unk0x00547fb4;
+Texture *g_unk0x00547fb4;
 
 void ParticleEdit_Select(int index);
 void ParticleEdit_CopyTemplate(int index);
-void ParticleEdit_SetTextureParams(int a, int b, int c, int d, int e);
-void ParticleEdit_SetExtendedParams(int a, int b, int c, int d, BYTE flag4, BYTE flag8, int e, int f,
+void ParticleEdit_SetTextureParams(Texture *texture, int b, int c, int d, int e);
+void ParticleEdit_SetExtendedParams(Texture **frames, int b, int c, int d, BYTE flag4, BYTE flag8, int e, int f,
                                     int g, int h);
 void ParticleEdit_SetMotion(int lifetime, int gravity, int drag, int bounce, int friction, char bounces,
                             BYTE killBelowFloor);
@@ -6157,24 +6155,24 @@ void ParticleEdit_SetColour(BYTE r, BYTE g, BYTE b, BYTE flag);
 void ParticleEdit_SetSizeRamp(int size, int target, int step);
 void ParticleEdit_SetSizeRange(int min, int max);
 void ParticleEdit_SetSpread(int x, int y, int z, BYTE flag);
-void ParticleEdit_SetCallbacks(int field0x5c, void (*update)(void *, ParticleType *, int),
+void ParticleEdit_SetCallbacks(ParticleDrawCallback draw, void (*update)(void *, ParticleType *, int),
                                void (*postUpdate)(void *, ParticleType *, int),
-                               void (*callback)(void *, ParticleType *, int), int field0x6c);
+                               ParticleInitCallback callback, int field0x6c);
 void ParticleEdit_SetField2CAndFlag5(short param1);
 void ParticleEdit_CommitCurrentType(void);
 void Particle_SetPoolCapacity(int count);
 int WheelSpray_Init(int spread, int range);
 void Spark_Draw(Particle *p, ParticleType *pType, SceneNode *pView);
 void CarEffects_UpdateAgedParticleAppearance(void *pParticle, ParticleType *pType, int param);
-void GlassShard_Draw(Particle *p, ParticleType *pType, int unused);
-void GlassShard_Init(Particle *p, ParticleType *pType, Car *pCar);
-void Debris_Init(Particle *p, ParticleType *pType, int *pParam);
+void GlassShard_Draw(Particle *p, ParticleType *pType, SceneNode *unused);
+void GlassShard_Init(void *particle, ParticleType *pType, void *owner);
+void Debris_Init(void *particle, ParticleType *pType, void *data);
 void Debris_Draw(Particle *p, ParticleType *pType, SceneNode *pView);
 void CarEffects_UpdateRisingParticle(void *pParticle, ParticleType *pType, int param);
 void CarEffects_UpdateCarFollowingRisingParticle(void *pParticle, ParticleType *pType, int param);
 void CarEffect_SpawnExhaustParticle(void *pParticle, ParticleType *pType, int param);
 void CarEffects_UpdateSpiralParticle(void *pParticle, ParticleType *pType, int param);
-void CarEffects_InitParticleOwnerData(void *pParticle, ParticleType *pType, int param);
+void CarEffects_InitParticleOwnerData(void *pParticle, ParticleType *pType, void *param);
 void CarEffects_UpdateParticleAtCarPosition(void *pParticle, ParticleType *pType, int param);
 
 // Fills the particle-type table of the stage effects (wheel spray, smoke,
@@ -6224,10 +6222,10 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_CopyTemplate(0);
   ParticleEdit_SetMotion(0x40000,0,0,0,0,0,0);
   ParticleEdit_SetSizeRamp(0xccc,0x2147,0xccc);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x005436d8,4,0,0x10000,0,0,0xffff0000,0x10000,0x10000,0xffff0000);
+  ParticleEdit_SetExtendedParams(g_unk0x005436d8,4,0,0x10000,0,0,0xffff0000,0x10000,0x10000,0xffff0000);
   ParticleEdit_SetAlphaRamp(0xfe,0xfe,0,0);
   ParticleEdit_SetSizeRange(0x1999,0x3333);
-  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffect_SpawnExhaustParticle,(void (*)(void *, ParticleType *, int))CarEffects_InitParticleOwnerData,0);
+  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffect_SpawnExhaustParticle,(ParticleInitCallback)CarEffects_InitParticleOwnerData,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(6);
   ParticleEdit_SetTextureParams(g_unk0x0054366c,0xffff999a,0x6666,0x6666,0xffff999a);
@@ -6237,7 +6235,7 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_SetSizeRamp(0x4ccc,0x18000,0x7ae);
   ParticleEdit_SetField2CAndFlag5(0);
   ParticleEdit_SetSpread(0x51e,0x28f,0x51e,0);
-  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateCarFollowingRisingParticle,(void (*)(void *, ParticleType *, int))CarEffects_InitParticleOwnerData,0);
+  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateCarFollowingRisingParticle,(ParticleInitCallback)CarEffects_InitParticleOwnerData,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(4);
   ParticleEdit_CopyTemplate(6);
@@ -6257,19 +6255,19 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(10);
   ParticleEdit_CopyTemplate(6);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x005436b8,8,0,0x20000,0,0,0xffffb334,0x4ccc,0x4ccc,0xffffb334);
+  ParticleEdit_SetExtendedParams(g_unk0x005436b8,8,0,0x20000,0,0,0xffffb334,0x4ccc,0x4ccc,0xffffb334);
   ParticleEdit_SetAlphaRamp(100,0,0,0);
   ParticleEdit_SetColour(0xff,0xff,0xff,1);
-  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateCarFollowingRisingParticle,(void (*)(void *, ParticleType *, int))CarEffects_InitParticleOwnerData,0);
+  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateCarFollowingRisingParticle,(ParticleInitCallback)CarEffects_InitParticleOwnerData,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(8);
   ParticleEdit_CopyTemplate(4);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x005436b8,8,0,0x20000,1,1,0xffff4ccd,0xb333,0xb333,0xffff4ccd);
+  ParticleEdit_SetExtendedParams(g_unk0x005436b8,8,0,0x20000,1,1,0xffff4ccd,0xb333,0xb333,0xffff4ccd);
   ParticleEdit_SetColour(0x98,0x7e,0x66,1);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0xb);
   ParticleEdit_CopyTemplate(7);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x005436b8,8,0,0x20000,1,1,0xffff4ccd,0xb333,0xb333,0xffff4ccd);
+  ParticleEdit_SetExtendedParams(g_unk0x005436b8,8,0,0x20000,1,1,0xffff4ccd,0xb333,0xb333,0xffff4ccd);
   ParticleEdit_SetSizeRamp(0x4ccc,0x13333,0x147a);
   ParticleEdit_SetMotion(0x640000,0,0xa0000,0,0,0,0);
   ParticleEdit_SetAlphaRamp(100,0,0,0);
@@ -6287,14 +6285,14 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0xc);
   ParticleEdit_CopyTemplate(5);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x005436b8,8,0,0x20000,1,1,0xffffc000,0x4000,0x8000,0xffffc000);
+  ParticleEdit_SetExtendedParams(g_unk0x005436b8,8,0,0x20000,1,1,0xffffc000,0x4000,0x8000,0xffffc000);
   ParticleEdit_SetAlphaRamp(0x1e,0,4,1);
   ParticleEdit_SetSizeRamp(0x4ccc,0x5555,0x3332);
   ParticleEdit_SetField2CAndFlag5(0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0xd);
   ParticleEdit_CopyTemplate(5);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x005436b8,8,0,0x20000,1,1,0xffff0000,0x10000,0x20000,0xffff0000);
+  ParticleEdit_SetExtendedParams(g_unk0x005436b8,8,0,0x20000,1,1,0xffff0000,0x10000,0x20000,0xffff0000);
   ParticleEdit_SetAlphaRamp(0x46,0,2,1);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0xe);
@@ -6305,21 +6303,21 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_SetSizeRamp(0x1999,0x10000,0xa3d);
   ParticleEdit_SetAlphaRamp(0xff,0,0xf,1);
   ParticleEdit_SetSpread(0,0,0,0);
-  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateParticleAtCarPosition,(void (*)(void *, ParticleType *, int))CarEffects_InitParticleOwnerData,0);
+  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateParticleAtCarPosition,(ParticleInitCallback)CarEffects_InitParticleOwnerData,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0xf);
   ParticleEdit_CopyTemplate(0xe);
   ParticleEdit_SetTextureParams(g_unk0x00543670,0,0,0x20000,0xfffe0000);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x10);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x0054367c,5,0x20000,0x10000,1,1,0xffff3334,0xcccc,0xcccc,0xffff3334);
+  ParticleEdit_SetExtendedParams(g_unk0x0054367c,5,0x20000,0x10000,1,1,0xffff3334,0xcccc,0xcccc,0xffff3334);
   ParticleEdit_SetMotion(0xc80000,0x28f,0,0,0,0,1);
   ParticleEdit_SetAlphaRamp(0xff,0xff,0,1);
   ParticleEdit_SetColour(0xff,0xff,0xff,1);
   ParticleEdit_SetSizeRange(0x1999,0x147a);
   ParticleEdit_SetField2CAndFlag5(0xb);
   ParticleEdit_SetSpread(0,0,0,0);
-  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateSpiralParticle,(void (*)(void *, ParticleType *, int))CarEffects_InitParticleOwnerData,0);
+  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateSpiralParticle,(ParticleInitCallback)CarEffects_InitParticleOwnerData,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x11);
   ParticleEdit_CopyTemplate(0x10);
@@ -6327,14 +6325,14 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x12);
   ParticleEdit_CopyTemplate(0x10);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x00543690,2,0x40000,0x40000,1,1,0xfffe8000,0x18000,0x18000,0xfffe8000);
+  ParticleEdit_SetExtendedParams(g_unk0x00543690,2,0x40000,0x40000,1,1,0xfffe8000,0x18000,0x18000,0xfffe8000);
   ParticleEdit_SetMotion(0xc80000,0x28f,0,0,0,0,1);
   ParticleEdit_SetAlphaRamp(0xff,0xff,0,1);
   ParticleEdit_SetColour(0xff,0xff,0xff,1);
   ParticleEdit_SetSizeRange(0x1999,0x147a);
   ParticleEdit_SetField2CAndFlag5(0xb);
   ParticleEdit_SetSpread(0,0,0,0);
-  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateSpiralParticle,(void (*)(void *, ParticleType *, int))CarEffects_InitParticleOwnerData,0);
+  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateSpiralParticle,(ParticleInitCallback)CarEffects_InitParticleOwnerData,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x13);
   ParticleEdit_CopyTemplate(0x12);
@@ -6342,7 +6340,7 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x14);
   ParticleEdit_CopyTemplate(0x12);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x00543698,2,0x40000,0x40000,1,1,0xfffe8000,0x18000,0x18000,0xfffe8000);
+  ParticleEdit_SetExtendedParams(g_unk0x00543698,2,0x40000,0x40000,1,1,0xfffe8000,0x18000,0x18000,0xfffe8000);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x15);
   ParticleEdit_CopyTemplate(0x14);
@@ -6365,7 +6363,7 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_SetSizeRamp(0x1999,0x1999,0);
   ParticleEdit_SetField2CAndFlag5(0);
   ParticleEdit_SetSpread(0,0,0,0);
-  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateParticleAtCarPosition,(void (*)(void *, ParticleType *, int))CarEffects_InitParticleOwnerData,0);
+  ParticleEdit_SetCallbacks(0,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateParticleAtCarPosition,(ParticleInitCallback)CarEffects_InitParticleOwnerData,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x1a);
   ParticleEdit_SetTextureParams(g_unk0x00543650,0xffffcccd,0x3333,0x3333,0xffffcccd);
@@ -6374,7 +6372,7 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_SetSizeRamp(0x10000,0x10000,0);
   ParticleEdit_SetField2CAndFlag5(0);
   ParticleEdit_SetSpread(0,0,0,0);
-  ParticleEdit_SetCallbacks((int)Spark_Draw,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateAgedParticleAppearance,0,0);
+  ParticleEdit_SetCallbacks(Spark_Draw,0,(void (*)(void *, ParticleType *, int))CarEffects_UpdateAgedParticleAppearance,0,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x1b);
   ParticleEdit_SetTextureParams(g_unk0x00543654,0xffffcccd,0x3333,0x3333,0xffffcccd);
@@ -6383,7 +6381,7 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_SetSizeRamp(0x10000,0x10000,0);
   ParticleEdit_SetField2CAndFlag5(0);
   ParticleEdit_SetSpread(0,0,0,0);
-  ParticleEdit_SetCallbacks((int)GlassShard_Draw,0,0,(void (*)(void *, ParticleType *, int))GlassShard_Init,0);
+  ParticleEdit_SetCallbacks(GlassShard_Draw,0,0,(ParticleInitCallback)GlassShard_Init,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x1c);
   ParticleEdit_SetTextureParams(g_unk0x00543658,0xffffcccd,0x3333,0x3333,0xffffcccd);
@@ -6392,11 +6390,11 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_SetSizeRamp(0x10000,0x10000,0);
   ParticleEdit_SetField2CAndFlag5(0);
   ParticleEdit_SetSpread(0,0,0,0);
-  ParticleEdit_SetCallbacks((int)Debris_Draw,0,0,(void (*)(void *, ParticleType *, int))Debris_Init,0);
+  ParticleEdit_SetCallbacks(Debris_Draw,0,0,(ParticleInitCallback)Debris_Init,0);
   ParticleEdit_CommitCurrentType();
   iVar1 = WheelSpray_Init(0x10000,0x190000);
   ParticleEdit_Select(0x1d);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x005436a0,5,0x20000,0x10000,1,1,0xfffff99a,0x666,0x666,0xfffff99a);
+  ParticleEdit_SetExtendedParams(g_unk0x005436a0,5,0x20000,0x10000,1,1,0xfffff99a,0x666,0x666,0xfffff99a);
   ParticleEdit_SetMotion(0xf0000,FixMul(iVar1, 0x3333),0,0xb333,0,1,0);
   ParticleEdit_SetAlphaRamp(0xff,0xff,0,0);
   ParticleEdit_SetColour(0xff,0,0xff,1);
@@ -6405,7 +6403,7 @@ void StageTiming_InitEffectParticleTypes(void)
   ParticleEdit_SetSpread(0,0,0,0);
   ParticleEdit_CommitCurrentType();
   ParticleEdit_Select(0x1e);
-  ParticleEdit_SetExtendedParams((int)&g_unk0x005436a0,5,0x20000,0x10000,1,1,0xfffff70b,0x8f5,0x8f5,0xfffff70b);
+  ParticleEdit_SetExtendedParams(g_unk0x005436a0,5,0x20000,0x10000,1,1,0xfffff70b,0x8f5,0x8f5,0xfffff70b);
   ParticleEdit_SetMotion(0x190000,iVar1,0,0xb333,0,1,0);
   ParticleEdit_SetAlphaRamp(0xff,0xff,0,0);
   ParticleEdit_SetColour(0xff,0,0xff,1);
@@ -6421,8 +6419,8 @@ void StageTiming_InitEffectParticleTypes(void)
   return;
 }
 
-void Car_Spawn(int param_1, int param_2, int param_3, int *param_4, int param_5, int param_6);
-void Car_ResetBodyBasis(int param_1);
+void Car_Spawn(Car *param_1, SceneNode *param_2, int param_3, FixVector *param_4, int param_5, int param_6);
+void Car_ResetBodyBasis(Car *param_1);
 void StageTiming_IntegratePartSpringMotion(void);
 
 // One wheel/hub record (stride 0x1a0) of the four slots CarPart_InitWheelHubSlot installs:
@@ -6784,8 +6782,8 @@ void StageTiming_PlaceCarViewNodesAndBody(SceneNode *pNodeA, SceneNode *pNodeB, 
     SceneNode_SetRotation(pNodeB, pAngles);
     SceneNode_SetPosition(pNodeA, pPosition);
     SceneNode_SetPosition(pNodeB, pPosition);
-    Car_Spawn((int)Car_Get(carIndex), (int)pNodeA, param_4, (int *)pPosition, carIndex, param_7);
-    Car_ResetBodyBasis((int)Car_Get(carIndex));
+    Car_Spawn(Car_Get(carIndex), pNodeA, param_4, pPosition, carIndex, param_7);
+    Car_ResetBodyBasis(Car_Get(carIndex));
     if (CGameInfo::GetGameModeOptionBit19() != 0)
         StageTiming_SnapshotCarNetworkPose(Car_Get(carIndex));
 }
@@ -7618,8 +7616,7 @@ void StageTiming_RecomputeCarSplitBarSamples(Car *pCar, unsigned int mask, int *
         (t) -= 0x1680000;               \
     else if ((t) < -0xb40000)           \
         (t) += 0x1680000;
-#define REF_TRACK ((BYTE *)*(int *)((int *)&g_unk0x00592744 + variant))
-    BYTE *pc;
+#define REF_TRACK (g_aiReferenceRoutes[variant])
     int nodeZ[20];
     int nodeX[20];
     int result[18];
@@ -7644,7 +7641,6 @@ void StageTiming_RecomputeCarSplitBarSamples(Car *pCar, unsigned int mask, int *
     int scale;
     int i;
 
-    pc = (BYTE *)pCar;
     i = pOut[0x15];
     idxCount = RallyData_GetRouteStateValue();
     angles[1] = i;
@@ -7659,19 +7655,19 @@ void StageTiming_RecomputeCarSplitBarSamples(Car *pCar, unsigned int mask, int *
         if (angles[i] < 0)
             angles[i] = idxCount - 1;
     }
-    frontAngle = StageObject_Atan2Degrees(*(int *)(pc + 0x368), *(int *)(pc + 0x360));
+    frontAngle = StageObject_Atan2Degrees(pCar->right.z, pCar->right.x);
     pOut[4] = frontAngle;
-    sideAngle = StageObject_Atan2Degrees(*(int *)(pc + 0x410), *(int *)(pc + 0x408));
-    px = *(int *)(pc + 0x2d0);
-    pz = *(int *)(pc + 0x2d8);
+    sideAngle = StageObject_Atan2Degrees(pCar->velocity.z, pCar->velocity.x);
+    px = pCar->position.x;
+    pz = pCar->position.z;
     RallyData_GetRouteNodeGroundPosition(angles[2], (int *)&node);
     nodeZ[0] = node.z;
     nodeX[0] = node.x;
     if (mask & 1)
         result[0] = StageObject_Atan2Degrees(nodeZ[0] - pz, nodeX[0] - px);
     if (variant != 0)
-        result[2] = StageObject_Atan2Degrees(*(int *)(REF_TRACK + 0x1158 + angles[4] * 4) - pz,
-                                             *(int *)(REF_TRACK + 0xb90 + angles[4] * 4) - px);
+        result[2] = StageObject_Atan2Degrees(REF_TRACK->positionZ[angles[4]] - pz,
+                                             REF_TRACK->positionX[angles[4]] - px);
     if (mask & 2) {
         RallyData_GetRouteNodeGroundPosition(angles[3], (int *)&node);
         nodeZ[1] = node.z;
@@ -7679,7 +7675,7 @@ void StageTiming_RecomputeCarSplitBarSamples(Car *pCar, unsigned int mask, int *
     }
     if (mask & 2)
         result[1] = StageObject_Atan2Degrees(nodeZ[1] - pz, nodeX[1] - px);
-    baseAngle = FixDiv(*(int *)(pc + 0x778), 0x4000000);
+    baseAngle = FixDiv(pCar->speed, 0x4000000);
     baseAngle = (int)(__int64)((double)baseAngle * CGraphics::m_65536);
     RallyData_GetRouteNodeGroundPosition(angles[1], (int *)&node);
     nz = node.z;
@@ -7697,8 +7693,8 @@ void StageTiming_RecomputeCarSplitBarSamples(Car *pCar, unsigned int mask, int *
     len = FixSqrt(len);
     if (variant != 0)
         refAngle = StageObject_Atan2Degrees(
-            *(int *)(REF_TRACK + 0x1158 + angles[1] * 4) - *(int *)(REF_TRACK + 0x1158 + angles[0] * 4),
-            *(int *)(REF_TRACK + 0xb90 + angles[1] * 4) - *(int *)(REF_TRACK + 0xb90 + angles[0] * 4));
+            REF_TRACK->positionZ[angles[1]] - REF_TRACK->positionZ[angles[0]],
+            REF_TRACK->positionX[angles[1]] - REF_TRACK->positionX[angles[0]]);
     tmp = curAngle - StageObject_Atan2Degrees(nodeZ[0] - nz, nodeX[0] - nx);
     WRAP(tmp)
     pOut[0x17] = tmp;
@@ -7715,10 +7711,10 @@ void StageTiming_RecomputeCarSplitBarSamples(Car *pCar, unsigned int mask, int *
             WRAP_STORE(pOut[7], tmp)
             break;
         case 3:
-            pOut[3] = *(int *)(pc + 0x870);
+            pOut[3] = pCar->wheelSlip[0];
             break;
         case 4:
-            pOut[0x28] = baseAngle - *(int *)(REF_TRACK + 0x5c8 + angles[5] * 4);
+            pOut[0x28] = baseAngle - REF_TRACK->speedSamples[angles[5]];
             break;
         case 6:
             *pOut = baseAngle;
@@ -7738,14 +7734,14 @@ void StageTiming_RecomputeCarSplitBarSamples(Car *pCar, unsigned int mask, int *
             WRAP_STORE(pOut[1], tmp)
             break;
         case 0xb:
-            pOut[2] = (int)*(short *)(pc + 0xb10);
+            pOut[2] = (int)(short)pCar->wheelSteeringAngle;
             break;
         case 0xc:
-            pOut[0x18] = baseAngle - *(int *)(REF_TRACK + 0x5c8 + angles[1] * 4);
+            pOut[0x18] = baseAngle - REF_TRACK->speedSamples[angles[1]];
             break;
         case 0xe:
-            b = *(int *)(REF_TRACK + 0x5c8 + angles[1] * 4);
-            t = *(int *)(REF_TRACK + angles[1] * 4);
+            b = REF_TRACK->speedSamples[angles[1]];
+            t = REF_TRACK->headingDegrees[angles[1]];
             if (b > 0x3c0000) {
                 if (baseAngle < 0x280000) {
                     t = curAngle;
@@ -7817,12 +7813,11 @@ char g_strTexPaint[] = "\\NEWIMAGE\\paint.tga";
 char g_strTexSpark[] = "\\NEWIMAGE\\spark4.tga";
 
 extern char g_strPathConcat[];
-struct Unk0x004a3e20;
-void Frontend_SetObjectField118(Unk0x004a3e20 *pObject, int value);
-void CarEffects_InitUVs(int unused1, int unused2);
+void Frontend_SetObjectField118(struct Texture *pTexture, int value);
+void CarEffects_InitUVs(Texture *unused1, Texture *unused2);
 
 #define LOAD_EFFECT_TEXTURE() \
-    (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(), CFrontend::m_stringDest, &loaded, NULL, 0, 0x10)
+    CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(), CFrontend::m_stringDest, &loaded, NULL, 0, 0x10)
 
 // Loads the textures of the particle effects (sparks, debris, exhaust, spray,
 // snow, dust, leaves, grass, gravel) from the stage archive.
@@ -7849,10 +7844,10 @@ void StageTiming_LoadEffectParticleTextures(void)
     g_unk0x00543668 = LOAD_EFFECT_TEXTURE();
     sprintf(CFrontend::m_stringDest, g_strPathConcat, CInstallInfo::GetTexturesDirectory(), g_strTexSplashSpray2);
     g_unk0x00543670 = LOAD_EFFECT_TEXTURE();
-    Frontend_SetObjectField118((Unk0x004a3e20 *)g_unk0x00543670, 1);
+    Frontend_SetObjectField118(g_unk0x00543670, 1);
     sprintf(CFrontend::m_stringDest, g_strPathConcat, CInstallInfo::GetTexturesDirectory(), g_strTexSplashSpray2f);
     g_unk0x00543674 = LOAD_EFFECT_TEXTURE();
-    Frontend_SetObjectField118((Unk0x004a3e20 *)g_unk0x00543674, 1);
+    Frontend_SetObjectField118(g_unk0x00543674, 1);
     sprintf(CFrontend::m_stringDest, g_strPathConcat, CInstallInfo::GetTexturesDirectory(), g_strTexSnowSpray);
     g_unk0x00543678 = LOAD_EFFECT_TEXTURE();
     for (i = 0; i < 8; i++) {
@@ -7862,7 +7857,7 @@ void StageTiming_LoadEffectParticleTextures(void)
     for (i = 0; i < 4; i++) {
         sprintf(CFrontend::m_stringDest, g_strNumberedTga, CInstallInfo::GetTexturesDirectory(), g_strTexDetail, i + 1);
         g_unk0x005436d8[i] = LOAD_EFFECT_TEXTURE();
-        Frontend_SetObjectField118((Unk0x004a3e20 *)g_unk0x005436d8[i], 1);
+        Frontend_SetObjectField118(g_unk0x005436d8[i], 1);
     }
     for (i = 0; i < 5; i++) {
         sprintf(CFrontend::m_stringDest, g_strNumberedTga, CInstallInfo::GetTexturesDirectory(), g_strTexLeaf, i);
@@ -7878,7 +7873,7 @@ void StageTiming_LoadEffectParticleTextures(void)
     }
     sprintf(CFrontend::m_stringDest, g_strPathConcat, CInstallInfo::GetTexturesDirectory(), g_strTexSplashDrop);
     g_unk0x005435c8 = LOAD_EFFECT_TEXTURE();
-    Frontend_SetObjectField118((Unk0x004a3e20 *)g_unk0x005435c8, 1);
+    Frontend_SetObjectField118(g_unk0x005435c8, 1);
     for (i = 0; i < 5; i++) {
         sprintf(CFrontend::m_stringDest, g_strNumberedTga, CInstallInfo::GetTexturesDirectory(), g_strTexRocksGrav, i);
         g_unk0x005436a0[i] = LOAD_EFFECT_TEXTURE();
@@ -7954,7 +7949,7 @@ int StageTiming_LoadStageCarsAndEffects(void)
     memset(g_carModelBuffers, 0, sizeof(g_carModelBuffers));
     // MSVC6 keeps the original cursor biased to bodyNode (+4). The bound
     // is the same member position one record beyond the 16-element array.
-    while ((int)pRec < (int)((BYTE *)(g_carScenes + 16) + sizeof(SceneNode *))) {
+    while ((INT_PTR)pRec < (INT_PTR)(g_carScenes + 16) + (int)offsetof(CarSceneRecord, bodyNode)) {
         pRec[1] = NULL;
         pRec[0] = NULL;
         pRec += sizeof(CarSceneRecord) / sizeof(SceneNode *);
@@ -8047,7 +8042,7 @@ int RallyData_GetDistinctValueEntry(int index);
 void RallyData_SetDriverCategoryOption(BYTE index, BYTE value);
 char *Car_GetDirectoryPath(int car);
 void Graphics_SetTextureStageState(int param1);
-int Sector_BuildC3DModelScene(unsigned int, unsigned int, unsigned int);
+struct SceneNode *Sector_BuildC3DModelScene(void *data, struct SceneNode *parent, struct GenericFile *archive);
 int *StageTiming_GetCarStartPosition(int car);
 int StageTiming_GetStartTableField244(int unused);
 int Car_UsesNarrowWheels(Car *pCar, int param2);
@@ -8318,7 +8313,7 @@ classes:
     CGenericFileLoader::LoadIntoFileRecord(pArchive, CFrontend::m_stringDest);
     if (pData == NULL)
         return 0;
-    pScene = (SceneNode *)Sector_BuildC3DModelScene((unsigned int)pData, RallyData_GetChallengeRenderState(), (unsigned int)pArchive);
+    pScene = Sector_BuildC3DModelScene(pData, RallyData_GetChallengeRenderState(), pArchive);
     pBody = SceneNode_FindByType(pScene, 5);
     pRecord->rootNode = pScene;
     pRecord->bodyNode = pBody;
@@ -8339,8 +8334,8 @@ classes:
             pWheelData = CFileBuffer::GetGenericFileBuffer(path, FALSE);
         }
         if (pWheelData != NULL) {
-            pRecord->alternateWheelScene = (SceneNode *)Sector_BuildC3DModelScene((unsigned int)pWheelData, RallyData_GetChallengeRenderState(),
-                                                   (unsigned int)&g_carModelArchives[car * 2]);
+            pRecord->alternateWheelScene = Sector_BuildC3DModelScene(pWheelData, RallyData_GetChallengeRenderState(),
+                                                   &g_carModelArchives[car * 2]);
             pRecord->originalWheelObjects[0] = SceneNode_FindByType(pScene, 1)->pObject;
             pRecord->originalWheelObjects[1] = SceneNode_FindByType(pScene, 2)->pObject;
             pRecord->originalWheelObjects[2] = SceneNode_FindByType(pScene, 3)->pObject;
@@ -8409,7 +8404,7 @@ wheelsDone:
     pArchive = &g_carModelArchives[car * 2 + 1];
     CGenericFileLoader::LoadIntoFileRecord(pArchive, CFrontend::m_stringDest);
     pCar = Car_Get(car);
-    pNodes = (SceneNode *)Sector_BuildC3DModelScene((unsigned int)pData, RallyData_GetChallengeRenderState(), (unsigned int)pArchive);
+    pNodes = Sector_BuildC3DModelScene(pData, RallyData_GetChallengeRenderState(), pArchive);
     g_carAlternateBodyScenes[car] = pNodes;
     pCar->pAlternateBodyNode = SceneNode_FindByType(pNodes, 5);
     pCar->pExtraNodes[0] = SceneNode_FindByType(pNodes, 1);
@@ -8932,14 +8927,14 @@ void StageTiming_PerturbComputerSplitDeltas(int *pDeltas)
     }
 }
 
-void StageTiming_BuildSplitInterpolationFactors(int *param_1);
-void StageTiming_InterpolateCarFixedSampleRows(int pCar, int *pOut);
+void StageTiming_BuildSplitInterpolationFactors(StageTimingSpread *param_1);
+void StageTiming_InterpolateCarFixedSampleRows(StageTimingSpread *pCar, int *pOut);
 void StageTiming_AccumulateSplitDeltas(int *pDeltas);
 void RallyTiming_SortOrder(int *piTimes, char *pcOrder, int iDirection, int iCount, char bInitialise);
 
 // Builds the CPU drivers' split times for a stage and sorts every split.
 // FUNCTION: CMR2 0x004561e0
-void StageTiming_BuildAndSortCPUSplitTimes(int *pTimes)
+void StageTiming_BuildAndSortCPUSplitTimes(StageTimingSpread *pTimes)
 {
     int *pDeltas;
     int n;
@@ -8949,7 +8944,7 @@ void StageTiming_BuildAndSortCPUSplitTimes(int *pTimes)
 
     pDeltas = (int *)CFileBuffer::AllocateLockedBuffer(0x280);
     StageTiming_BuildSplitInterpolationFactors(pTimes);
-    StageTiming_InterpolateCarFixedSampleRows((int)pTimes, pDeltas);
+    StageTiming_InterpolateCarFixedSampleRows(pTimes, pDeltas);
     StageTiming_PerturbComputerSplitDeltas(pDeltas);
     StageTiming_AccumulateSplitDeltas(pDeltas);
     n = GetStageSplitCount();
@@ -8980,8 +8975,8 @@ FixVector g_exhaustSparkLines[4][2] = {
 // GLOBAL: CMR2 0x005439b0
 BYTE g_carExhaustBurstFrames[8];
 
-void Particle_Spawn(int typeIndex, FixVector *pSource, FixVector *pPosition, int field0x48, int field0x40,
-                    BYTE *pColour, BYTE field0x54, int callbackParam, BYTE field0x55);
+void Particle_Spawn(int typeIndex, FixVector *pSource, FixVector *pPosition, int field0x48, FixMatrix *attachmentMatrix,
+                    BYTE *pColour, BYTE field0x54, void *callbackParam, BYTE field0x55);
 int FixMatrix_RotateVector(FixVector *pOut, FixVector *pV, FixMatrix *pM);
 
 // Exhaust effects of a car: smoke from each exhaust while the engine revs at
@@ -9079,7 +9074,7 @@ void CarEffect_UpdateExhaustSmokeAndBackfire(int car)
         zero.y = 0;
         zero.z = 0;
         g_trailForced[car] = 0;
-        Particle_Spawn(3, &zero, &velocity, -0x640000, 0, NULL, 0, (int)&car,
+        Particle_Spawn(3, &zero, &velocity, -0x640000, 0, NULL, 0, &car,
                        *(BYTE *)(*(BYTE * *)&pCar->pBodyNode + 0x17c));
         r = (int)(__int64)((float)rand() * g_oneOverRandMax * CGraphics::m_65536);
         if (g_carExhaustGlows[car][exhaust] != 0) {
@@ -9165,7 +9160,7 @@ void StageTiming_UpdateAttachedCarParts(Car *pCars, short *pOrder, short count)
                         g_partState->update();
                 }
                 pTable--;
-            } while ((int)pTable >= (int)g_carPartStateTables.parts);
+            } while ((INT_PTR)pTable >= (INT_PTR)g_carPartStateTables.parts);
             Car_BreakQueuedWindows(g_partCar);
             pIndex--;
         } while (--remaining);
@@ -9415,7 +9410,7 @@ void StageTiming_RestoreDeviceStageResources(void)
     for (i = 0; i < CGraphics::m_textureCount; i++) {
         Texture *pTexture = CGraphics::m_pTextureManager->textureBuffer[i];
         if (pTexture != NULL && pTexture->pSurface != NULL) {
-            CGraphics::ApplyTextureStageChange(0, (int)pTexture);
+            CGraphics::ApplyTextureStageChange(0, pTexture);
             Gfx_DrawPrimitiveTL(GFX_TRIANGLELIST, (GfxTLVertex *)verts, 3);
         }
     }
@@ -9429,13 +9424,7 @@ unsigned int g_unk0x00541f88;
 
 // Per-driver timing block: 0xa0 bytes of split samples followed by the four
 // spread parameters of the stage (the two fixed-point ones first).
-struct StageTimingSpread {
-    BYTE field_0x0[0xa0];
-    int field_0xa0;
-    int field_0xa4;
-    int field_0xa8;
-    int field_0xac;
-};
+
 
 // Rebuilds the stage's timing records when a stage starts: resets the split
 // tables, seeds the RNG, lays out the driver slots and pairs the split
@@ -9449,17 +9438,17 @@ void StageTiming_InitRaceDriverRecords(char param_1)
     if (g_unk0x00542604 == 0)
         return;
     StageTiming_Reset();
-    StageTiming_GetObjectRampParameters(&local.field_0xa8, &local.field_0xac, &local.field_0xa0, &local.field_0xa4);
+    StageTiming_GetObjectRampParameters(&local.startBlendFixed, &local.endBlendFixed, &local.startPositionFixed, &local.endPositionFixed);
     if ((char)RallyDataCountryIndex() == 3) {
-        local.field_0xa8 = 0;
-        local.field_0xac = 0;
+        local.startBlendFixed = 0;
+        local.endBlendFixed = 0;
     }
     if (param_1 != 0)
         g_unk0x00541f88 = CMain::GetFrameTime();
     srand(g_unk0x00541f88);
     StageTiming_AssignReservedDriverSlots(CGameInfo::GetConfiguredPlayerCount());
-    StageTiming_RefreshPaintSamplesAndTimeSpread((int)&local);
-    StageTiming_BuildAndSortCPUSplitTimes((int *)&local);
+    StageTiming_RefreshPaintSamplesAndTimeSpread(&local);
+    StageTiming_BuildAndSortCPUSplitTimes(&local);
     StageTiming_RebuildSplitPositions();
     if ((char)RallyData_GetSelectionFlag27() != 0) {
         p = (int *)(g_unk0x00542528 + 0x10);
@@ -9467,7 +9456,7 @@ void StageTiming_InitRaceDriverRecords(char param_1)
             p[-3] = 0;
             p[0] = 0;
             p += 6;
-        } while ((int)p < (int)(g_unk0x00542528 + 0xd0));
+        } while ((INT_PTR)p < (INT_PTR)(g_unk0x00542528 + 0xd0));
         g_unk0x00542420[0] = ConvertRawTimeToCentiseconds(*(int *)(g_unk0x0054241c + 0x2d0));
         g_unk0x00542420[1] = ConvertRawTimeToCentiseconds(*(int *)(g_unk0x0054241c + 0x310));
         StageTiming_PairPlayerOpponentSlots();

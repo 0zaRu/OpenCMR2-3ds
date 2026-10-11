@@ -1,3 +1,5 @@
+#include <stddef.h>
+#include <windows.h>
 #include "Game.h"
 #include "port/diagnostics.h"
 #include "RallyData.h"
@@ -92,8 +94,12 @@ int g_unk0x00537190;
 int g_unk0x00537194;
 // GLOBAL: CMR2 0x00537394
 int g_unk0x00537394;
+typedef char RaceTransitionAddressWidthCheck[sizeof(ptrdiff_t) >= sizeof(void *) ? 1 : -1];
+// 64BIT: slots 0..4 hold bounded numeric states/cursors; slot 5 holds the
+// callback machine saved by Race_EnterCurrentModeScene, read by GameMenus.
+// ptrdiff_t preserves the original MSVC6 int type and native pointer width.
 // GLOBAL: CMR2 0x00537f0c
-int g_unk0x00537f0c[6];
+ptrdiff_t g_unk0x00537f0c[6];
 // GLOBAL: CMR2 0x00537f24
 int g_unk0x00537f24;
 // GLOBAL: CMR2 0x00537f3c
@@ -170,8 +176,8 @@ int g_unk0x0051922c = -1;
 // GLOBAL: CMR2 0x0051948c
 char g_strTempC3D[] = "TEMP.C3D";
 
-int RallyData_GetChallengeRenderState(void);
-int Sector_BuildC3DModelScene(unsigned int, unsigned int, unsigned int);
+SceneNode *RallyData_GetChallengeRenderState(void);
+struct SceneNode *Sector_BuildC3DModelScene(void *data, struct SceneNode *parent, struct GenericFile *archive);
 BYTE *Replay_LoadValidatedBuffer(char *path);
 char *Race_GetStagePathBuffer3874C(void);
 GenericFile *Race_GetLoadedStageFile(void);
@@ -347,7 +353,7 @@ void Race_LoadStageModel(void)
     pBuffer = CGenericFileLoader::FindFile((GenericFile *)StageTiming_GetStageFile3(), g_strTempC3D, NULL, NULL, 0);
     if (pBuffer != NULL) {
         pFile = Race_GetLoadedStageFile();
-        Sector_BuildC3DModelScene((unsigned int)pBuffer, RallyData_GetChallengeRenderState(), (unsigned int)pFile);
+        Sector_BuildC3DModelScene(pBuffer, RallyData_GetChallengeRenderState(), pFile);
     }
 }
 
@@ -421,7 +427,7 @@ int Race_IsMultiplayerRecordMode10(void)
 {
     int result = 0;
 
-    if ((BYTE)RallyDataState() > 1 && **(char **)(StageUI_GetRaceResultTable() + 4) == 10)
+    if ((BYTE)RallyDataState() > 1 && (char)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[0].packedState == 10)
         result = 1;
     return result;
 }
@@ -830,6 +836,7 @@ int g_unk0x0053708c[2];
 int g_unk0x00537198[2];
 
 #include "Car.h"
+#include "RallyRouteNode.h"
 int RallyData_GetActiveCarRaceRecordField0(BYTE *p);
 
 // Stores the player's route position twice and frees the first five race slots.
@@ -2167,7 +2174,7 @@ int Race_ReadPlayerState37F78(int index)
 // FUNCTION: CMR2 0x0041bf70
 int Race_ReadPlayerState37F0C(int index)
 {
-    return g_unk0x00537f0c[index];
+    return (int)g_unk0x00537f0c[index];
 }
 
 // FUNCTION: CMR2 0x0041d290
@@ -2302,14 +2309,14 @@ BYTE g_unk0x00537fd4;
 // Enters a race: resets the race state, builds the stage data of the current
 // mode and starts the race scene.
 // FUNCTION: CMR2 0x0041bf80
-void Race_EnterCurrentModeScene(int param1, int param2)
+void Race_EnterCurrentModeScene(CallbackStateMachine *param1, int param2)
 {
     g_unk0x00538100 = 0;
     NetRace_SetRaceControlFlag(0);
     g_unk0x00537fd4 = 0;
     NetPlayers_ResetStatisticsSequences();
     g_unk0x0053810c = 0;
-    g_unk0x00537f0c[5] = param1;
+    g_unk0x00537f0c[5] = (ptrdiff_t)param1;
     g_unk0x00537ffa = 0;
     g_unk0x0053810d = 0;
     g_unk0x00538108 = 1;
@@ -2355,13 +2362,13 @@ void Race_EnterCurrentModeScene(int param1, int param2)
         StageObject_BuildInRaceActionMenu();
         g_raceResourcesFreed = 0;
     }
-    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 0, 2);
+    CGame::PromoteCallbackEntryByRule(param1, param2, 0, 2);
 }
 
 // Starts the arcade race: initialises the sound system, the replay slots and
 // the race scene, and queues the arcade music track of the current rally.
 // FUNCTION: CMR2 0x0041c0e0
-void Race_StartArcadeScene(int param1, int param2)
+void Race_StartArcadeScene(CallbackStateMachine *param1, int param2)
 {
     char buffer[MAX_PATH];
 
@@ -2380,7 +2387,7 @@ void Race_StartArcadeScene(int param1, int param2)
         Replay_InitSlots();
         g_unk0x00537ffc = CMain::GetFrameDelta();
     }
-    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 0, 2);
+    CGame::PromoteCallbackEntryByRule(param1, param2, 0, 2);
     g_unk0x00537f08 = 1;
     g_unk0x00537f2c = 0;
     g_unk0x00537f78[5] = 1;
@@ -2389,7 +2396,7 @@ void Race_StartArcadeScene(int param1, int param2)
 // Leaves the current race: releases the frame resources, tears the stage list
 // down and fades the race out.
 // FUNCTION: CMR2 0x0041e5c0
-void Race_LeaveAndFadeOut(int param1, char param2)
+void Race_LeaveAndFadeOut(CallbackStateMachine *param1, char param2)
 {
     int i;
     BYTE *p;
@@ -2424,7 +2431,7 @@ available:
     }
     Race_SetFlag3810D();
 done:
-    Race_UpdatePlayerViewAndDrivenCars(**(BYTE **)(param1 + 4), 1);
+    Race_UpdatePlayerViewAndDrivenCars((BYTE)param1->records[0].packedState, 1);
     g_unk0x00537f08 = 1;
 }
 
@@ -2501,7 +2508,7 @@ void StageTiming_SetStartSelectionIndex(int value);
 // Per-driver in-race update of the pre-race scene: resets the slot state, runs
 // the countdown/fade of the current mode and rebuilds the player's view slots.
 // FUNCTION: CMR2 0x0041d2b0
-void Race_UpdateDriverPreRaceScene(BYTE *param1, unsigned int param2)
+void Race_UpdateDriverPreRaceScene(CallbackStateMachine *param1, unsigned int param2)
 {
     unsigned int index;
     int count;
@@ -2555,7 +2562,7 @@ void Race_UpdateDriverPreRaceScene(BYTE *param1, unsigned int param2)
         }
         if (g_unk0x00538100 != 0) {
 fade:
-            Race_UpdatePlayerViewAndDrivenCars(*(BYTE *)(*(int *)(param1 + 4) + index * 8), 1);
+            Race_UpdatePlayerViewAndDrivenCars((BYTE)param1->records[index].packedState, 1);
             return;
         }
     }
@@ -2565,7 +2572,7 @@ fade:
         StageObject_ResetCarSoundElapsedTime(index);
         g_unk0x00537f00 = StageObject_GetCarSoundElapsedTime(index);
         g_unk0x00537fc0 = 1;
-        if (index == *param1 - 1)
+        if (index == param1->count - 1)
             g_unk0x00537f08 = 0;
     } else if ((char)param2 == 0) {
         g_unk0x00537fc0 = count - g_unk0x00537f00;
@@ -2586,7 +2593,7 @@ fade:
     // Checking it after the update adds one countdown step when the next
     // rendered frame also contains the next simulation step (e.g. at 30 FPS).
     if ((char)param2 == 0)
-        Race_UpdatePlayerViewAndDrivenCars(*(BYTE *)(*(int *)(param1 + 4)), 0);
+        Race_UpdatePlayerViewAndDrivenCars((BYTE)param1->records[0].packedState, 0);
     GameMenu_ClearPauseOverlayLatch();
     if (GameInfo_GetFrontendSessionFlag() == 0) {
         if (CGameInfo::GetConfiguredGameMode() == 12)
@@ -2594,7 +2601,7 @@ fade:
         return;
     }
 big:
-    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 0, 2);
+    CGame::PromoteCallbackEntryByRule(param1, param2, 0, 2);
     StageTiming_ResetClockAndPreviousTime();
     if ((char)RallyData_GetFlag22() != 0 && (char)RallyData_GetFlag25() == 0 &&
         CGameInfo::GetGameModeOptionBit19() == 0) {
@@ -2618,7 +2625,7 @@ big:
                 Replay_InitCarStreamState((ReplayStream *)*p, 0, NetPlayers_GetPlayerField8(i));
             p++;
             i++;
-        } while ((int)p < (int)(g_unk0x00537f3c + 8)); // 0x537f5c in the original
+        } while ((INT_PTR)p < (INT_PTR)(g_unk0x00537f3c + 8)); // 0x537f5c in the original
     } else if ((BYTE)RallyDataState() == 1 && (char)RallyData_GetFlag25() != 0) {
         if (CGameInfo::GetConfiguredGameMode() == 4) {
             i = 0;
@@ -2632,7 +2639,7 @@ big:
                 }
                 p++;
                 i++;
-            } while ((int)p < (int)&g_unk0x00537f3c[2]);
+            } while ((INT_PTR)p < (INT_PTR)&g_unk0x00537f3c[2]);
         } else if ((char)RallyData_GetFlag25() != 0) {
             for (i = 0; i < ((char)RallyData_GetSelectionFlag28() != 0 ? 1 : 2); i++) {
                 if (CGameInfo::IsConfiguredMultiplayer() != 0) {
@@ -2667,7 +2674,7 @@ big:
 // Per-driver in-race update of the pre-race countdown: tracks whether the field
 // has settled, advances the race-slot bookkeeping and drives the fade-out.
 // FUNCTION: CMR2 0x0041d7a0
-void Race_UpdateDriverCountdown(int param1, unsigned int param2)
+void Race_UpdateDriverCountdown(CallbackStateMachine *param1, unsigned int param2)
 {
     unsigned int index;
     unsigned int cond;
@@ -2735,7 +2742,7 @@ void Race_UpdateDriverCountdown(int param1, unsigned int param2)
         }
         if (g_unk0x00538100 != 0) {
 fade:
-            Race_UpdatePlayerViewAndDrivenCars(*(BYTE *)(*(int *)(param1 + 4) + index * 8), 1);
+            Race_UpdatePlayerViewAndDrivenCars((BYTE)param1->records[index].packedState, 1);
             return;
         }
     }
@@ -2746,14 +2753,14 @@ fade:
         g_unk0x00537f98[index] = 1;
         CarDamage_CaptureStageSnapshot(index);
         g_unk0x00537f34[index] = CMain::GetFrameDelta();
-        CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 0, 2);
+        CGame::PromoteCallbackEntryByRule(param1, param2, 0, 2);
     }
     index = RallyDataState();
     cond = (g_unk0x00537f78[4] == index);
     if (CGameInfo::GetGameModeOptionBit19() != 0 && CGameInfo::GetConfiguredGameMode() == 10)
         cond = (unsigned char)flag;
     if ((char)param2 == 0) {
-        Race_UpdatePlayerViewAndDrivenCars(*(BYTE *)(*(int *)(param1 + 4)), cond);
+        Race_UpdatePlayerViewAndDrivenCars((BYTE)param1->records[0].packedState, cond);
         if (cond == 0) {
             if (GameInfo_GetFrontendSessionFlag() == 0)
                 goto done;
@@ -2820,7 +2827,7 @@ BYTE RallyData_GetModeStageGroup(BYTE flags, char mode);
 // free here in our build because our function keeps one value less live.
 // match 85%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x0041db10
-void Race_UpdateDriverReadyAndRecordState(BYTE *param1, unsigned int param2)
+void Race_UpdateDriverReadyAndRecordState(CallbackStateMachine *param1, unsigned int param2)
 {
     unsigned int index;
     int hold;
@@ -2859,7 +2866,7 @@ void Race_UpdateDriverReadyAndRecordState(BYTE *param1, unsigned int param2)
             do {
                 Replay_StopRecording(*pp);
                 pp++;
-            } while ((int)pp < (int)(g_unk0x00537f3c + 8)); // 0x537f5c in the original
+            } while ((INT_PTR)pp < (INT_PTR)(g_unk0x00537f3c + 8)); // 0x537f5c in the original
         } else {
             Replay_StopRecording(g_unk0x00537f3c[index]);
         }
@@ -2895,7 +2902,7 @@ void Race_UpdateDriverReadyAndRecordState(BYTE *param1, unsigned int param2)
             ready = ready + 1;
     }
     flag = (g_unk0x00537fcc == (RallyDataState() & 0xff) && ready == 0);
-    Race_UpdatePlayerViewAndDrivenCars(*(BYTE *)(*(int *)(param1 + 4)), 1);
+    Race_UpdatePlayerViewAndDrivenCars((BYTE)param1->records[0].packedState, 1);
     if (CGameInfo::GetGameModeOptionBit19() != 0) {
         NetRace_DrainPendingMessages();
         if (CGameInfo::GetConfiguredGameMode() != 10 && CGameInfo::GetConfiguredGameMode() != 12) {
@@ -2911,8 +2918,8 @@ void Race_UpdateDriverReadyAndRecordState(BYTE *param1, unsigned int param2)
         g_unk0x00537f08 = 1;
         return;
     }
-    for (k = 0; k < *param1; k++)
-        CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, k, 0, 2);
+    for (k = 0; k < param1->count; k++)
+        CGame::PromoteCallbackEntryByRule(param1, k, 0, 2);
     if ((char)RallyData_GetFlag22() != 0 || (char)RallyData_GetFlag24() != 0)
         StageTiming_EstimateRemainingDriverTimes();
     if ((char)RallyData_GetSelectionFlag27() != 0 && CGameInfo::GetGameModeOptionBit19() == 0) {
@@ -3037,7 +3044,7 @@ void Race_StartPlayerAndOpponentReplays(int player)
 // Waits for the inter-stage fade of a special stage (mode 10) and otherwise
 // re-arms the per-player fade jobs of the in-race menu.
 // FUNCTION: CMR2 0x0041e350
-void Race_UpdateInterStageFadeJobs(int param1, unsigned int param2)
+void Race_UpdateInterStageFadeJobs(CallbackStateMachine *param1, unsigned int param2)
 {
     BYTE colour[4];
     int anyAlive;
@@ -3110,7 +3117,7 @@ void Race_UpdateInterStageFadeJobs(int param1, unsigned int param2)
         } while (i < (BYTE)RallyDataState());
     }
 done:
-    Race_UpdatePlayerViewAndDrivenCars(**(BYTE **)(param1 + 4), 1);
+    Race_UpdatePlayerViewAndDrivenCars((BYTE)param1->records[0].packedState, 1);
     if (CGameInfo::GetGameModeOptionBit19() != 0) {
         NetRace_DrainPendingMessages();
         if (CGameInfo::GetConfiguredGameMode() == 10 || CGameInfo::GetConfiguredGameMode() == 12)
@@ -3123,7 +3130,7 @@ done:
     g_unk0x00537f08 = 1;
     return;
 fadeEarly:
-    Race_UpdatePlayerViewAndDrivenCars(*(BYTE *)(*(int *)(param1 + 4) + (param2 & 0xff) * 8), 1);
+    Race_UpdatePlayerViewAndDrivenCars((BYTE)param1->records[param2 & 0xff].packedState, 1);
 }
 
 // Releases the race resources once (sounds, callbacks, textures).
@@ -3214,7 +3221,7 @@ extern int g_unk0x00537f5c;
 // only happens once Replay_SwapPendingSlotValue takes an int flag (pushed as
 // a full register). What is left is the placement of the n = 2 block.
 // FUNCTION: CMR2 0x0041e6b0
-void Race_TeardownStage(int param1, int param2, char flag)
+void Race_TeardownStage(CallbackStateMachine *param1, int param2, char flag)
 {
     BYTE **pp;
     int n;
@@ -3244,8 +3251,8 @@ void Race_TeardownStage(int param1, int param2, char flag)
     }
     Stage_RestoreCarsToRoutePositions();
     if (flag != zero) {
-        for (i = 0; i < *(BYTE *)param1; i++) {
-            CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, i, 4, 2);
+        for (i = 0; i < param1->count; i++) {
+            CGame::PromoteCallbackEntryByRule(param1, i, 4, 2);
             View_ResetCameras(i);
             RallyData_ValidateIndex(i);
         }
@@ -3265,7 +3272,7 @@ void Race_TeardownStage(int param1, int param2, char flag)
             Replay_ResetBufferIfActive((int *)*pp);
             Replay_StopRecording(*pp);
             pp++;
-        } while ((int)pp < (int)(g_unk0x00537f3c + 8)); // 0x537f5c in the original
+        } while ((INT_PTR)pp < (INT_PTR)(g_unk0x00537f3c + 8)); // 0x537f5c in the original
     } else if (CGameInfo::GetConfiguredGameMode() == 4 || (char)RallyData_GetFlag25()) {
         n = 2;
     } else {
@@ -3312,7 +3319,7 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
 
     count = *pPlayers;
     if (count >= 1) {
-        p = *(BYTE **)(pPlayers + 4);
+        p = (BYTE *)((CallbackStateMachine *)pPlayers)->records;
         for (i = 0; i < count; i++) {
             if (*p != 11)
                 return;
@@ -3376,7 +3383,7 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
                 return;
             }
             if (StageUI_GetRaceResultValue() == 4) {
-                Race_TeardownStage((int)pPlayers, param2, 0);
+                Race_TeardownStage((CallbackStateMachine *)pPlayers, param2, 0);
                 Race_FreeSoundsAndUnwindCallbacks();
                 Sound_FreeAll();
                 StageSound_ResetRecordsAndRegisterCleanup();
@@ -3406,7 +3413,7 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
             StageUI_ClearRaceEndLatch();
             return;
         }
-        Race_TeardownStage((int)pPlayers, param2, 1);
+        Race_TeardownStage((CallbackStateMachine *)pPlayers, param2, 1);
         if (CGameInfo::GetConfiguredGameMode() != 4)
             return;
         if (Knockout_GetRoundActiveFlag() == 0)
@@ -3606,7 +3613,7 @@ L_teardown:
             Replay_ResetBufferIfActive((int *)*pp);
             Replay_StopRecording(*pp);
             pp++;
-        } while ((int)pp < (int)(g_unk0x00537f3c + 8)); // 0x537f5c in the original
+        } while ((INT_PTR)pp < (INT_PTR)(g_unk0x00537f3c + 8)); // 0x537f5c in the original
     }
     if ((char)RallyData_GetSelectionFlag28() != 0 && (char)CGameInfo::GetSoundOptionBit30() != 0)
         Replay_ResetActiveBufferState();
@@ -3724,7 +3731,7 @@ void Race_StopAllStageSounds(void)
             pHandle++;
         }
         pSet++;
-    } while ((int)pSet < (int)&g_carSoundSets[8]);
+    } while ((INT_PTR)pSet < (INT_PTR)&g_carSoundSets[8]);
 }
 
 // Loads a sound sample by the name held in the caller's buffer, reading it
@@ -4440,7 +4447,7 @@ void Race_ResolveStageTexturesAndPalettes(void)
 
 // Route helpers of the per-car update below (no shared header declares them).
 int RallyData_GetRouteAvailabilityState(void);
-BYTE *RallyData_GetAvailableRouteNodeRecord(int index);
+RallyRouteNode *RallyData_GetAvailableRouteNodeRecord(int index);
 int RallyData_GetCarRecordValueRatio(BYTE *p);
 BYTE StageTiming_GetCheckpointField18(int index);
 int StageTiming_GetClockTime(void);
@@ -4466,7 +4473,7 @@ void Race_UpdateCarRouteAndWrongWayState(int param_1)
     int best;
     int prev;
     int node;
-    int n;
+    RallyRouteNode *n;
     int dot;
     int i;
     unsigned int cnt;
@@ -4540,20 +4547,20 @@ void Race_UpdateCarRouteAndWrongWayState(int param_1)
     if (i <= g_unk0x0053708c[param_1] + 6) {
         do {
             cnt = (unsigned int)RallyData_GetRouteAvailabilityState();
-            if ((int)cnt <= i || *(char *)(RallyData_GetAvailableRouteNodeRecord(i) + 0x19) != -1)
+            if ((int)cnt <= i || RallyData_GetAvailableRouteNodeRecord(i)->callId != -1)
                 g_unk0x00537354 = 1;
             i++;
         } while (i <= g_unk0x0053708c[param_1] + 6);
     }
 
-    if (*(char *)(*(int *)(StageUI_GetRaceResultTable() + 4) + param_1 * 8) == '\t')
+    if ((char)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[param_1].packedState == '\t')
         g_unk0x00537354 = 1;
 
     if ((g_raceCallRecords[param_1 * 5 + 1].flags & 0x100) != 0)
         g_unk0x00537354 = 1;
 
     if (Car_IsStateC10Set(param_1) == 0 &&
-        *(char *)(*(int *)(StageUI_GetRaceResultTable() + 4) + param_1 * 8) == '\b') {
+        (char)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[param_1].packedState == '\b') {
         if (!((char)RallyData_GetFlag25() != '\0' &&
               RallyData_GetCarRecordValueRatio((BYTE *)Car_Get(param_1)) >= 0x10000)) {
             if (g_unk0x0053708c[param_1] < best) {
@@ -4561,21 +4568,21 @@ void Race_UpdateCarRouteAndWrongWayState(int param_1)
                 if (node <= best) {
                     prev = cur + 2;
                     do {
-                        n = (int)RallyData_GetAvailableRouteNodeRecord(node);
-                        if (*(char *)(n + 0x19) != -1 &&
+                        n = RallyData_GetAvailableRouteNodeRecord(node);
+                        if (n->callId != -1 &&
                             Race_IsFlag24Clear() != 0 && Car_IsStateC10Set(param_1) == 0) {
                             int ok = 1;
                             if (prev >= 2) {
-                                n = (int)RallyData_GetAvailableRouteNodeRecord(node - 1);
-                                if (*(char *)(n + 0x19) != -1) {
+                                n = RallyData_GetAvailableRouteNodeRecord(node - 1);
+                                if (n->callId != -1) {
                                     ok = 0;
                                 } else {
-                                    callId = *(BYTE *)(RallyData_GetAvailableRouteNodeRecord(node) + 0x19);
-                                    prevCallId = *(BYTE *)(RallyData_GetAvailableRouteNodeRecord(prev) + 0x19);
+                                    callId = (BYTE)RallyData_GetAvailableRouteNodeRecord(node)->callId;
+                                    prevCallId = (BYTE)RallyData_GetAvailableRouteNodeRecord(prev)->callId;
                                 }
                             } else {
-                                callId = *(BYTE *)(RallyData_GetAvailableRouteNodeRecord(node) + 0x19);
-                                prevCallId = *(BYTE *)(RallyData_GetAvailableRouteNodeRecord(prev) + 0x19);
+                                callId = (BYTE)RallyData_GetAvailableRouteNodeRecord(node)->callId;
+                                prevCallId = (BYTE)RallyData_GetAvailableRouteNodeRecord(prev)->callId;
                             }
                             if (ok)
                                 Race_QueuePlayerCallout(param_1, callId, prevCallId, (BYTE)node);
@@ -5246,11 +5253,11 @@ void Race_UpdatePlayerViewAndDrivenCars(BYTE param1, int param2)
         for (g_unk0x00538104 = 0; g_unk0x00538104 < Car_GetOrderCount(); g_unk0x00538104++) {
             if (Car_Get(g_unk0x00538104)->simulationStepsRemaining > 0) {
                 if (g_unk0x00538104 < (BYTE)RallyDataState()) {
-                    g_unk0x00537fb8 = *(char *)(*(int *)(StageUI_GetRaceResultTable() + 4) + g_unk0x00538104 * 8);
+                    g_unk0x00537fb8 = (char)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[g_unk0x00538104].packedState;
                     if (Race_GetPlayerRecordField4(g_unk0x00538104) != 0)
                         g_unk0x00537fb8 = *(char *)(g_unk0x00537f3c[g_unk0x00538104] + 0x10c);
                 } else {
-                    if ((BYTE)(*(int *)(*(int *)(StageUI_GetRaceResultTable() + 4))) <= 7) {
+                    if ((BYTE)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[0].packedState <= 7) {
                         g_unk0x00537fb8 = 7;
                     } else {
                         g_unk0x00537fb8 = 8;
@@ -5337,7 +5344,7 @@ void Race_UpdatePlayerViewAndDrivenCars(BYTE param1, int param2)
             }
         }
         if ((char)CGameInfo::GetGameInfoSessionFlag() != 0 && player != 0 &&
-            **(char **)(StageUI_GetRaceResultTable() + 4) == 13) {
+            (char)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[0].packedState == 13) {
             if (g_unk0x00537f8c != 0) {
                 Input_ClearCharacterQueue();
                 g_unk0x00537f8c = 0;

@@ -636,18 +636,16 @@ found:
 // FUNCTION: CMR2 0x004adf60
 void Scene_FreeType2Object(void *pObject)
 {
-    void **pSlot;
+    int i;
     int count;
 
     count = 0;
-    pSlot = g_sceneType2Objects;
-    do {
-        if (*pSlot != NULL && *pSlot == pObject) {
-            *pSlot = NULL;
+    for (i = 0; i < 256; i++) {
+        if (g_sceneType2Objects[i] != NULL && g_sceneType2Objects[i] == pObject) {
+            g_sceneType2Objects[i] = NULL;
             count++;
         }
-        pSlot++;
-    } while ((int)pSlot < (int)&g_sceneType2Objects[256]);
+    }
     if (count > 0) {
         CFileBuffer::FreeGenericFileBuffer(pObject);
         g_sceneType2Count--;
@@ -671,14 +669,12 @@ int g_sceneType2CallbackRegistered;
 // FUNCTION: CMR2 0x004ae070
 int SceneType2_ReleaseAll(void)
 {
-    void **pSlot;
+    int i;
 
-    pSlot = g_sceneType2Objects;
-    do {
-        if (*pSlot != NULL)
-            Scene_FreeType2Object(*pSlot);
-        pSlot++;
-    } while ((int)pSlot < (int)&g_sceneType2Objects[256]);
+    for (i = 0; i < 256; i++) {
+        if (g_sceneType2Objects[i] != NULL)
+            Scene_FreeType2Object(g_sceneType2Objects[i]);
+    }
     g_sceneType2CallbackRegistered = 0;
     return 1;
 }
@@ -960,10 +956,12 @@ void Scene_GetShadowColourD3D(DWORD *pColour, int level)
     *pColour = g_sceneShadowTableD3D[i];
 }
 
+struct ShadowCaster;
+
 // GLOBAL: CMR2 0x006e0124
-int g_sceneLightState[30];
+ShadowCaster *g_shadowCasters[30];  // registered shadow casters
 // GLOBAL: CMR2 0x006e01c4
-int g_sceneLightState2[10];
+Mesh *g_shadowCylinders[10];        // shadow cylinders, cached by mesh name
 // GLOBAL: CMR2 0x006e019c
 void *g_sceneSectorLights;          // per sector
 // GLOBAL: CMR2 0x006dfd90
@@ -979,11 +977,11 @@ int *g_sceneSectorFlags;            // per sector
 // GLOBAL: CMR2 0x006e0204
 short *g_sceneSectorZone;           // zone of each sector (-1 none)
 // GLOBAL: CMR2 0x006deab8
-BYTE g_sceneLightFlag;
+BYTE g_shadowCasterCount;           // used entries of g_shadowCasters
 // GLOBAL: CMR2 0x006e0b99
-BYTE g_sceneLightFlag2;
+BYTE g_shadowCylinderCount;         // used entries of g_shadowCylinders
 
-void Sound_NoOpMusicCallback(int unused);
+void Sound_NoOpMusicCallback(INT_PTR unused);
 int Scene_AttenuateSectorLight(int sector, int light);
 extern int g_unk0x005210c0;
 
@@ -1063,7 +1061,7 @@ void Scene_RelightSector(int sector)
                 }
             }
             for (pNode = pSector->pFirstNode; pNode != NULL; pNode = pNode->pNextInSector)
-                Sound_NoOpMusicCallback((int)pNode);
+                Sound_NoOpMusicCallback((INT_PTR)pNode);
             if (g_sceneShadowMeshes == NULL)
                 return;
             if (g_sceneShadowMeshes[sector] != NULL)
@@ -1112,7 +1110,7 @@ void Scene_RelightSector(int sector)
 
 // One mesh of a shadow caster with its per-vertex working buffers (0x58 bytes).
 struct ShadowPart {
-    BYTE field_0x0[0x30];
+    float light[12];            // 0x0  light direction and basis in mesh space (4 x float[3])
     Mesh *pMesh;                // 0x30 mesh (or its shadow cylinder)
     SceneNode *pNode;           // 0x34 node that owns the mesh
     void *pVertexWork;          // 0x38 12 bytes per vertex
@@ -1121,8 +1119,8 @@ struct ShadowPart {
     void *pVertexWork3;         // 0x44 12 bytes per vertex
     BYTE *pVertices;            // 0x48 0x30 bytes per vertex, colour 0xff000000
     void *pTriangleWork;        // 0x4c 12 bytes per triangle
-    short field_0x50;
-    short field_0x52;
+    short faceCount;            // 0x50 faces emitted by Scene_EmitProjectedShadowMesh
+    short vertexCount;          // 0x52 vertices emitted
     int field_0x54;
 };
 
@@ -1173,10 +1171,10 @@ void Scene_MarkShadowPartDirty(SceneNode *pNode, Mesh *pMesh)
     int count;
     if (g_sceneShadowMeshes != NULL) {
         i = 0;
-        count = g_sceneLightFlag & 0xff;
+        count = g_shadowCasterCount & 0xff;
         if (count > 0) {
             do {
-                ShadowCaster *p = (ShadowCaster *)g_sceneLightState[i];
+                ShadowCaster *p = g_shadowCasters[i];
                 if (p->pNode == pNode) {
                     pCaster = p;
                     i = count;
@@ -1235,10 +1233,10 @@ void Scene_AddShadowCaster(SceneNode *pNode, int exactMeshes)
     SceneNode *pChild;
     SceneNode *p;
 
-    if (pNode == NULL || g_sceneLightFlag >= 29)
+    if (pNode == NULL || g_shadowCasterCount >= 29)
         return;
     pCaster = (ShadowCaster *)CFileBuffer::AllocateLockedBuffer(sizeof(ShadowCaster));
-    g_sceneLightState[g_sceneLightFlag++] = (int)pCaster;
+    g_shadowCasters[g_shadowCasterCount++] = pCaster;
     pCaster->pNode = pNode;
     pCaster->pParts = NULL;
     pCaster->partCount = 0;
@@ -1258,9 +1256,9 @@ void Scene_AddShadowCaster(SceneNode *pNode, int exactMeshes)
         if (exactMeshes == 0 && (pNode->flags & 0xff) <= 4)
             pPart->pMesh = Mesh_GetShadowCylinder((Mesh *)pNode->pObject);
         ShadowPart_Init(pPart);
-        pPart->field_0x50 = 0;
+        pPart->faceCount = 0;
         pPart->pNode = pNode;
-        pPart->field_0x52 = 0;
+        pPart->vertexCount = 0;
         pPart++;
     }
     for (pChild = pNode->pFirstChild; pChild != NULL; pChild = pChild->pNext) {
@@ -1272,8 +1270,8 @@ void Scene_AddShadowCaster(SceneNode *pNode, int exactMeshes)
                     pPart->pMesh = (Mesh *)p->pObject;
                 ShadowPart_Init(pPart);
                 pPart->pNode = p;
-                pPart->field_0x50 = 0;
-                pPart->field_0x52 = 0;
+                pPart->faceCount = 0;
+                pPart->vertexCount = 0;
                 pPart++;
             }
         }
@@ -1554,15 +1552,12 @@ int Scene_FreeLighting(void)
 void Scene_InitLighting(int *pData, int *pHeights)
 {
     int i;
-    int *p;
     unsigned int k;
 
-    p = g_sceneLightState;
-    for (i = 30; i != 0; i--)
-        *p++ = 0;
-    p = g_sceneLightState2;
-    for (i = 10; i != 0; i--)
-        *p++ = 0;
+    for (i = 0; i < 30; i++)
+        g_shadowCasters[i] = NULL;
+    for (i = 0; i < 10; i++)
+        g_shadowCylinders[i] = NULL;
     g_triangleVertexHeights = NULL;
     g_sceneSectorLights = NULL;
     g_sceneSectorLights2 = NULL;
@@ -1574,8 +1569,8 @@ void Scene_InitLighting(int *pData, int *pHeights)
     g_sceneLightData = NULL;
     g_sceneLightZones = NULL;
     g_sceneSectorFlags = NULL;
-    g_sceneLightFlag = 0;
-    g_sceneLightFlag2 = 0;
+    g_shadowCasterCount = 0;
+    g_shadowCylinderCount = 0;
     g_sceneSectorLights = CFileBuffer::AllocateLockedBuffer(g_sectorCount * 4);
     g_sceneSectorLights2 = CFileBuffer::AllocateLockedBuffer(g_sectorCount * 4);
     g_sceneLightTable = (BYTE *)CFileBuffer::AllocateLockedBuffer(200);
@@ -1893,7 +1888,7 @@ void Scene_ProjectCasterIntoLightZone(void *pItem, void *pCaster, BYTE param3)
                     ray[1] = plane[1] * inv;
                     ray[2] = plane[2] * inv;
                     vi = 0;
-                    if (pPart->field_0x52 != 0) {
+                    if (pPart->vertexCount != 0) {
                         pIn = (float *)pPart->pVertexWork3;
                         pOut = (float *)((BYTE *)pPart->pVertices + 0x24);
                         do {
@@ -1909,11 +1904,11 @@ void Scene_ProjectCasterIntoLightZone(void *pItem, void *pCaster, BYTE param3)
                             pOut[0] = minY - (qx * projY[0] + qy * projY[1] + qz * projY[2]) + minW;
                             pIn += 3;
                             pOut += 0xc;
-                        } while (vi < (unsigned short)pPart->field_0x52);
+                        } while (vi < (unsigned short)pPart->vertexCount);
                     }
                     pTri = (DWORD **)pPart->pTriangleWork;
                     triIndex = 0;
-                    if (pPart->field_0x50 != 0) {
+                    if (pPart->faceCount != 0) {
                         do {
                             pv0 = (BYTE *)pTri[0];
                             pv1 = (BYTE *)pTri[1];
@@ -1940,7 +1935,7 @@ void Scene_ProjectCasterIntoLightZone(void *pItem, void *pCaster, BYTE param3)
                             }
                             pTri += 3;
                             triIndex++;
-                        } while (triIndex < (int)(unsigned short)pPart->field_0x50);
+                        } while (triIndex < (int)(unsigned short)pPart->faceCount);
                     }
                 }
             }
@@ -1950,7 +1945,7 @@ void Scene_ProjectCasterIntoLightZone(void *pItem, void *pCaster, BYTE param3)
     }
 }
 void Sector_GetGridDimensions(int *columns, int *rows);
-void Scene_EmitProjectedShadowMesh(float *param_1, int param_2);
+void Scene_EmitProjectedShadowMesh(ShadowPart *pPart, int param_2);
 
 // Scale of the normal added to the vertex position when a shadow part is
 // projected (0x00511cec, 0.005f).
@@ -2005,7 +2000,7 @@ void Scene_ProjectDirtyShadowParts(ShadowCaster *pCaster, int param2)
     pCaster->field_0xc = 0;
     if (pCaster->field_0x10 != 0) {
         for (i = 0; i < pCaster->partCount; i++)
-            Scene_EmitProjectedShadowMesh((float *)(pCaster->pParts + i), param2);
+            Scene_EmitProjectedShadowMesh(pCaster->pParts + i, param2);
     }
     pCaster->field_0x10 = 0;
 }
@@ -2023,10 +2018,10 @@ void Scene_EmitNodeShadowGeometry(SceneNode *pNode, int param2, BYTE param3)
     if (pNode != NULL && pNode->viewMask != 0 && g_sceneSectorZone != NULL &&
         (unsigned short)g_sceneZoneCount > 0) {
         i = 0;
-        count = g_sceneLightFlag & 0xff;
+        count = g_shadowCasterCount & 0xff;
         if (count > 0) {
             do {
-                ShadowCaster *p = (ShadowCaster *)g_sceneLightState[i];
+                ShadowCaster *p = g_shadowCasters[i];
                 if (p->pNode == pNode) {
                     pCaster = p;
                     i = count;
@@ -2081,10 +2076,10 @@ void Scene_CollectNearbyLightZones(SceneNode *pNode, int radius, short *pSector)
     *(unsigned short *)&g_sceneZoneCount = 0;
     if (pNode != NULL && pNode->viewMask != 0 && g_sceneSectorZone != NULL) {
         i = 0;
-        count = g_sceneLightFlag & 0xff;
+        count = g_shadowCasterCount & 0xff;
         if (count > 0) {
             do {
-                ShadowCaster *p = (ShadowCaster *)g_sceneLightState[i];
+                ShadowCaster *p = g_shadowCasters[i];
                 if (p->pNode == pNode) {
                     pCaster = p;
                     i = count;
@@ -2306,81 +2301,71 @@ DWORD Scene_GetGroundLight(FixVector *pPos, int *pLevel)
 
 // Frees every shadow caster (with its per-part buffers) and every cached
 // shadow cylinder.
-// match 49%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x004b5380
 void Scene_FreeShadowCasters(void)
 {
-    int *p;
-    ShadowCaster *pCaster;
-    Mesh *pCyl;
+    int n;
     int i;
 
-    p = g_sceneLightState;
-    do {
-        pCaster = (ShadowCaster *)*p;
-        if (pCaster != NULL) {
-            if (pCaster->pParts != NULL) {
-                for (i = 0; i < pCaster->partCount; i++) {
-                    if (((ShadowCaster *)*p)->pParts[i].pVertexWork != NULL) {
-                        CFileBuffer::FreeGenericFileBuffer(((ShadowCaster *)*p)->pParts[i].pVertexWork);
-                        ((ShadowCaster *)*p)->pParts[i].pVertexWork = NULL;
+    for (n = 0; n < 30; n++) {
+        if (g_shadowCasters[n] != NULL) {
+            if (g_shadowCasters[n]->pParts != NULL) {
+                for (i = 0; i < g_shadowCasters[n]->partCount; i++) {
+                    if (g_shadowCasters[n]->pParts[i].pVertexWork != NULL) {
+                        CFileBuffer::FreeGenericFileBuffer(g_shadowCasters[n]->pParts[i].pVertexWork);
+                        g_shadowCasters[n]->pParts[i].pVertexWork = NULL;
                     }
-                    if (((ShadowCaster *)*p)->pParts[i].pVertexFlags != NULL) {
-                        CFileBuffer::FreeGenericFileBuffer(((ShadowCaster *)*p)->pParts[i].pVertexFlags);
-                        ((ShadowCaster *)*p)->pParts[i].pVertexFlags = NULL;
+                    if (g_shadowCasters[n]->pParts[i].pVertexFlags != NULL) {
+                        CFileBuffer::FreeGenericFileBuffer(g_shadowCasters[n]->pParts[i].pVertexFlags);
+                        g_shadowCasters[n]->pParts[i].pVertexFlags = NULL;
                     }
-                    if (((ShadowCaster *)*p)->pParts[i].pVertexWork2 != NULL) {
-                        CFileBuffer::FreeGenericFileBuffer(((ShadowCaster *)*p)->pParts[i].pVertexWork2);
-                        ((ShadowCaster *)*p)->pParts[i].pVertexWork2 = NULL;
+                    if (g_shadowCasters[n]->pParts[i].pVertexWork2 != NULL) {
+                        CFileBuffer::FreeGenericFileBuffer(g_shadowCasters[n]->pParts[i].pVertexWork2);
+                        g_shadowCasters[n]->pParts[i].pVertexWork2 = NULL;
                     }
-                    if (((ShadowCaster *)*p)->pParts[i].pVertices != NULL) {
-                        CFileBuffer::FreeGenericFileBuffer(((ShadowCaster *)*p)->pParts[i].pVertices);
-                        ((ShadowCaster *)*p)->pParts[i].pVertices = NULL;
+                    if (g_shadowCasters[n]->pParts[i].pVertices != NULL) {
+                        CFileBuffer::FreeGenericFileBuffer(g_shadowCasters[n]->pParts[i].pVertices);
+                        g_shadowCasters[n]->pParts[i].pVertices = NULL;
                     }
-                    if (((ShadowCaster *)*p)->pParts[i].pVertexWork3 != NULL) {
-                        CFileBuffer::FreeGenericFileBuffer(((ShadowCaster *)*p)->pParts[i].pVertexWork3);
-                        ((ShadowCaster *)*p)->pParts[i].pVertexWork3 = NULL;
+                    if (g_shadowCasters[n]->pParts[i].pVertexWork3 != NULL) {
+                        CFileBuffer::FreeGenericFileBuffer(g_shadowCasters[n]->pParts[i].pVertexWork3);
+                        g_shadowCasters[n]->pParts[i].pVertexWork3 = NULL;
                     }
-                    if (((ShadowCaster *)*p)->pParts[i].pTriangleWork != NULL) {
-                        CFileBuffer::FreeGenericFileBuffer(((ShadowCaster *)*p)->pParts[i].pTriangleWork);
-                        ((ShadowCaster *)*p)->pParts[i].pTriangleWork = NULL;
+                    if (g_shadowCasters[n]->pParts[i].pTriangleWork != NULL) {
+                        CFileBuffer::FreeGenericFileBuffer(g_shadowCasters[n]->pParts[i].pTriangleWork);
+                        g_shadowCasters[n]->pParts[i].pTriangleWork = NULL;
                     }
                 }
-                CFileBuffer::FreeGenericFileBuffer(((ShadowCaster *)*p)->pParts);
-                ((ShadowCaster *)*p)->pParts = NULL;
+                CFileBuffer::FreeGenericFileBuffer(g_shadowCasters[n]->pParts);
+                g_shadowCasters[n]->pParts = NULL;
             }
-            CFileBuffer::FreeGenericFileBuffer((void *)*p);
-            *p = 0;
+            CFileBuffer::FreeGenericFileBuffer(g_shadowCasters[n]);
+            g_shadowCasters[n] = NULL;
         }
-        *p = 0;
-        p++;
-    } while ((int)p < (int)&g_sceneLightState[30]);
-    p = g_sceneLightState2;
-    do {
-        pCyl = (Mesh *)*p;
-        if (pCyl != NULL) {
-            if (pCyl->pTriangles != NULL) {
-                CFileBuffer::FreeGenericFileBuffer(pCyl->pTriangles);
-                ((Mesh *)*p)->pTriangles = NULL;
+        g_shadowCasters[n] = NULL;
+    }
+    for (n = 0; n < 10; n++) {
+        if (g_shadowCylinders[n] != NULL) {
+            if (g_shadowCylinders[n]->pTriangles != NULL) {
+                CFileBuffer::FreeGenericFileBuffer(g_shadowCylinders[n]->pTriangles);
+                g_shadowCylinders[n]->pTriangles = NULL;
             }
-            if (((Mesh *)*p)->pVertexData != NULL) {
-                CFileBuffer::FreeGenericFileBuffer(((Mesh *)*p)->pVertexData);
-                ((Mesh *)*p)->pVertexData = NULL;
+            if (g_shadowCylinders[n]->pVertexData != NULL) {
+                CFileBuffer::FreeGenericFileBuffer(g_shadowCylinders[n]->pVertexData);
+                g_shadowCylinders[n]->pVertexData = NULL;
             }
-            CFileBuffer::FreeGenericFileBuffer((void *)*p);
-            *p = 0;
+            CFileBuffer::FreeGenericFileBuffer(g_shadowCylinders[n]);
+            g_shadowCylinders[n] = NULL;
         }
-        *p = 0;
-        p++;
-    } while ((int)p < (int)&g_sceneLightState2[10]);
-    g_sceneLightFlag = 0;
-    g_sceneLightFlag2 = 0;
+        g_shadowCylinders[n] = NULL;
+    }
+    g_shadowCasterCount = 0;
+    g_shadowCylinderCount = 0;
     g_shadowVertexCount = 0;
     g_shadowBatchCount = 0;
 }
 
-struct Unk0x004a3e20;
-void Frontend_SetObjectField118(Unk0x004a3e20 *pObject, int value);
+void Frontend_SetObjectField118(struct Texture *pTexture, int value);
 void Graphics_InvalidateTextureStageCache(void);
 
 // Draws the shadow batches visible in view `view` (bit of each batch mask),
@@ -2407,9 +2392,9 @@ void Scene_DrawShadowBatches(unsigned int view)
             if (pTexture != pLast) {
                 pLast = pTexture;
                 blend = pTexture->blendMode;
-                Frontend_SetObjectField118((Unk0x004a3e20 *)pTexture, 10);
-                CGraphics::ApplyTextureStageChange(0, (int)pTexture);
-                Frontend_SetObjectField118((Unk0x004a3e20 *)pTexture, blend);
+                Frontend_SetObjectField118(pTexture, 10);
+                CGraphics::ApplyTextureStageChange(0, pTexture);
+                Frontend_SetObjectField118(pTexture, blend);
             }
             Gfx_DrawPrimitiveVB(GFX_TRIANGLELIST, CGraphics::m_pTextureManager->pVertexBuffer2, g_shadowBatch[0], g_shadowBatch[1]);
         }
@@ -2446,19 +2431,14 @@ GfxMaterial g_sceneMaterial;
 // FUNCTION: CMR2 0x004b2e50
 void Scene_RestoreLights(void)
 {
-    void **pSlot;
     int i;
 
-    i = 0;
-    pSlot = g_sceneType1Objects;
-    do {
-        if (*pSlot != NULL) {
-            Gfx_SetLight(i, (GfxLight *)*pSlot);
+    for (i = 0; i < 60; i++) {
+        if (g_sceneType1Objects[i] != NULL) {
+            Gfx_SetLight(i, (GfxLight *)g_sceneType1Objects[i]);
             Gfx_EnableLight(i, TRUE);
         }
-        pSlot++;
-        i++;
-    } while ((int)pSlot < (int)&g_sceneType1Objects[60]);
+    }
     memset(&g_sceneMaterial, 0, sizeof(g_sceneMaterial));
     g_sceneMaterial.diffuse.r = 1.0f;
     g_sceneMaterial.ambient.r = 1.0f;
@@ -2652,8 +2632,8 @@ extern const double g_unk0x00511380;
 void Scene_InitFixedMathTables(void)
 {
     int i;
+    int n;
     int value;
-    unsigned short *p;
 
     for (i = 0; i < 4096; i++) {
         g_sinTable[i] = (int)llrint(sin((double)i * g_unk0x00511d08) * CGraphics::m_65536);
@@ -2664,22 +2644,17 @@ void Scene_InitFixedMathTables(void)
     g_tanTable[3072] = 0x7fffffff;
     g_tanTable[1024] = 0x7fffffff;
 
-    p = g_sqrtTable;
-    for (; (int)p < (int)(g_sqrtTable + 4096); i += 16)
-        *p++ = (unsigned short)(int)llrint(sqrt((double)i * CGraphics::m_oneOver65536) * CGraphics::m_65536);
+    for (n = 0; n < 4096; n++, i += 16)
+        g_sqrtTable[n] = (unsigned short)(int)llrint(sqrt((double)i * CGraphics::m_oneOver65536) * CGraphics::m_65536);
 
-    i = 0;
-    p = (unsigned short *)g_acosTable;
-    for (; (int)p < (int)(g_acosTable + 4096); i++, p++) {
+    for (i = 0; i < 4096; i++) {
         value = (int)llrint(asin((double)i * g_unk0x00511d00) * CGraphics::m_65536);
-        *p = (short)llrint((double)value * g_unk0x00511380);
+        g_acosTable[i] = (short)llrint((double)value * g_unk0x00511380);
     }
 
-    i = 0;
-    p = g_atanTable;
-    for (; (int)p < (int)(g_atanTable + 512); i++, p++) {
+    for (i = 0; i < 512; i++) {
         value = (int)llrint(atan((double)i * g_unk0x00511cf8) * CGraphics::m_65536);
-        *p = (unsigned short)llrint((double)value * g_unk0x00511380);
+        g_atanTable[i] = (unsigned short)llrint((double)value * g_unk0x00511380);
     }
 }
 
@@ -2699,9 +2674,8 @@ unsigned short g_unk0x006e0354[0x3f0];
 // and the vertices of the others are emitted once with their lit position and
 // their colour, sharing the emitted vertex of duplicated vertices.
 // FUNCTION: CMR2 0x004b4180
-void Scene_EmitProjectedShadowMesh(float *param_1, int param_2)
+void Scene_EmitProjectedShadowMesh(ShadowPart *pPart, int param_2)
 {
-    BYTE *p = (BYTE *)param_1;
     int *pi;
     BYTE **pEdge;
     float scale;
@@ -2727,49 +2701,49 @@ void Scene_EmitProjectedShadowMesh(float *param_1, int param_2)
     param_2 = FixMul(g_shadowLevel, param_2);
     scale = (float)((double)param_2 * CGraphics::m_oneOver65536);
     baseColour = (BYTE)(__int64)scale;
-    *(short *)(p + 0x50) = 0;
-    *(short *)(p + 0x52) = 0;
+    pPart->faceCount = 0;
+    pPart->vertexCount = 0;
     {
         unsigned short *pw = g_unk0x006e0354;
-        for (i = *(int *)(*(int *)(p + 0x30) + 0x10); i > 0; i--)
+        for (i = pPart->pMesh->field_0x10; i > 0; i--)
             *pw++ = 0xffff;
     }
 
-    lightOffset[0] = *(float *)(*(int *)(p + 0x34) + 0x148);
-    lightOffset[1] = *(float *)(*(int *)(p + 0x34) + 0x14c);
-    lightOffset[2] = *(float *)(*(int *)(p + 0x34) + 0x150);
-    FloatMatrix_InverseRotateVector(param_1, g_sceneLightDirF,
-                                    (float *)(*(int *)(p + 0x34) + 0x118));
-    FloatMatrix_InverseRotateVector(param_1 + 3, g_sceneLightBasisF,
-                                    (float *)(*(int *)(p + 0x34) + 0x118));
-    FloatMatrix_InverseRotateVector(param_1 + 6, g_sceneLightBasisF + 3,
-                                    (float *)(*(int *)(p + 0x34) + 0x118));
-    FloatMatrix_InverseRotateVector(param_1 + 9, g_sceneLightBasisF + 6,
-                                    (float *)(*(int *)(p + 0x34) + 0x118));
+    lightOffset[0] = pPart->pNode->worldF[12];
+    lightOffset[1] = pPart->pNode->worldF[13];
+    lightOffset[2] = pPart->pNode->worldF[14];
+    FloatMatrix_InverseRotateVector(pPart->light, g_sceneLightDirF,
+                                    pPart->pNode->worldF);
+    FloatMatrix_InverseRotateVector(pPart->light + 3, g_sceneLightBasisF,
+                                    pPart->pNode->worldF);
+    FloatMatrix_InverseRotateVector(pPart->light + 6, g_sceneLightBasisF + 3,
+                                    pPart->pNode->worldF);
+    FloatMatrix_InverseRotateVector(pPart->light + 9, g_sceneLightBasisF + 6,
+                                    pPart->pNode->worldF);
 
     {
-        pPos = *(float **)(p + 0x38);
-        pDst = *(float **)(p + 0x40);
-        for (i = *(int *)(*(int *)(p + 0x30) + 0x10); i > 0; i--) {
-            *pDst = pPos[2] * param_1[2] + pPos[1] * param_1[1] + pPos[0] * param_1[0];
+        pPos = (float *)pPart->pVertexWork;
+        pDst = (float *)pPart->pVertexFlags;
+        for (i = pPart->pMesh->field_0x10; i > 0; i--) {
+            *pDst = pPos[2] * pPart->light[2] + pPos[1] * pPart->light[1] + pPos[0] * pPart->light[0];
             pDst++;
             pPos += 3;
         }
     }
 
-    pEdge = (BYTE **)*(int *)(p + 0x4c);
-    pOut = *(BYTE **)(p + 0x44);
-    pVtx = *(BYTE **)(p + 0x48);
-    i = *(int *)(*(int *)(p + 0x30) + 0x28);
+    pEdge = (BYTE **)pPart->pTriangleWork;
+    pOut = (BYTE *)pPart->pVertexWork3;
+    pVtx = pPart->pVertices;
+    i = pPart->pMesh->triangleCount;
     if (i > 0) {
-        pFace = (unsigned short *)((char *)*(int *)(*(int *)(p + 0x30) + 0x24) + 0x42);
+        pFace = &pPart->pMesh->pTriangles->vertexIndex[1];
         do {
             index[0] = pFace[-1];
             index[1] = pFace[0];
             index[2] = pFace[1];
-            if ((*(float **)(p + 0x40))[index[0]] >= g_netZero ||
-                (*(float **)(p + 0x40))[index[1]] >= g_netZero ||
-                (*(float **)(p + 0x40))[index[2]] >= g_netZero) {
+            if (((float *)pPart->pVertexFlags)[index[0]] >= g_netZero ||
+                ((float *)pPart->pVertexFlags)[index[1]] >= g_netZero ||
+                ((float *)pPart->pVertexFlags)[index[2]] >= g_netZero) {
                 pi = index;
                 off = (char *)pEdge - (char *)index;
                 k = 3;
@@ -2777,15 +2751,15 @@ void Scene_EmitProjectedShadowMesh(float *param_1, int param_2)
                     v = *pi;
                     s = g_unk0x006e0354[v];
                     if (s == -1) {
-                        DWORD *pSrcD = (DWORD *)(*(int *)(p + 0x3c) + v * 0xc);
+                        DWORD *pSrcD = (DWORD *)((BYTE *)pPart->pVertexWork2 + v * 0xc);
                         DWORD *pOutD = (DWORD *)pOut;
                         pOutD[0] = pSrcD[0];
                         pOutD[1] = pSrcD[1];
                         pOutD[2] = pSrcD[2];
                         *(BYTE **)((char *)pi + off) = pVtx;
-                        g_unk0x006e0354[v] = *(short *)(p + 0x52);
+                        g_unk0x006e0354[v] = pPart->vertexCount;
                         {
-                            float vy = (*(float **)(p + 0x40))[v];
+                            float vy = ((float *)pPart->pVertexFlags)[v];
                             colour[3] = baseColour;
                             if (vy < g_netZero)
                                 colour[3] = 0;
@@ -2795,7 +2769,7 @@ void Scene_EmitProjectedShadowMesh(float *param_1, int param_2)
                         *(DWORD *)(pVtx + 0x18) =
                             ((((DWORD)colour[3] << 8 | colour[0]) << 8 | colour[1]) << 8) | colour[2];
                         FloatMatrix_RotateVector(light, (float *)pOut,
-                                                 (float *)(*(int *)(p + 0x34) + 0x118));
+                                                 pPart->pNode->worldF);
                         light[0] = light[0] + lightOffset[0];
                         light[1] = light[1] + lightOffset[1];
                         light[2] = light[2] + lightOffset[2];
@@ -2804,14 +2778,14 @@ void Scene_EmitProjectedShadowMesh(float *param_1, int param_2)
                         *(float *)(pVtx + 8) = light[2];
                         pOut += 0xc;
                         pVtx += 0x30;
-                        (*(short *)(p + 0x52))++;
+                        (pPart->vertexCount)++;
                     } else {
                         *(BYTE **)((char *)pi + off) = (BYTE *)(pVtx + s * 0x30);
                     }
                     pi++;
                 } while (--k);
                 pEdge += 3;
-                (*(short *)(p + 0x50))++;
+                (pPart->faceCount)++;
             }
             pFace += 0x26;
         } while (--i);

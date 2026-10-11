@@ -1,5 +1,6 @@
 #include "port/sys.h"
 #include "FixedPoint.h"
+#include "MovingObject.h"
 #include "Graphics.h"
 #include "GameInfo.h"
 #include "Car.h"
@@ -1124,28 +1125,7 @@ FixVector g_unk0x00589458[8];
 int Track_GetGroundHeight(FixVector *pPoint, FixVector *pNormal, short *pTri, unsigned short *pSurface,
                           int defaultY);
 
-struct StageObjectEntry0x128 {
-    int field_0x0;              // 0x000 route element of the object
-    int *pObject;               // 0x004 scene node (head of the object's node chain)
-    FixMatrix keyB;             // 0x008 previous key
-    FixMatrix keyA;             // 0x048 next key
-    FixMatrix current;          // 0x088 interpolated matrix
-    FixMatrix *pMatrix;         // 0x0c8 matrix the motion integrates (keyB)
-    int mode;                   // 0x0cc 1 = sliding on the ground, 2 = airborne
-    int objectType;             // 0x0d0
-    FixVector groundNormal;     // 0x0d4
-    FixVector spin;             // 0x0e0 angular step
-    FixVector velocity;         // 0x0ec
-    FixVector field_0xf8;       // 0x0f8
-    FixVector probe;            // 0x104 ground-probe half extents (x, y, z)
-    int groundHeight;           // 0x110 last ground height under the probe
-    int actionState;            // 0x114 node action / sound callback state
-    int field_0x118;            // 0x118
-    short groundTriangle;       // 0x11c last ground triangle (-1 = none)
-    short field_0x11e;
-    int field_0x120;            // 0x120
-    int moved;                  // 0x124 the interpolated matrix changed this frame
-};
+
 
 // Normalises pV into pOut (zero when pV is zero) and returns its length.
 inline int FixVecNormalizeLen(FixVector *pOut, FixVector *pV)
@@ -1167,7 +1147,7 @@ inline int FixVecNormalizeLen(FixVector *pOut, FixVector *pV)
 // point and returns the signed distance from the point to the ground plane.
 // match 77%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x004702f0
-int StageObject_ProbeGroundDistance(StageObjectEntry0x128 *pObj, FixVector *pPoint)
+int StageObject_ProbeGroundDistance(MovingObject *pObj, FixVector *pPoint)
 {
     unsigned short surface;
     FixVector neg;
@@ -1416,13 +1396,7 @@ void NetRace_ExtrapolateOrderedCarPoses(Car *pCars, short *pOrder, short count)
 // Moving stage objects: the table walked by the per-frame update below, one
 // 0x128-byte record per object (defined in StageObjects.cpp, which owns the
 // GLOBAL annotations of the table and of the active count).
-struct MovingObjects {
-    StageObjectEntry0x128 entries[40];
-    BYTE meshCount;
-    BYTE field_0x2e41[0x103];
-    int carDistance[40 * 8];
-    BYTE count;
-};
+
 extern MovingObjects g_movingObjects;
 
 // 16.16 -> 12-bit angle of a turn rate (its negated twin is 0x511398 in Car.cpp);
@@ -1498,8 +1472,8 @@ void StageObject_UpdateMovingTransforms(void)
     FixVector v;
     FixAngles angles;
     FixMatrix *pMatrix;
-    StageObjectEntry0x128 *pObj;
-    int *pNode;
+    MovingObject *pObj;
+    SceneNode *pNode;
     int len;
     int len2;
     int dot;
@@ -1588,8 +1562,8 @@ void StageObject_UpdateMovingTransforms(void)
             FixMatrix_SetUp(&basis.up, pMatrix);
             FixMatrix_SetForward(&basis.forward, pMatrix);
 
-            for (pNode = pObj->pObject; pNode != NULL; pNode = *(int **)((BYTE *)pNode + 8))
-                *(int *)((BYTE *)pNode + 0x174) = 1;
+            for (pNode = pObj->pObject; pNode != NULL; pNode = pNode->pParent)
+                pNode->dirty = 1;
 
             if (pObj->mode == 0)
                 pObj->keyA = pObj->keyB;
@@ -1731,8 +1705,8 @@ void StageObject_UpdateMovingTransforms(void)
             pos.z = world.z - pos.z;
             FixMatrix_SetPosition(&pos, pMatrix);
 
-            for (pNode = pObj->pObject; pNode != NULL; pNode = *(int **)((BYTE *)pNode + 8))
-                *(int *)((BYTE *)pNode + 0x174) = 1;
+            for (pNode = pObj->pObject; pNode != NULL; pNode = pNode->pParent)
+                pNode->dirty = 1;
 
             if (pObj->mode == 0)
                 pObj->keyA = pObj->keyB;

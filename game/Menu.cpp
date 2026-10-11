@@ -9,7 +9,7 @@ BYTE g_unk0x0052af58[2];
 // GLOBAL: CMR2 0x0059f8fc
 char g_unk0x0059f8fc;
 // GLOBAL: CMR2 0x0059f908
-int g_menuNextAction;
+Menu *g_menuNextAction;
 // GLOBAL: CMR2 0x0059fa14
 char g_unk0x0059fa14;
 // GLOBAL: CMR2 0x0059f904
@@ -24,9 +24,9 @@ unsigned int g_menuLastInput;
 char g_unk0x0059fa17;
 
 // FUNCTION: CMR2 0x0049ffd0
-void Menu_Init(Menu *pMenu, int stringId, short param3, int param4, Menu *pParent, MenuItemCallbacks *pItemCallbacks, BYTE flag4, BYTE defaultCursor, BYTE layout)
+void Menu_Init(Menu *pMenu, char *text, short param3, int param4, Menu *pParent, MenuItemCallbacks *pItemCallbacks, BYTE flag4, BYTE defaultCursor, BYTE layout)
 {
-    pMenu->stringId = stringId;
+    pMenu->text = text;
     pMenu->field_0x4 = param3;
     pMenu->pParent = pParent == (Menu *)-1 ? NULL : pParent;
     pMenu->itemCount = 0;
@@ -54,10 +54,10 @@ void Menu_ClearNextItem(Menu *pMenu)
     MenuItem *pItem;
 
     pItem = &pMenu->items[pMenu->itemCount];
-    pItem->stringId = 0;
+    pItem->text = 0;
     pItem->type = 0;
     pItem->value = 0;
-    pItem->param = 0;
+    pItem->action = NULL;
     pItem->min = 0;
     pItem->max = 0;
     pItem->pSubMenu = NULL;
@@ -69,69 +69,69 @@ void Menu_ClearNextItem(Menu *pMenu)
 }
 
 // FUNCTION: CMR2 0x004a00a0
-void Menu_AddItemType3(Menu *pMenu, int stringId, short id, BYTE min, BYTE max, BYTE flag2, int unused, int param, short value)
+void Menu_AddItemType3(Menu *pMenu, char *text, short id, BYTE min, BYTE max, BYTE flag2, int unused, MenuItemAction action, short value)
 {
     Menu_ClearNextItem(pMenu);
-    pMenu->items[pMenu->itemCount].stringId = stringId;
+    pMenu->items[pMenu->itemCount].text = text;
     pMenu->items[pMenu->itemCount].id = id;
     pMenu->items[pMenu->itemCount].type = 3;
     pMenu->items[pMenu->itemCount].min = min;
     pMenu->items[pMenu->itemCount].max = max;
     pMenu->items[pMenu->itemCount].flag2 = flag2;
     pMenu->items[pMenu->itemCount].value = value;
-    pMenu->items[pMenu->itemCount].param = param;
+    pMenu->items[pMenu->itemCount].action = action;
     pMenu->itemCount++;
 }
 
 // FUNCTION: CMR2 0x004a0150
-void Menu_AddItemType6(Menu *pMenu, int stringId, short id, BYTE min, BYTE max, BYTE flag2, int unused, int param, short value)
+void Menu_AddItemType6(Menu *pMenu, char *text, short id, BYTE min, BYTE max, BYTE flag2, int unused, MenuItemAction action, short value)
 {
     Menu_ClearNextItem(pMenu);
-    pMenu->items[pMenu->itemCount].stringId = stringId;
+    pMenu->items[pMenu->itemCount].text = text;
     pMenu->items[pMenu->itemCount].id = id;
     pMenu->items[pMenu->itemCount].type = 6;
     pMenu->items[pMenu->itemCount].min = min;
     pMenu->items[pMenu->itemCount].max = max;
     pMenu->items[pMenu->itemCount].flag2 = flag2;
     pMenu->items[pMenu->itemCount].value = value;
-    pMenu->items[pMenu->itemCount].param = param;
+    pMenu->items[pMenu->itemCount].action = action;
     pMenu->itemCount++;
 }
 
 // FUNCTION: CMR2 0x004a0200
-void Menu_AddItemType4(Menu *pMenu, int stringId, short id, int param, short value)
+void Menu_AddItemType4(Menu *pMenu, char *text, short id, MenuItemAction action, short value)
 {
     Menu_ClearNextItem(pMenu);
-    pMenu->items[pMenu->itemCount].stringId = stringId;
+    pMenu->items[pMenu->itemCount].text = text;
     pMenu->items[pMenu->itemCount].id = id;
     pMenu->items[pMenu->itemCount].type = 4;
     pMenu->items[pMenu->itemCount].value = value;
-    pMenu->items[pMenu->itemCount].param = param;
+    pMenu->items[pMenu->itemCount].action = action;
     pMenu->itemCount++;
 }
 
 // FUNCTION: CMR2 0x004a0270
-void Menu_AddItemType1(Menu *pMenu, int stringId, short id, int param, short value)
+void Menu_AddItemType1(Menu *pMenu, char *text, short id, MenuItemAction action, short value)
 {
     Menu_ClearNextItem(pMenu);
-    pMenu->items[pMenu->itemCount].stringId = stringId;
+    pMenu->items[pMenu->itemCount].text = text;
     pMenu->items[pMenu->itemCount].id = id;
     pMenu->items[pMenu->itemCount].type = 1;
     pMenu->items[pMenu->itemCount].value = value;
-    pMenu->items[pMenu->itemCount].param = param;
+    pMenu->items[pMenu->itemCount].action = action;
     pMenu->itemCount++;
 }
 
 // FUNCTION: CMR2 0x004a02e0
-void Menu_AddItemType2(Menu *pMenu, int stringId, short id, Menu *pSubMenu, int param, short value)
+void Menu_AddItemType2(Menu *pMenu, char *text, short id, Menu *pSubMenu, MenuItemAction action, short value)
 {
     Menu_ClearNextItem(pMenu);
-    pMenu->items[pMenu->itemCount].stringId = stringId;
+    pMenu->items[pMenu->itemCount].text = text;
     pMenu->items[pMenu->itemCount].id = id;
     pMenu->items[pMenu->itemCount].type = 2;
     pMenu->items[pMenu->itemCount].pSubMenu = pSubMenu;
     pMenu->items[pMenu->itemCount].value = value;
-    pMenu->items[pMenu->itemCount].param = param;
+    pMenu->items[pMenu->itemCount].action = action;
     pMenu->itemCount++;
 }
 
@@ -270,7 +270,7 @@ void Menu_PlaySound(int id)
 }
 
 // FUNCTION: CMR2 0x004a0ad0
-void Menu_SetNextAction(int action)
+void Menu_SetNextAction(Menu *action)
 {
     if (g_unk0x0059f8fc == 0 && g_unk0x0059fa14 != 0)
         Menu_PlaySound(CInput::m_unk0x0059f910);
@@ -287,7 +287,7 @@ void Menu_SetNextAction(int action)
 // pairs swap with layout), 4 select, 5 back.
 // match 86%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x004a0570
-int Menu_Update(Menu *pMenu, unsigned int input)
+Menu *Menu_Update(Menu *pMenu, unsigned int input)
 {
     BYTE bNext;
     BYTE bLeft;
@@ -301,7 +301,7 @@ int Menu_Update(Menu *pMenu, unsigned int input)
     int moved;
     int wrapped;
     MenuItem *pItem;
-    int action;
+    Menu *action;
     BYTE flags;
     BYTE v;
 
@@ -443,7 +443,7 @@ int Menu_Update(Menu *pMenu, unsigned int input)
             } else if (bRight || (bSelect && pItem->flag3)) {
                 moved = 1;
                 if (pItem->max < pItem->min - 1 || pItem->flag2 || (bSelect && pItem->flag3)) {
-                    if (!bSelect || pItem->param == 0) {
+                    if (!bSelect || pItem->action == NULL) {
                         pItem->max++;
                         if (pItem->max >= pItem->min)
                             pItem->max = 0;
@@ -463,7 +463,7 @@ int Menu_Update(Menu *pMenu, unsigned int input)
         if (bSelect == 0) {
             if (bBack) {
 back:
-                g_menuNextAction = (int)pMenu->pParent;
+                g_menuNextAction = pMenu->pParent;
                 g_unk0x0059f8fc = 1;
                 if (pMenu->pItemCallbacks != NULL && pMenu->pItemCallbacks->pfnBack != NULL)
                     pMenu->pItemCallbacks->pfnBack(pMenu, ITEM_AT(pMenu, pMenu->cursor), 1);
@@ -471,12 +471,12 @@ back:
                     Menu_PlaySound(CInput::m_unk0x0059f8f4);
             }
         } else {
-            if (pItem->param != 0)
-                ((void (*)(Menu *, MenuItem *))pItem->param)(pMenu, pItem);
+            if (pItem->action != NULL)
+                pItem->action(pMenu, pItem);
             if (bBack || pItem->type == 1)
                 goto back;
             if (pItem->type == 2) {
-                g_menuNextAction = (int)pItem->pSubMenu;
+                g_menuNextAction = pItem->pSubMenu;
                 if (pMenu->pItemCallbacks != NULL && pMenu->pItemCallbacks->pfnSelect != NULL)
                     pMenu->pItemCallbacks->pfnSelect(pMenu, ITEM_AT(pMenu, pMenu->cursor), 1);
                 if (g_unk0x0059fa14 != 0)
@@ -514,7 +514,7 @@ void Menu_GoBack(Menu *pMenu)
 {
     if (g_unk0x0059f8fc == 0 && g_unk0x0059fa14 != 0)
         Menu_PlaySound(CInput::m_unk0x0059f910);
-    g_menuNextAction = (int)pMenu->pParent;
+    g_menuNextAction = pMenu->pParent;
     g_unk0x0059fa17 = 1;
 }
 

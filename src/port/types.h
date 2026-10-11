@@ -35,6 +35,10 @@ typedef WORD *LPWORD;
 typedef DWORD *LPDWORD, *PDWORD;
 typedef LONG *PLONG;
 typedef LONG HRESULT;
+
+/* Pointer-sized integers: 32 bits on x86, 64 bits on 64-bit targets. */
+typedef intptr_t INT_PTR, LONG_PTR;
+typedef uintptr_t UINT_PTR, ULONG_PTR, DWORD_PTR;
 #define SUCCEEDED(hr) (((HRESULT)(hr)) >= 0)
 #define FAILED(hr) (((HRESULT)(hr)) < 0)
 

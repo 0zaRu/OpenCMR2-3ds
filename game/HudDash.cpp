@@ -420,31 +420,31 @@ void Dash_DrawBar(int player, int layer)
         rect[1] = DASH_Y(0xfd70) - (short)((g_pGraphics->resY * 0x28) / 480) + dy;
         rect[2] = (short)split;
         rect[3] = (short)((g_pGraphics->resY * 0x14) / 480);
-        Sprite_FillRect((int)g_pGraphics + 0x150, rect, g_dashBarColour, 3);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, rect, g_dashBarColour, 3);
         if (rest != 0) {
             rect[0] = rect[0] + rect[2];
             rect[2] = (short)rest;
-            Sprite_FillRect((int)g_pGraphics + 0x150, rect, g_dashBarRedColour, 3);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, rect, g_dashBarRedColour, 3);
         }
         rect[0] = DASH_X(0xfd70) - (short)((g_pGraphics->resX * 0x82) / 640) - 1 + dx;
         rect[2] = 1;
         rect[1] = DASH_Y(0xfd70) - (short)((g_pGraphics->resY * 0x28) / 480) - 1 + dy;
         rect[3] = (short)((g_pGraphics->resY * 0x14) / 480) + 2;
-        Sprite_FillRect((int)g_pGraphics + 0x150, rect, g_dashWhite, 3);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, rect, g_dashWhite, 3);
         rect[3] = 1;
         rect[2] = (short)((g_pGraphics->resX * 0x4b) / 640) + 2;
-        Sprite_FillRect((int)g_pGraphics + 0x150, rect, g_dashWhite, 3);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, rect, g_dashWhite, 3);
         rect[2] = 1;
         rect[0] = DASH_X(0xfd70) + 1 + dx +
                   ((short)((g_pGraphics->resX * 0x4b) / 640) - (short)((g_pGraphics->resX * 0x82) / 640));
         rect[3] = (short)((g_pGraphics->resY * 0x14) / 480) + 2;
-        Sprite_FillRect((int)g_pGraphics + 0x150, rect, g_dashWhite, 3);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, rect, g_dashWhite, 3);
         rect[0] = DASH_X(0xfd70) - (short)((g_pGraphics->resX * 0x82) / 640) - 1 + dx;
         rect[1] = DASH_Y(0xfd70) + dy +
                   ((short)((g_pGraphics->resY * 0x14) / 480) - (short)((g_pGraphics->resY * 0x28) / 480));
         rect[3] = 1;
         rect[2] = (short)((g_pGraphics->resX * 0x4b) / 640) + 2;
-        Sprite_FillRect((int)g_pGraphics + 0x150, rect, g_dashWhite, 3);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, rect, g_dashWhite, 3);
     }
 
     // Gear and speed.
@@ -641,9 +641,9 @@ void Dash_DrawDial(int player, int layer)
     rect[1] = (short)g_dashGearMarkerY[player];
     *(DWORD *)shadow = *(DWORD *)colour;
     shadow[3] = colour[3] >> 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, shadow, 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, shadow, 3);
     rect[1] = (short)g_dashGearMarker[player];
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, colour, 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, colour, 3);
     Font_DrawText(4, speed, FixMul(g_pGraphics->resX << 16, 0xf467) >> 16, FixMul(g_pGraphics->resY << 16, 0xd90f) >> 16,
                   (int *)g_dashWhite, 0x24);
 
@@ -928,7 +928,7 @@ void Dash_BuildInterpolatedCockpitMatrix(BYTE *param_1, FixMatrix *param_2, int 
         else
             scale = 0xe0000;
         t = FixMul(FixDiv(g_physicsTimeStep, scale),
-                   Car_Get(param_1[2])->field_0xa74);
+                   Car_Get(param_1[2])->surfaceNoise);
         FixMatrix_Interpolate(&xform, &mat, &xform, t, t, 0x10000, 0);
         FixMatrix_GetUp(pUp, &xform);
         FixMatrix_GetForward(pRight, &xform);

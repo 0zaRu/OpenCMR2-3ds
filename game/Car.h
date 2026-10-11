@@ -35,10 +35,17 @@ struct SectorNeighbours {
 };
 
 struct Car {
-    FixMatrix physicsMatrix;          // 0x00 pWorld points here
-    FixMatrix bodyMatrix;             // 0x40 pBodyMatrix points here
-    CarCornerGrip cornerGrip[8];      // 0x80
-    CarWheelSurface wheelSurfaceFx[4]; // 0x1a0
+    // Fixed-word prefix: original cursors walk across grip/effect records.
+    union {
+        struct {
+            FixMatrix physicsMatrix;          // 0x00 pWorld points here
+            FixMatrix bodyMatrix;             // 0x40 pBodyMatrix points here
+            CarCornerGrip cornerGrip[8];      // 0x80
+            CarWheelSurface wheelSurfaceFx[4]; // 0x1a0
+        };
+        int surfaceOutputWords[116];
+        BYTE surfaceOutputBytes[0x1d0];
+    };
     char flag0x1d0[4];                // 0x1d0
     BYTE field_0x1d4[0x4];
     int handbrake;                    // 0x1d8  handbrake engaged (the rear wheels stop being driven)
@@ -48,8 +55,13 @@ struct Car {
     int field_0x1e8[4];               // 0x1e8
     FixVector bodySize;                // 0x1f8  full body dimensions; halfExtents is half this vector
     FixVector halfExtents;            // 0x204
-    FixVector wheelPos[4];            // 0x210  wheel positions in body space
-    FixVector upperCornersLocal[4];    // 0x240  four upper body-space collision corners
+    union {
+        struct {
+            FixVector wheelPos[4];            // 0x210  wheel positions in body space
+            FixVector upperCornersLocal[4];    // 0x240  four upper body-space collision corners
+        };
+        FixVector collisionCornersLocal[8]; // 0x210 four lower + four upper corners
+    };
     FixVector corners[8];             // 0x270  world-space box corners
     FixVector position;               // 0x2d0
     FixVector field_0x2dc;            // 0x2dc
@@ -57,12 +69,24 @@ struct Car {
     FixVector positionPrev2;          // 0x2f4  and of the one before
     FixVector cornerPrev[4];          // 0x300  previous positions of the four lower corners
     FixVector cornerPrev2[4];         // 0x330  and the ones before
-    FixVector right;                  // 0x360  body axes (rows of the body matrix)
-    FixVector up;                     // 0x36c
-    FixVector forward;                // 0x378
-    BYTE field_0x384[0xc];
-    FixVector targetUp;               // 0x390  up/forward the body relaxes towards
-    FixVector targetForward;          // 0x39c
+    // The original copies all nine words together at start/reset and restores
+    // them together on a player fade. These overlays are runtime state.
+    union {
+        struct {
+            FixVector right;         // 0x360 body axes (rows of the body matrix)
+            FixVector up;            // 0x36c
+            FixVector forward;       // 0x378
+        };
+        int bodyAxes[9];
+    };
+    union {
+        struct {
+            FixVector targetRight;   // 0x384 saved right, restored with up/forward
+            FixVector targetUp;      // 0x390 up/forward the body relaxes towards
+            FixVector targetForward; // 0x39c
+        };
+        int targetAxes[9];
+    };
     FixVector frontWheelAxis;         // 0x3a8  lateral axis of the front (steered) wheels
     FixVector frontWheelDir;          // 0x3b4  rolling direction of the front wheels 0/1: rearWheelDir turned by the steering
     FixVector wheelEmitter[4];        // 0x3c0  wheel dust/smoke emitter in body space
@@ -144,12 +168,17 @@ struct Car {
     int wheelTorque[4];               // 0x850  drive/brake torque per wheel
     int wheelLoad[4];                 // 0x860  paired per axle; Car_BalanceWheelPairs evens each pair out
     int wheelSlip[4];                 // 0x870  rolling slip of each wheel
-    int wheelSlipLateral[4];          // 0x880  lateral slip of each wheel
-    int wheelSpinForWheelLean[4];      // 0x890  filtered wheel spin (front lean)
-    int wheelSpinForBodyLean[4];       // 0x8a0  filtered wheel spin (body lean)
-    int cornerMass;                   // 0x8b0  mass carried by each touching corner
-    int tyreGrip;                     // 0x8b4  tyre grip, times the physics scale each step
-    int field_0x8b8[8];               // 0x8b8  per-wheel torque rebuilt every step (8 corners)
+    union {
+        struct {
+            int wheelSlipLateral[4];          // 0x880  lateral slip of each wheel
+            int wheelSpinForWheelLean[4];      // 0x890  filtered wheel spin (front lean)
+            int wheelSpinForBodyLean[4];       // 0x8a0  filtered wheel spin (body lean)
+            int cornerMass;                   // 0x8b0  mass carried by each touching corner
+            int tyreGrip;                     // 0x8b4  tyre grip, times the physics scale each step
+            int field_0x8b8[8];               // 0x8b8  per-wheel torque rebuilt every step (8 corners)
+        };
+        int surfaceCompressionWords[22]; // 0x880..0x8d7, original contiguous walk
+    };
     int field_0x8d8;                  // 0x8d8
     int cornerHeight[8];              // 0x8dc  ground height under each box corner
     int field_0x8fc[8];               // 0x8fc  per-corner height offset while cornerOnGround[4 + i]
@@ -184,8 +213,8 @@ struct Car {
     int field_0xa5c[4];               // 0xa5c
     BYTE field_0xa6c[0x4];
     int field_0xa70;                  // 0xa70
-    int field_0xa74;
-    BYTE field_0xa78[0x4];
+    int surfaceNoise;               // 0xa74 smoothed wheel-surface noise
+    int surfaceNoiseTarget;                  // 0xa78 surface-noise target, copied to +0xa74
     int field_0xa7c;                  // 0xa7c
     int field_0xa80;
     int field_0xa84;
@@ -199,7 +228,13 @@ struct Car {
     short wheelSurface[8];            // 0xaae  surface class under each corner
     short previousWheelSurface[4];     // 0xabe  surface of each wheel at the last step
     short wheelSurfaceType[8];        // 0xac6  surface id under each corner
-    BYTE field_0xad6[0x28];
+    union {
+        BYTE field_0xad6[0x28];
+        struct {
+            short contactSurfaces[2][5]; // 0xad6 previous IDs, 0xae0 pending IDs
+            BYTE field_0xaea[0x14];
+        };
+    };
     short engineStartTimer;            // 0xafe  engine startup countdown
     short sector;                     // 0xb00  stage sector the car is in
     SectorNeighbours neighbours;      // 0xb02  the sectors around it (Sector_GetNeighbours)
@@ -224,12 +259,20 @@ struct Car {
     BYTE field_0xb26;
     BYTE field_0xb27;
     BYTE field_0xb28;                 // 0xb28
-    BYTE field_0xb29;                 // 0xb29
+    BYTE surfaceDragLevel;             // 0xb29 group of nine surface drag values
     BYTE field_0xb2a;                 // 0xb2a
     char deepestCorner;                // 0xb2b  0..3, or -1 when no corner penetrates
     char cornerFlags[8];              // 0xb2c  set while a corner is disabled
     char field_0xb34;                 // 0xb34
-    BYTE field_0xb35[0xd];
+    union {
+        BYTE field_0xb35[0xd];
+        struct {
+            BYTE field_0xb35Prefix[9];
+            char previousContactCount; // 0xb3e signed count of previous surface IDs
+            char pendingContactCount;  // 0xb3f signed count of pending surface IDs
+            BYTE field_0xb40[2];
+        };
+    };
     char field_0xb42;                 // 0xb42
     BYTE simulationStepsRemaining;    // 0xb43 scheduled steps not yet consumed this frame
     char field_0xb44;                 // 0xb44
@@ -259,8 +302,17 @@ struct Car {
     int gearAtOrBelowBest;             // 0xb98  current gear is at or below the best one
     int automaticGearbox;              // 0xb9c  automatic gearbox enabled
     int field_0xba0[3];               // 0xba0
-    int cornerOnGround[8];            // 0xbac  per corner: touching the ground
-    int field_0xbcc[4];               // 0xbcc
+    union {
+        struct {
+            int cornerOnGround[8];    // 0xbac per corner: touching the ground
+            int field_0xbcc[4];       // 0xbcc
+        };
+        struct {
+            int field_0xbac[4];
+            int objectContactState[8]; // 0xbbc cleared before object traversal;
+                                       // first four alias cornerOnGround[4..7]
+        };
+    };
     int field_0xbdc;                  // 0xbdc
     int field_0xbe0;                  // 0xbe0
     int field_0xbe4;                  // 0xbe4

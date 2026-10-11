@@ -11,7 +11,7 @@ list(REMOVE_ITEM ZLIB_C_SOURCES ${GAME_DIR}/ZlibZutil.cpp)
 set_source_files_properties(${ZLIB_C_SOURCES} PROPERTIES LANGUAGE C)
 
 add_library(cmr2_game STATIC ${GAME_SOURCES})
-target_include_directories(cmr2_game PUBLIC ${GAME_DIR} ${CMAKE_CURRENT_SOURCE_DIR})
+target_include_directories(cmr2_game PUBLIC ${GAME_DIR} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/port/compat)
 target_compile_options(cmr2_game PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-x c>
     "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/port/types.h"

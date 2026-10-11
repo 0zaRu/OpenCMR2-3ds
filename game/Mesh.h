@@ -4,7 +4,9 @@
 // Triangle of a Mesh (0x4c bytes); per-vertex colour bytes at 0x34/0x38/0x3c.
 struct MeshTriangle {
     unsigned short flags;           // 0x0  bits 0..6 and 9..15: material groups
-    BYTE field_0x2[0x2a];
+    BYTE field_0x2[2];
+    int textureIndex;               // 0x4  index into D3DTextureManager::textureBuffer
+    BYTE field_0x8[0x24];
     int field_0x2c;                 // 0x2c set per group (0x49c440)
     int field_0x30;                 // 0x30 set per group (0x49c4b0)
     BYTE colour[3][4];              // 0x34  r,g,b,a per vertex
@@ -23,6 +25,10 @@ struct MeshPart {
     int field_0x18;             // 0x18
 };
 
+struct MeshCollisionRecord;
+// ON-DISK: 0x120-byte stage mesh header, relocated in place at 0x4b93c0.
+// pVertexData, pTriangles and pCollisionRecords hold relocated file offsets;
+// the port must separate this disk representation from native mesh storage.
 // Renderable mesh (0x120 bytes); only the fields used so far are named.
 struct Mesh {
     BYTE field_0x0[0xc];
@@ -39,7 +45,8 @@ struct Mesh {
     int *pLightLevels;          // 0x34 light level of each vertex
     MeshPart *pParts[50];       // 0x38
     int partCount;              // 0x100
-    BYTE field_0x104[0xc];
+    BYTE field_0x104[8];
+    MeshCollisionRecord *pCollisionRecords; // 0x10c relocated collision chain
     BYTE sizeUnits;             // 0x110
     BYTE field_0x111[7];
     int field_0x118;

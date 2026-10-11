@@ -1318,11 +1318,11 @@ private:
     // GLOBAL: CMR2 0x0065fa24
     static unsigned int m_unk0x0065fa24;
     // GLOBAL: CMR2 0x0065fa38
-    static int m_unk0x0065fa38;
+    static Texture *m_unk0x0065fa38;     // texture set on the last changed stage
 
     static void SetCachedSourceDestinationBlend(int param1, int param2);
-    static void ConfigureTextureStageBlendMode(int param1, int param2);
-    static void ApplyTextureStageChange(int param1, int param2);
+    static void ConfigureTextureStageBlendMode(int stage, Texture *pTexture);
+    static void ApplyTextureStageChange(int stage, Texture *pTexture);
     // SceneNode_CreateRoot stores the root node in the texture manager.
     friend SceneNode *SceneNode_CreateRoot(void);
     friend void Graphics_SetTextureFactorAlpha(BYTE *pColour);
@@ -1341,7 +1341,7 @@ private:
     friend void Graphics_DrawCubeMappedShadowTriangles(Mesh *pMesh);
     // Mesh_DrawEnvMapped sets the texture transform of the projected cube map.
     friend void Mesh_DrawEnvMapped(Mesh *pMesh);
-    friend void *Sector_RelocateStageMeshFile(BYTE *pData, int param_2, unsigned int param_3);
+    friend void *Sector_RelocateStageMeshFile(BYTE *pData, struct SceneNode *parent, struct GenericFile *archive);
     friend void OptionPreview_UpdateWheelMeshVariants(int param1);
     friend Texture *Graphics_FindAndEnsureResidentTexture(char *name);
     friend void Events_Init(int unused, int slot, char animate);
@@ -1500,7 +1500,7 @@ private:
     friend void Game_DrawViewMaskNode(SceneNode *pNode, int bit);
     friend void Game_DrawDeferredObjects(void);
     friend int Graphics_RenderNodeCubeMapFaces(SceneNode *pNode, int bit);
-    friend int Game_DrawSceneViewport(int param1, int param2, void *param3, int bit, BYTE flag);
+    friend int Game_DrawSceneViewport(struct SceneNode *pRoot, struct SceneNode *pCamera, void *pRect, int bit, BYTE flag);
 };
 
 
@@ -1586,6 +1586,6 @@ struct BillboardDef {
     BYTE flags;                 // 0x23 1 mirrored, 2 lit by the scene light
     int field_0x24;
 };
-void Billboard_Add(BillboardDef *pDef, unsigned short *pTexture);
+void Billboard_Add(BillboardDef *pDef, Texture *pTexture);
 
 #endif

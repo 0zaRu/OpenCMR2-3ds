@@ -3,7 +3,14 @@
 
 #include "FixedPoint.h"
 
-// Definition of one particle kind (0x70 bytes).
+// Runtime particle templates: allocated by Particle_Init and edited in memory.
+// Pointer members grow on native builds; these records are not file payloads.
+struct Particle;
+struct ParticleType;
+struct SceneNode;
+typedef void (*ParticleDrawCallback)(Particle *, ParticleType *, SceneNode *);
+typedef void (*ParticleInitCallback)(void *, ParticleType *, void *);
+// Definition of one particle kind (0x70 bytes on Win32).
 struct ParticleType {
     int lifetime;
     FixVector spread;
@@ -24,19 +31,19 @@ struct ParticleType {
                             //      0x10 size ramp set by range, 0x20 spin, 0x40 alpha ramp, 0x80 bounce
     BYTE directionFlags;
     BYTE pad0x37;
-    int field0x38;
+    Texture *texture;       // 0x38
     int field0x3c;          // 0x3c billboard top/left/bottom/right (0x3c..0x48)
     int field0x40;
     int field0x44;
     int field0x48;
-    int field0x4c;          // 0x4c animation frames (texture per frame)
+    Texture **frames;       // 0x4c animation frames (texture per frame)
     int field0x50;          // 0x50 frame count
     int field0x54;          // 0x54 delay before the animation starts
     int field0x58;          // 0x58 time per frame
-    int field0x5c;          // 0x5c custom draw callback
+    ParticleDrawCallback draw; // 0x5c custom draw callback
     void (*update)(void *, ParticleType *, int);        // 0x60 replaces the default motion
     void (*postUpdate)(void *, ParticleType *, int);    // 0x64
-    void (*callback)(void *, ParticleType *, int);
+    ParticleInitCallback callback; // 0x68 initial particle data
     int field0x6c;
 };
 
@@ -48,7 +55,7 @@ struct Particle {
     FixVector vector0x1c;   // interpolated position used only for drawing
     FixVector vector0x28;   // current position after the attachment callback
     FixVector sourceVector; // simulation position before attachment/interpolation
-    int field0x40;
+    FixMatrix *attachmentMatrix; // 0x40 optional local-to-world attachment
     int age;
     int field0x48;
     int size;
@@ -62,12 +69,12 @@ struct Particle {
     BYTE field0x58;
     BYTE colour[3];
     BYTE pad0x5c[4];
-    int field0x60;
+    Texture *texture;       // 0x60 the type's texture, copied when spawned
     short field0x64;         // effect data: car << 8 | variant
     short field0x66;
 };
 
-void Particle_Spawn(int typeIndex, FixVector *pSource, FixVector *pPosition, int field0x48, int field0x40,
-                    BYTE *pColour, BYTE field0x54, int callbackParam, BYTE field0x55);
+void Particle_Spawn(int typeIndex, FixVector *pSource, FixVector *pPosition, int field0x48, FixMatrix *attachmentMatrix,
+                    BYTE *pColour, BYTE field0x54, void *callbackParam, BYTE field0x55);
 
 #endif

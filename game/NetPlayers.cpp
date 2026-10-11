@@ -1,5 +1,6 @@
 #include <string.h>
 #include <stdlib.h>
+#include <stddef.h>
 #include "NetPlayers.h"
 #include "GameInfo.h"
 #include "RallyData.h"
@@ -66,9 +67,9 @@ BYTE *NetworkLeaderboard_GetPublishedBoard(void);
 int Network_FindSessionPlayerIndex(NetPlayerID *pId, char *pIndex);
 char *Network_GetActiveSessionPlayerLongName(BYTE index);
 NetPlayerID Network_GetLocalPlayerID(void);
-char Network_SetLocalPlayerData(int data, int size);
+char Network_SetLocalPlayerData(void *data, int size);
 unsigned int StageTiming_GetDriverSplitClock(int index, int split);
-char Network_SendPlayerMessage(int to, int guaranteed, int data, int size);
+char Network_SendPlayerMessage(int to, int guaranteed, void *data, int size);
 
 // FUNCTION: CMR2 0x00409a30
 void NetPlayers_ResetAllTables(void)
@@ -133,14 +134,14 @@ void NetPlayers_ClearReadyFlags(void)
 {
     unsigned int *p;
 
-    // The original walks the flags byte of each record up to g_netRanks[1],
-    // the global that follows g_netPlayers.
-    for (p = &g_netPlayers[0].flags; (int)p < (int)&g_netRanks[1]; p += 0x20)
+    // The original bound is one flags-member bias beyond this array.
+    // Calculate its address from the owned array, without linker adjacency.
+    for (p = &g_netPlayers[0].flags; (INT_PTR)p < (INT_PTR)g_netPlayers + (int)sizeof(g_netPlayers) + (int)offsetof(NetPlayer, flags); p += sizeof(NetPlayer) / sizeof(*p))
         *p &= ~0x100;
 }
 
 // FUNCTION: CMR2 0x00409be0
-void NetPlayers_SetNotificationMask(int param)
+void NetPlayers_SetNotificationMask(void *param)
 {
     Network_SetLocalPlayerData(param, 0x10);
 }
@@ -588,7 +589,7 @@ void NetPlayers_RebuildStageResults(int param1, int param2, int param3)
     g_netResults[i].field_0x8 = param2;
     g_netResults[i].field_0xc = param3;
     g_netResults[i].id = Network_GetLocalPlayerID();
-    if ((*(unsigned int *)*(BYTE **)(StageUI_GetRaceResultTable() + 4) & 0xff) > 8)
+    if (((unsigned int)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[0].packedState & 0xff) > 8)
         g_netResults[i].field_0x14 = 1;
     else
         g_netResults[i].field_0x14 = 0;
@@ -693,7 +694,7 @@ void NetPlayers_BuildStageStandings(unsigned int localTime)
     {
         int *r = g_netRanks2;
         NetStanding *p = &g_netStandings2[1];
-        for (; (int)p < (int)&g_netStandings2[8]; p++) {
+        for (; (INT_PTR)p < (INT_PTR)&g_netStandings2[8]; p++) {
             if (p->index == -1)
                 return;
             if (p->time != p[-1].time)
@@ -807,7 +808,7 @@ void NetPlayers_SendCarClass(BYTE carClass)
 
     msg[0] = 6;
     msg[1] = carClass;
-    Network_SendPlayerMessage(0, 1, (int)msg, 2);
+    Network_SendPlayerMessage(0, 1, msg, 2);
 }
 
 // FUNCTION: CMR2 0x0040ac70
@@ -935,7 +936,7 @@ void NetPlayers_SendType16Notification(void)
     BYTE msg;
 
     msg = 0x10;
-    Network_SendPlayerMessage(0, 1, (int)&msg, 1);
+    Network_SendPlayerMessage(0, 1, &msg, 1);
 }
 
 // FUNCTION: CMR2 0x0040af60
@@ -957,7 +958,7 @@ void NetPlayers_SendPublishedLeaderboard(void)
     } else {
         msg.valid = 0;
     }
-    Network_SendPlayerMessage(0, 1, (int)&msg, sizeof(msg));
+    Network_SendPlayerMessage(0, 1, &msg, sizeof(msg));
 }
 
 // FUNCTION: CMR2 0x0040afb0
@@ -974,7 +975,7 @@ void NetPlayers_BlockStatisticsReception(void)
     unsigned int *p;
 
     // Same bound as NetPlayers_ClearReadyFlags (see there).
-    for (p = &g_netPlayers[0].flags; (int)p < (int)&g_netRanks[1]; p += 0x20)
+    for (p = &g_netPlayers[0].flags; (INT_PTR)p < (INT_PTR)g_netPlayers + (int)sizeof(g_netPlayers) + (int)offsetof(NetPlayer, flags); p += sizeof(NetPlayer) / sizeof(*p))
         *p |= 0x400000;
 }
 

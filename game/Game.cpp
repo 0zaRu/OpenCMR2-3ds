@@ -1,4 +1,5 @@
 #include "port/sys.h"
+#include "RaceCallbackStorage.h"
 #include "StageBlock.h"
 #include "Game.h"
 #include "Menu.h"
@@ -115,7 +116,7 @@ void OptionMenu_LeaveAndCommitState(CallbackStateMachine *p1, BYTE state);
 void OptionMenu_LeaveWithoutCommitState(CallbackStateMachine *p1, BYTE state);
 void Game_FinishRaceAndAdvanceBootState(CallbackStateMachine *p1, BYTE p2);
 void Game_DrawLogoAndLoadingSprites(CallbackStateMachine *p1, BYTE p2);
-void OptionMenu_StartDelayedFade(int param1, int unused);
+void OptionMenu_StartDelayedFade(CallbackStateMachine *param1, int unused);
 void Game_DrawMovieFrameAndCredits(CallbackStateMachine *p1, BYTE p2);
 
 StateCallbackPair CGame::m_initializeGameGroupedFuncTable[10] = {
@@ -155,7 +156,7 @@ void CGame::UpdateActiveSoundSlots(void)
             if (*ppSlot != NULL)
                 CSound::UpdateFinishedSoundSlot(*ppSlot);
             ppSlot++;
-        } while ((int)ppSlot < (int)(CSound::m_soundSlots + 32));
+        } while ((INT_PTR)ppSlot < (INT_PTR)(CSound::m_soundSlots + 32));
     }
 }
 
@@ -255,8 +256,8 @@ int g_unk0x00523c64[5] = { -1, 120, 120, 120, 120 };
 
 void FrontendMenu_DrawActiveMenu(void);
 float Graphics_GetFrameScale(void);
-int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, int unused, int param);
-int Game_DrawSceneViewport(int, int, void *, int, BYTE);
+int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, void *pRect, int param);
+int Game_DrawSceneViewport(struct SceneNode *pRoot, struct SceneNode *pCamera, void *pRect, int bit, BYTE flag);
 void Graphics_PresentFrameAndResetCounters(void);
 
 // Boot render state: places the splash-scene camera, clears the target and
@@ -286,12 +287,12 @@ void Game_DrawBootCameraAndFPS(CallbackStateMachine *p1, BYTE p2)
     CGraphics::ClearTarget();
     CGraphics::ClearZBuffer();
     FrontendMenu_DrawActiveMenu();
-    Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, (int)rect, 0);
+    Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, rect, 0);
     if ((g_pGraphics->field913_0x3bc & 4) != 0) {
         sprintf(CFrontend::m_stringDest, g_strFpsFormat0x00516e14, Graphics_GetFrameScale());
         Font_DrawText(0, CFrontend::m_stringDest, 0, 0, g_unk0x00523c64, 9);
     }
-    Game_DrawSceneViewport((int)g_unk0x00817fc8, (int)g_unk0x00817fc4, rect, 0, 1);
+    Game_DrawSceneViewport(g_unk0x00817fc8, g_unk0x00817fc4, rect, 0, 1);
     if (g_unk0x00817fcc == 0)
         Graphics_PresentFrameAndResetCounters();
 }
@@ -375,12 +376,12 @@ void Game_DrawLogoAndLoadingSprites(CallbackStateMachine *p1, BYTE p2)
         }
     }
 
-    Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, (int)&screen, 0);
+    Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, &screen, 0);
     if (g_pGraphics->field913_0x3bc & 4) {
         sprintf(CFrontend::m_stringDest, g_strFpsFormat0x00516e14, Graphics_GetFrameScale());
         Font_DrawText(0, CFrontend::m_stringDest, 0, 0, (int *)colour, 9);
     }
-    Game_DrawSceneViewport((int)g_unk0x00817fc8, (int)g_unk0x00817fc4, &screen, 0, 1);
+    Game_DrawSceneViewport(g_unk0x00817fc8, g_unk0x00817fc4, &screen, 0, 1);
     if (g_unk0x00817fcc == 0)
         Graphics_PresentFrameAndResetCounters();
 }
@@ -425,8 +426,8 @@ void Game_DrawCountryLoadingScreen(CallbackStateMachine *p1, BYTE p2)
                 CFrontend::GetTextString((RallyDataCountryIndex() & 0xff) + 0x27));
         CGenericFileLoader::StrLowerPolish(CFrontend::m_stringDest);
         Game_DrawFadingBootLabel(y, (int)g_pGraphics->resY / 2, CFrontend::m_stringDest, 1);
-        Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, (int)rect, 0);
-        Game_DrawSceneViewport((int)g_unk0x00817fc8, (int)g_unk0x00817fc4, rect, 0, 1);
+        Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, rect, 0);
+        Game_DrawSceneViewport(g_unk0x00817fc8, g_unk0x00817fc4, rect, 0, 1);
         if (g_unk0x00817fcc == 0)
             Graphics_PresentFrameAndResetCounters();
     }
@@ -523,9 +524,9 @@ char g_strMusicSelect1Adp[16] = "%s\\select1.adp";
 
 void FrontendMenu_UpdateAndSwitchActive(void);
 
-int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, int unused, int param);
+int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, void *pRect, int param);
 float Graphics_GetFrameScale(void);
-int Game_DrawSceneViewport(int, int, void *, int, BYTE);
+int Game_DrawSceneViewport(struct SceneNode *pRoot, struct SceneNode *pCamera, void *pRect, int bit, BYTE flag);
 void Graphics_PresentFrameAndResetCounters(void);
 
 // FPS overlay format string ("FPS: %.2f").
@@ -573,14 +574,14 @@ void Game_DrawBootTextureScreen(CallbackStateMachine *p1, BYTE p2)
         Sprite_Queue(&src, &dst, CFrontend::m_unk0x00817fd0, 1, 0, centre, NULL, colour, 8);
     }
 
-    Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, (int)&screenRect, 0);
+    Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, &screenRect, 0);
 
     if ((g_pGraphics->field913_0x3bc & 4) != 0) {
         sprintf(CFrontend::m_stringDest, g_strFpsFormat0x00516e14, Graphics_GetFrameScale());
         Font_DrawText(0, CFrontend::m_stringDest, 0, 0, (int *)colour, 9);
     }
 
-    Game_DrawSceneViewport((int)g_unk0x00817fc8, (int)g_unk0x00817fc4, &screenRect, 0, 1);
+    Game_DrawSceneViewport(g_unk0x00817fc8, g_unk0x00817fc4, &screenRect, 0, 1);
 
     if (g_unk0x00817fcc == 0)
         Graphics_PresentFrameAndResetCounters();
@@ -635,7 +636,7 @@ void Game_RunFrontendBootFrame(CallbackStateMachine *p1, BYTE p2)
 // GLOBAL: CMR2 0x00513ec8
 float g_unk0x00513ec8 = 1.0f / 1500.0f;
 extern const float g_netByteScale;
-int Sprite_FillRect(int unused, short *pRect, BYTE *pColour, int layer);
+int Sprite_FillRect(BYTE *unused, short *pRect, BYTE *pColour, int layer);
 
 // Draws a boot/HUD label at (x, y) in a colour that fades out 2.5 s after the
 // frame timer was last reset; unless flag is set it also fills the 2 pixel wide
@@ -675,7 +676,7 @@ int Game_DrawFadingBootLabel(int x, int y, char *pText, char flag)
         rect[1] = (int)(g_pGraphics->resY * 200) / 0x1e0;
         rect[2] = 2;
         rect[3] = (int)(g_pGraphics->resY * 60) / 0x1e0;
-        Sprite_FillRect((int)g_pGraphics + 0x150, rect, colour, 1);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, rect, colour, 1);
         px += (int)(g_pGraphics->resX * 10) / 0x280;
     }
     return px;
@@ -838,9 +839,9 @@ void Game_FinishRaceAndAdvanceBootState(CallbackStateMachine *p1, BYTE unused)
 }
 
 float Graphics_GetFrameScale(void);
-int Game_DrawSceneViewport(int, int, void *, int, BYTE);
+int Game_DrawSceneViewport(struct SceneNode *pRoot, struct SceneNode *pCamera, void *pRect, int bit, BYTE flag);
 void Graphics_PresentFrameAndResetCounters(void);
-int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, int unused, int param);
+int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, void *pRect, int param);
 
 // Needed by every boot-screen render of this file (0x4d0a80 / 0x4d0ea0 /
 // 0x4d1080 / 0x4d1370); the duplicated definition is deduplicated on integration.
@@ -892,7 +893,7 @@ void Game_DrawMovieFrameAndCredits(CallbackStateMachine *p1, BYTE p2)
         centre[1] = h / 2;
         Sprite_Queue(&src, &dst, CFrontend::m_unk0x00817ebc, 1, 0, centre, NULL, white, 8);
     }
-    Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, (int)&viewport, 0);
+    Game_PrepareScene(g_unk0x00817fc8, g_unk0x00817fc4, &viewport, 0);
     if ((g_pGraphics->field913_0x3bc & 4) != 0) {
         sprintf(CFrontend::m_stringDest, g_strFpsFormat0x00516e14, Graphics_GetFrameScale());
         Font_DrawText(0, CFrontend::m_stringDest, 0, 0, (int *)white, 9);
@@ -903,7 +904,7 @@ void Game_DrawMovieFrameAndCredits(CallbackStateMachine *p1, BYTE p2)
         sprintf(CFrontend::m_stringDest, g_strBinkCredit0x00523cd8);
     Font_DrawText(0, CFrontend::m_stringDest, (int)(g_pGraphics->resX * 0x140) / 0x280,
                   (int)(g_pGraphics->resY * 0x15e) / 0x1e0, (int *)black, 10);
-    Game_DrawSceneViewport((int)g_unk0x00817fc8, (int)g_unk0x00817fc4, &viewport, 0, 1);
+    Game_DrawSceneViewport(g_unk0x00817fc8, g_unk0x00817fc4, &viewport, 0, 1);
     if (g_unk0x00817fcc == 0)
         Graphics_PresentFrameAndResetCounters();
 }
@@ -1315,7 +1316,7 @@ BOOL CGame::UpdateSecondaryCallbackMachine()
 }
 // In-race callback group of the game state machine (0x0041b060), filled by
 // InitializeCallbackStateMachine; its slots live at 0x537de0.
-extern BYTE g_unk0x00537dd0[0x20];
+extern RaceCallbackStorage g_raceCallbackStorage;
 extern BYTE g_unk0x00537ef4;
 extern BYTE g_unk0x00537ef5;
 extern int g_unk0x00537ef8;
@@ -1331,24 +1332,24 @@ int RallyData_IsChampionshipFinalStage(void);
 void RallyData_SetSelectionBits14To15(BYTE param1);
 void Car_BuildRaceOrder(int count);
 void Dash_Reset(void);
-void Race_EnterCurrentModeScene(int param1, int param2);
+void Race_EnterCurrentModeScene(CallbackStateMachine *param1, int param2);
 void Race_UpdatePauseState(CallbackStateMachine *p, BYTE index);
 void RallyData_DrawProjectedChallengeScene(int param1, int param2);
-void Race_StartArcadeScene(int param1, int param2);
+void Race_StartArcadeScene(CallbackStateMachine *param1, int param2);
 void RallyData_RunChallengeLoadingScreen(int param1, char param2);
-void GameInfo_EnterStageGroup(BYTE *param1, int param2);
-void GameInfo_LeaveStageGroup(BYTE *param1, int param2);
-void InRaceMenu_AdvanceCascade(int param1, int param2);
+void GameInfo_EnterStageGroup(CallbackStateMachine *param1, int param2);
+void GameInfo_LeaveStageGroup(CallbackStateMachine *param1, int param2);
+void InRaceMenu_AdvanceCascade(CallbackStateMachine *param1, int param2);
 void RallyData_GrowEntryAndInvokeAction(BYTE *param1, unsigned int param2);
 void Knockout_UpdateRaceStateAndFades(BYTE *param_1, unsigned int param_2);
 void StageObject_ClearAndDrawSplitPositions(int unused1, int unused2);
-void Race_UpdateDriverPreRaceScene(BYTE *param1, unsigned int param2);
-void Race_UpdateDriverCountdown(int param1, unsigned int param2);
-void Race_UpdateDriverReadyAndRecordState(BYTE *param1, unsigned int param2);
+void Race_UpdateDriverPreRaceScene(CallbackStateMachine *param1, unsigned int param2);
+void Race_UpdateDriverCountdown(CallbackStateMachine *param1, unsigned int param2);
+void Race_UpdateDriverReadyAndRecordState(CallbackStateMachine *param1, unsigned int param2);
 void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2);
-void Race_UpdateInterStageFadeJobs(int param1, unsigned int param2);
+void Race_UpdateInterStageFadeJobs(CallbackStateMachine *param1, unsigned int param2);
 void Race_UpdateState12(CallbackStateMachine *p, BYTE index);
-void Race_LeaveAndFadeOut(int param1, char param2);
+void Race_LeaveAndFadeOut(CallbackStateMachine *param1, char param2);
 void RallyData_GrowEntryAndRefreshRecords(BYTE *param1, unsigned int param2);
 void RallyData_GrowEntryPanel(BYTE *param1, unsigned int param2);
 void RallyData_UpdateUnavailableEntryText(BYTE *param1, unsigned int param2);
@@ -1422,14 +1423,14 @@ BOOL CGame::UpdateInRaceCallbackMachine(void)
 
     if (g_unk0x00537ef4 != 0 && g_unk0x00537ef5 == 0 && g_unk0x00537ef8 == 0) {
         if (CGameInfo::IsInRaceMenuOpen() != 0) {
-            InRaceMenu_UpdateStateMachineFrame((CallbackStateMachine *)g_unk0x00537dd0);
-            InRaceMenu_AdvanceScreenEntries(g_unk0x00537dd0);
-            AdvanceCallbackStateTimers((CallbackStateMachine *)g_unk0x00537dd0);
+            InRaceMenu_UpdateStateMachineFrame(&g_raceCallbackStorage.machine);
+            InRaceMenu_AdvanceScreenEntries(((BYTE *)&g_raceCallbackStorage.machine));
+            AdvanceCallbackStateTimers(&g_raceCallbackStorage.machine);
             return FALSE;
         }
-        RunStateUpdateCallbacks((CallbackStateMachine *)g_unk0x00537dd0);
-        RunStateRenderCallbacks((CallbackStateMachine *)g_unk0x00537dd0);
-        AdvanceCallbackStateTimers((CallbackStateMachine *)g_unk0x00537dd0);
+        RunStateUpdateCallbacks(&g_raceCallbackStorage.machine);
+        RunStateRenderCallbacks(&g_raceCallbackStorage.machine);
+        AdvanceCallbackStateTimers(&g_raceCallbackStorage.machine);
         return FALSE;
     }
     pState = RallyData_GetChampionshipState();
@@ -1487,7 +1488,7 @@ done:
     RallyData_SetSelectionBits14To15(state);
     g_unk0x00537df0 = level;
     if (state > 0) {
-        pSlot = (CallbackStateRecord *)&g_unk0x00537dd0[0x10];
+        pSlot = g_raceCallbackStorage.records;
         i = state;
         do {
             if (g_unk0x00537ef8 != 0) {
@@ -1500,7 +1501,7 @@ done:
             i--;
         } while (i != 0);
     }
-    InitializeCallbackStateMachine((CallbackStateMachine *)g_unk0x00537dd0, state, (CallbackStateRecord *)&g_unk0x00537dd0[0x10],
+    InitializeCallbackStateMachine(&g_raceCallbackStorage.machine, state, g_raceCallbackStorage.records,
                  g_raceStateCallbacks, g_raceStateRules);
     if (g_unk0x00537ef8 != 0) {
         Car_BuildRaceOrder(2);
@@ -1516,7 +1517,7 @@ done:
 // FUNCTION: CMR2 0x00501680
 void CGame::NoOpSecondaryStateCallback(struct CallbackStateMachine *, BYTE) { return; }
 
-extern int g_unk0x0082b1b0;
+extern SceneNode *g_unk0x0082b1b0;
 
 void FixMatrix_ProjectWorldPointToView(int *pOut, FixVector *pPoint, BYTE *pView);
 
@@ -1664,7 +1665,7 @@ void CGame::ResetSessionPlayerTable(bool param1) {
         dest->playerId = 0;
         dest->active = 0;
         dest++;
-    } while ((int)dest->longName < (int)m_sessionPlayers[7].longName); // 0x5a1e34 in the original
+    } while ((INT_PTR)dest->longName < (INT_PTR)m_sessionPlayers[7].longName); // 0x5a1e34 in the original
 
     m_sessionPlayerCount = 0;
 }
@@ -1913,8 +1914,8 @@ void Game_SetRaceExitFlags(Menu *pMenu, int param)
     Race_SetFlag37F94();
 }
 
-int InRaceMenu_GetUpArrowTexture(void);
-int InRaceMenu_GetDownArrowTexture(void);
+Texture *InRaceMenu_GetUpArrowTexture(void);
+Texture *InRaceMenu_GetDownArrowTexture(void);
 
 // Draws the in-race menu built by 0x475f00: the title, then one row per item
 // with its banner sprite, the item text and the separator line above the list
@@ -1944,22 +1945,22 @@ void Game_DrawInRaceActionMenu(Menu *pMenu)
     rect[1] = 0;
     rect[0] = (short)x;
     if (InRaceMenu_GetUpArrowTexture() != 0) {
-        rect[2] = ((SpriteRect *)(InRaceMenu_GetUpArrowTexture() + 0x11c))->w;
-        rect[3] = ((SpriteRect *)(InRaceMenu_GetUpArrowTexture() + 0x11c))->h;
+        rect[2] = InRaceMenu_GetUpArrowTexture()->width;
+        rect[3] = InRaceMenu_GetUpArrowTexture()->height;
     }
     line[0] = (short)x;
     line[1] = (short)((int)(g_pGraphics->resY * 0xd7) / 0x1e0);
     line[2] = (short)((int)(g_pGraphics->resX * 0xa2) / 0x280);
     line[3] = 1;
     if (cursor == 0)
-        Sprite_FillRect((int)g_pGraphics + 0x150, line, colourWhite, 1);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, line, colourWhite, 1);
     else
-        Sprite_FillRect((int)g_pGraphics + 0x150, line, colourDim, 1);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, line, colourDim, 1);
     pItem = pMenu->items;
     for (i = 0; i < 2; i++, pItem++) {
         if (InRaceMenu_GetUpArrowTexture() != 0)
             rect[1] = (short)(line[1] + (int)(g_pGraphics->resY * 0xe) / 0x1e0 -
-                              ((SpriteRect *)(InRaceMenu_GetUpArrowTexture() + 0x11c))->h / 2);
+                              InRaceMenu_GetUpArrowTexture()->height / 2);
         sprintf(CFrontend::m_stringDest, CRegKey::m_regKeyPathFormatValue,
                 CFrontend::GetTextString(pItem->id));
         if (i == cursor) {
@@ -1968,23 +1969,23 @@ void Game_DrawInRaceActionMenu(Menu *pMenu)
                               (int)(g_pGraphics->resX * 0x14) / 0x280,
                           line[1] + (int)(g_pGraphics->resY * 0x12) / 0x1e0, (int *)colourWhite, 0x11);
             if (InRaceMenu_GetDownArrowTexture() != 0)
-                Sprite_Queue((SpriteRect *)(InRaceMenu_GetDownArrowTexture() + 0x11c), (SpriteRect *)rect,
-                             (Texture *)InRaceMenu_GetDownArrowTexture(), 1, 0, NULL, NULL, colourWhite, 8);
+                Sprite_Queue((SpriteRect *)&InRaceMenu_GetDownArrowTexture()->field_0x11c, (SpriteRect *)rect,
+                             InRaceMenu_GetDownArrowTexture(), 1, 0, NULL, NULL, colourWhite, 8);
         } else {
             Font_DrawText(0, CFrontend::m_stringDest,
                           (int)(g_pGraphics->resX * 0xf0) / 0x280 +
                               (int)(g_pGraphics->resX * 0x14) / 0x280,
                           line[1] + (int)(g_pGraphics->resY * 0x12) / 0x1e0, (int *)colourText, 0x11);
             if (InRaceMenu_GetDownArrowTexture() != 0)
-                Sprite_Queue((SpriteRect *)(InRaceMenu_GetDownArrowTexture() + 0x11c), (SpriteRect *)rect,
-                             (Texture *)InRaceMenu_GetDownArrowTexture(), 1, 0, NULL, NULL, colourText, 8);
+                Sprite_Queue((SpriteRect *)&InRaceMenu_GetDownArrowTexture()->field_0x11c, (SpriteRect *)rect,
+                             InRaceMenu_GetDownArrowTexture(), 1, 0, NULL, NULL, colourText, 8);
         }
         line[1] = (short)((int)(g_pGraphics->resY * 0x18) / 0x1e0 * (i + 1) +
                           (int)(g_pGraphics->resY * 0xd7) / 0x1e0);
         if (i == cursor || i + 1 == cursor)
-            Sprite_FillRect((int)g_pGraphics + 0x150, line, colourWhite, 1);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, line, colourWhite, 1);
         else
-            Sprite_FillRect((int)g_pGraphics + 0x150, line, colourDim, 1);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, line, colourDim, 1);
     }
 }
 
@@ -2090,7 +2091,7 @@ void Game_DrawMeshTextureRuns(Mesh *pMesh)
             }
             prev = texture;
             count = 0;
-            CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[texture]);
+            CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[texture]);
         }
         g_unk0x0059be74[count++] = pTri->vertexIndex[0];
         g_unk0x0059be74[count++] = pTri->vertexIndex[1];
@@ -2105,7 +2106,7 @@ void Game_DrawMeshTextureRuns(Mesh *pMesh)
         pTri++;
     }
     if (count != 0) {
-        CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[
+        CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[
             *(int *)((BYTE *)&pMesh->pTriangles[total - 1] + 4 +
                      pMesh->pTriangles[total - 1].field_0x2c * 4)]);
         Gfx_DrawIndexedPrimitiveVB(GFX_TRIANGLELIST, CGraphics::m_pTextureManager->pVertexBuffers[pMesh->vertexBufferIndex], pMesh->vertexOffset, pMesh->field_0x10, g_unk0x0059be74, count);
@@ -2207,8 +2208,7 @@ CMR2_LAYOUT_CHECK(StageObjectDraw_size, sizeof(StageObjectDraw) == 0xa0);
 // (defined in Graphics.cpp).
 extern int g_unk0x005207b4;
 
-struct Unk0x004a3e20;
-void Frontend_SetObjectField118(Unk0x004a3e20 *pObject, int value);
+void Frontend_SetObjectField118(struct Texture *pTexture, int value);
 
 // Draws the objects the deferred pass of the static stage objects queued:
 // sorts them by view depth (farthest first) and, for each one, binds its
@@ -2223,8 +2223,8 @@ void Game_DrawDeferredObjects(void)
         if (g_unk0x005207b4 != 0)
             qsort(CGame::m_unk0x00593cb0, CGame::m_unk0x0059ce28, 4, Game_CompareDeferredDrawDepth);
         for (i = 0; i < (unsigned int)CGame::m_unk0x0059ce28; i++) {
-            Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[
-                ((int *)((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->pMesh->pTriangles)[1]], 0);
+            Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[
+                ((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->pMesh->pTriangles->textureIndex], 0);
             Gfx_SetTransform(GFX_TRANSFORM_WORLD, (GfxMatrix *)((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->matrix);
             if (*(int *)((BYTE *)((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->pMesh + 0x114) < 0xc80000)
                 ((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->pMesh->flags |= 8;
@@ -2517,11 +2517,11 @@ void Tri2D_DrawLayer(int layer);
 void Line2D_Draw(void);
 void Quad2D_DrawLayer(unsigned int layer);
 void Billboard_Draw(SceneNode *pCamera);
-void Particle_DrawAll(int param, BYTE view);
+void Particle_DrawAll(SceneNode *pCamera, BYTE view);
 void Scene_DrawShadowBatches(unsigned int view);
 void Scene_RelightSector(int sector);
 BYTE Flare_SampleVisibility(short *pRect, BYTE *pColour, BYTE tolerance);
-void Sector_CullGridAroundViewNode(SceneNode *pNode, int unused);
+void Sector_CullGridAroundViewNode(SceneNode *pNode, void *pRect);
 void Graphics_UpdateFrameStatistics(void);
 int Graphics_GetFlareStateValue(void);
 void Graphics_SwitchAlphaBlendAndTest(int enable);
@@ -2542,7 +2542,7 @@ GfxMatrix *FixMatrix_ToFloat(GfxMatrix *pOut, FixMatrix *pIn);
 // scratch slots), plus the 0.0f store which the original materialises as an
 // immediate.
 // FUNCTION: CMR2 0x0049d3f0
-int Game_DrawSceneViewport(int param1, int param2, void *param3, int bit, BYTE flag)
+int Game_DrawSceneViewport(SceneNode *pRoot, SceneNode *pCamera, void *pRect, int bit, BYTE flag)
 {
     GfxViewport viewport;
     FixVector cameraPosition;
@@ -2551,17 +2551,17 @@ int Game_DrawSceneViewport(int param1, int param2, void *param3, int bit, BYTE f
     unsigned int i;
     unsigned short *pIndex;
 
-    g_unk0x0059be6c = (SceneNode *)param2;
+    g_unk0x0059be6c = pCamera;
     CGame::m_unk0x0059ce18 = 0;
     CGame::m_unk0x0059ce1c = 0;
     CGame::m_unk0x0059ce20 = 0;
     // PORT: the renderer has no lost device to fail BeginScene.
     Gfx_BeginScene();
     memset(&viewport, 0, sizeof(viewport));
-    viewport.x = ((short *)param3)[0];
-    viewport.y = ((short *)param3)[1];
-    viewport.width = ((short *)param3)[2];
-    viewport.height = ((short *)param3)[3];
+    viewport.x = ((short *)pRect)[0];
+    viewport.y = ((short *)pRect)[1];
+    viewport.width = ((short *)pRect)[2];
+    viewport.height = ((short *)pRect)[3];
     viewport.minZ = 0.0f;
     viewport.maxZ = 1.0f;
     Gfx_SetViewport(&viewport);
@@ -2574,13 +2574,13 @@ int Game_DrawSceneViewport(int param1, int param2, void *param3, int bit, BYTE f
     if (flag != 0) {
         if (CGraphics::m_unk0x0072d56c != 0) {
             Gfx_SetTransform(GFX_TRANSFORM_WORLD, &g_unk0x005207b8);
-            Sector_CullGridAroundViewNode((SceneNode *)param2, (int)param3);
+            Sector_CullGridAroundViewNode(pCamera, pRect);
             for (i = 0; i < (unsigned int)g_sectorCullEnabled; i++)
                 Scene_RelightSector(((unsigned short *)g_unk0x006ed5f0)[i]);
         }
         CGraphics::SetCullMode(CGame::GetSectorDrawState());
-        FixMatrix_GetPosition(&cameraPosition, &((SceneNode *)param2)->world);
-        Particle_DrawAll(param2, (BYTE)bit);
+        FixMatrix_GetPosition(&cameraPosition, &pCamera->world);
+        Particle_DrawAll(pCamera, (BYTE)bit);
         forward.x = g_unk0x0059be6c->world.forward.x;
         forward.y = 0;
         forward.z = g_unk0x0059be6c->world.forward.z;
@@ -2616,7 +2616,7 @@ int Game_DrawSceneViewport(int param1, int param2, void *param3, int bit, BYTE f
             Graphics_SetLightingMode(5);
             Game_DrawCulledSectorShadows();
             Graphics_SwitchAlphaBlendAndTest(1);
-            Glow_Draw((SceneNode *)param2, (BYTE)bit);
+            Glow_Draw(pCamera, (BYTE)bit);
             Quad2D_DrawLayer(8);
             Graphics_SetLightingMode(4);
             Quad2D_DrawLayer(0x20);
@@ -2631,7 +2631,7 @@ int Game_DrawSceneViewport(int param1, int param2, void *param3, int bit, BYTE f
                 Graphics_SetLightingMode(5);
                 Quad2D_DrawLayer(0x10);
                 Line2D_Draw();
-                Billboard_Draw((SceneNode *)param2);
+                Billboard_Draw(pCamera);
                 Graphics_SetLightingMode(1);
                 Game_QueueVisibleSectorNodes(bit);
                 Game_DrawSortedNodes(bit);
@@ -2654,7 +2654,7 @@ int Game_DrawSceneViewport(int param1, int param2, void *param3, int bit, BYTE f
         Quad2D_DrawLayer(0x40);
         Graphics_SetLightingMode(5);
         Line2D_Draw();
-        Billboard_Draw((SceneNode *)param2);
+        Billboard_Draw(pCamera);
         Scene_DrawShadowBatches(bit);
     }
     Flare_SampleVisibility(NULL, NULL, 0);
@@ -2761,7 +2761,7 @@ struct Unk004238e0 {
 };
 
 void StageObject_ResetContactEffectAndSetLevel(BYTE *p, BYTE *q);
-void StageObject_SetContactLevelToUnity(BYTE *p, int unused);
+void StageObject_SetContactLevelToUnity(BYTE *p, void *unused);
 void Game_SetObjectRenderModeOne(void *param1);
 void StageObject_ResetRightAngleContactEffect(BYTE *pCar, BYTE *pInfo);
 
@@ -2775,7 +2775,7 @@ void Game_DispatchObjectContactReset(BYTE *pObject, BYTE *pInfo)
         Game_SetObjectRenderModeOne(pObject);
         return;
     case 2:
-        StageObject_SetContactLevelToUnity(pObject, (int)pInfo);
+        StageObject_SetContactLevelToUnity(pObject, pInfo);
         return;
     case 1:
     case 10:
@@ -2816,7 +2816,7 @@ void Game_DispatchObjectTypeUpdate(BYTE *pObject, BYTE *pInfo)
 }
 
 // FUNCTION: CMR2 0x004238e0
-void Game_UpdateType3ObjectState(Unk004238e0 *param1, int param2)
+void Game_UpdateType3ObjectState(Unk004238e0 *param1, void *param2)
 {
     if (param1->field_0x4 == 3)
         Game_SetObjectRenderModeZero(param1);
@@ -3139,22 +3139,23 @@ bool Network_EnumerateServiceProviders(void)
     return Net_EnumProviders(Network_EnumerateConnectionCallback, NULL) == NET_OK;
 }
 
+
 // Sets the local player data (guaranteed).
 // FUNCTION: CMR2 0x004a1cb0
-char Network_SetLocalPlayerData(int data, int size)
+char Network_SetLocalPlayerData(void *data, int size)
 {
     if (CGame::GetDirectPlay() != NULL)
-        return Net_SetPlayerData(CGame::m_localPlayerId, (const void *)(intptr_t)data, size) == NET_OK;
+        return Net_SetPlayerData(CGame::m_localPlayerId, data, size) == NET_OK;
     return 0;
 }
 
 // Sends a message to a player (0 = all), guaranteed when requested.
 // match 82%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x004a1c50
-char Network_SendPlayerMessage(int to, int guaranteed, int data, int size)
+char Network_SendPlayerMessage(int to, int guaranteed, void *data, int size)
 {
     if (CGame::GetDirectPlay() != NULL)
-        return Net_Send(CGame::m_localPlayerId, to, guaranteed == 1, (const void *)(intptr_t)data, size) == NET_OK;
+        return Net_Send(CGame::m_localPlayerId, to, guaranteed == 1, data, size) == NET_OK;
     return 0;
 }
 
@@ -3162,15 +3163,15 @@ char Network_SendPlayerMessage(int to, int guaranteed, int data, int size)
 // GLOBAL: CMR2 0x005a1fa8
 NetName g_networkPlayerName;
 // FUNCTION: CMR2 0x004a1a10
-int Network_CreateLocalPlayer(int param1, int param2, int param3, int param4)
+int Network_CreateLocalPlayer(char *param1, char *param2, void *param3, int param4)
 {
     memset(&g_networkPlayerName, 0, sizeof(g_networkPlayerName));
     g_networkPlayerName.dwSize = sizeof(g_networkPlayerName);
-    g_networkPlayerName.lpszShortNameA = (char *)(intptr_t)param1;
-    g_networkPlayerName.lpszLongNameA = (char *)(intptr_t)param2;
+    g_networkPlayerName.lpszShortNameA = param1;
+    g_networkPlayerName.lpszLongNameA = param2;
     if (CGame::GetDirectPlay() == NULL)
         return 0;
-    if (Net_CreatePlayer(&CGame::m_localPlayerId, &g_networkPlayerName, (const void *)(intptr_t)param3, param4) != NET_OK)
+    if (Net_CreatePlayer(&CGame::m_localPlayerId, &g_networkPlayerName, param3, param4) != NET_OK)
         return 0;
     CGame::m_unk0x005a1fc0 = 1;
     return 1;
@@ -3234,7 +3235,7 @@ bool Network_AddSessionPlayerSlot(BYTE param1)
 
 // Enumera las sesiones o vuelca el buffer recibido en *param2.
 // FUNCTION: CMR2 0x004a1b90
-int Network_PollReceivedMessageBuffer(int param1, void **param2)
+int Network_PollReceivedMessageBuffer(DWORD *param1, void **param2)
 {
     DWORD bufferSize = CGame::m_unk0x005a1fbc;
     NetPlayerID receiver;
@@ -3242,7 +3243,7 @@ int Network_PollReceivedMessageBuffer(int param1, void **param2)
 
     if (CGame::GetDirectPlay() == NULL)
         return 0;
-    hr = Net_Receive((NetPlayerID *)(intptr_t)param1, &receiver, CGame::m_unk0x005a1fb8, &bufferSize);
+    hr = Net_Receive(param1, &receiver, CGame::m_unk0x005a1fb8, &bufferSize);
     if (hr == NET_ERR_BUFFERTOOSMALL) {
         // The original grows the buffer and returns: the message comes with
         // the next poll.
@@ -3369,7 +3370,7 @@ void Scene_SetViewFromCamera(SceneNode *pCamera);
 
 // Updates a scene tree for drawing from a camera.
 // FUNCTION: CMR2 0x0049ce10
-int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, int unused, int param)
+int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, void *pRect, int param)
 {
     SceneNode_UpdateTree(pRoot, param);
     SceneNode_FlushTransforms(pRoot);

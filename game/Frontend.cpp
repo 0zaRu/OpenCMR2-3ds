@@ -351,7 +351,7 @@ void CFrontend::LoadFrontendCarPreviewTextures(void) {
         sprintf(CFrontend::m_stringDest, CFrontend::m_strFrontendTexturesCarsLivery, CInstallInfo::GetGameCDPath(), liveryIndex);
         *pTexture = CTexture::FindLoadTexture(CGenericFileLoader::GetGenericFile(), CFrontend::m_stringDest, 0, 0, 0, 0);
         pTexture++;
-    } while ((int)pTexture < (int)(m_unk0x00818530 + 3)); // 0x81853c in the original
+    } while ((INT_PTR)pTexture < (INT_PTR)(m_unk0x00818530 + 3)); // 0x81853c in the original
 }
 
 // Returns the common frontend archive (Common.bfl).
@@ -635,16 +635,16 @@ void Frontend_DrawRectangleOutline(short *pRect, BYTE *pColour)
     rect[1] = pRect[1] + 1;
     rect[2] = 1;
     rect[3] = pRect[3] - 2;
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, pColour, 4);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, pColour, 4);
     rect[0] = pRect[2] + pRect[0] - 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, pColour, 4);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, pColour, 4);
     rect[0] = pRect[0];
     rect[1] = pRect[1];
     rect[2] = pRect[2];
     rect[3] = 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, pColour, 4);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, pColour, 4);
     rect[1] = pRect[1] + pRect[3] - 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, pColour, 4);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, pColour, 4);
 }
 
 // Draws the animated frontend background: an 18x12 grid of the large matrix
@@ -1004,16 +1004,11 @@ int CFrontend::GetArchiveSecondaryIDEntry(int index)
     return g_unk0x00516b40.ids[index + 22];
 }
 
-struct Unk0x004a3e20 {
-    BYTE field_0x0[0x118];
-    int field_0x118;
-};
-
 // FUNCTION: CMR2 0x004a3e20
-void Frontend_SetObjectField118(Unk0x004a3e20 *pObject, int value)
+void Frontend_SetObjectField118(Texture *pTexture, int value)
 {
-    if (pObject != NULL)
-        pObject->field_0x118 = value;
+    if (pTexture != NULL)
+        pTexture->blendMode = value;
 }
 
 // ---------------------------------------------------------------------------
@@ -1693,7 +1688,7 @@ void Frontend_LoadSplitTimeMirror(void)
             }
             pDest++;
             i++;
-        } while ((int)pDest < (int)&g_unk0x00817448[10]);
+        } while ((INT_PTR)pDest < (INT_PTR)&g_unk0x00817448[10]);
         RallyData_GetFlag24();
         g_unk0x00817570 = 360000;
         return;

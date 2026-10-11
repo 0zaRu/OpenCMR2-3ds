@@ -35,7 +35,7 @@ char g_strCouldNotOpenMusicFile[28] = "Could not open music file";
 
 BOOL Sound_CreateMusicStreamingBuffer(void);
 BOOL Sound_OpenADPCMDecoder(void);
-void Sound_NoOpMusicCallback(int unused);
+void Sound_NoOpMusicCallback(INT_PTR unused);
 HRESULT Sound_StartLoopingMusicStream(int param1);
 
 // Opens a music file (.wav with Microsoft ADPCM data) and prepares it for
@@ -62,7 +62,7 @@ void CSound::OpenStreamingMusicFile(char *path) {
 
     m_pMMIO = new MMIOData();
     if (m_pMMIO->Open(path) != 0) {
-        Sound_NoOpMusicCallback((int)g_strCouldNotOpenMusicFile);
+        Sound_NoOpMusicCallback((INT_PTR)g_strCouldNotOpenMusicFile);
     } else {
         m_unk0x005a2728 = TRUE;
         if (IsSoundCallSuccessful(Sound_CreateMusicStreamingBuffer()) != 0) {
@@ -74,10 +74,10 @@ void CSound::OpenStreamingMusicFile(char *path) {
                 m_unk0x005a2734 = TRUE;
                 strcpy(m_unk0x005a2738, path);
             } else {
-                Sound_NoOpMusicCallback((int)g_strCouldNotOpenAdpcm);
+                Sound_NoOpMusicCallback((INT_PTR)g_strCouldNotOpenAdpcm);
             }
         } else {
-            Sound_NoOpMusicCallback((int)g_strCouldNotCreateStreamingBuffer);
+            Sound_NoOpMusicCallback((INT_PTR)g_strCouldNotCreateStreamingBuffer);
         }
     }
     if (m_unk0x005a2730 == FALSE)
@@ -590,7 +590,7 @@ char g_strCouldNotFillMusicBuffer[28] = "Could not fill music buffer";
 // GLOBAL: CMR2 0x00520ae0
 char g_strCouldNotRestoreMusicBuffer[32] = "Could not restore music buffer";
 
-void Sound_NoOpMusicCallback(int unused);
+void Sound_NoOpMusicCallback(INT_PTR unused);
 
 // Starts playing the opened music from the beginning, looping.
 // FUNCTION: CMR2 0x004a2bd0
@@ -604,9 +604,9 @@ HRESULT Sound_StartLoopingMusicStream(int param1)
         if (CSound::m_pDirectSoundBuffer == NULL)
             return -1;
         if (CSound::IsSoundCallSuccessful(Sound_RestoreLostMusicBuffer(param1)) == 0)
-            Sound_NoOpMusicCallback((int)g_strCouldNotRestoreMusicBuffer);
+            Sound_NoOpMusicCallback((INT_PTR)g_strCouldNotRestoreMusicBuffer);
         if (CSound::IsSoundCallSuccessful(Sound_RewindAndFillMusicBuffer(param1)) == 0)
-            Sound_NoOpMusicCallback((int)g_strCouldNotFillMusicBuffer);
+            Sound_NoOpMusicCallback((INT_PTR)g_strCouldNotFillMusicBuffer);
         Audio_Play(CSound::m_pDirectSoundBuffer, TRUE);
     }
     return 0;
@@ -1118,7 +1118,7 @@ void Sound_FreeAll(void)
             *pp = NULL;
         }
         pp++;
-    } while ((int)pp < (int)(CSound::m_soundSlots + 32));
+    } while ((INT_PTR)pp < (INT_PTR)(CSound::m_soundSlots + 32));
 }
 
 // FUNCTION: CMR2 0x004b7940
@@ -1158,7 +1158,7 @@ int Sound_FindFreeSlot(void)
     int i;
     SoundSlot **pp;
 
-    for (i = 0, pp = CSound::m_soundSlots; (int)pp < (int)(CSound::m_soundSlots + 32); pp++, i++) {
+    for (i = 0, pp = CSound::m_soundSlots; (INT_PTR)pp < (INT_PTR)(CSound::m_soundSlots + 32); pp++, i++) {
         if (*pp == NULL)
             return i;
     }
@@ -1194,7 +1194,7 @@ void Sound_ClearMusicPauseFlag(void)
 }
 
 // FUNCTION: CMR2 0x004a3240
-void Sound_NoOpMusicCallback(int unused)
+void Sound_NoOpMusicCallback(INT_PTR unused)
 {
 }
 
@@ -1212,7 +1212,7 @@ void Sound_SetMasterVolume(int volume)
         if (*ppSlot != NULL)
             Sound_ApplySlotVolumeAttenuation(*ppSlot);
         ppSlot++;
-    } while ((int)ppSlot < (int)(CSound::m_soundSlots + 32));
+    } while ((INT_PTR)ppSlot < (INT_PTR)(CSound::m_soundSlots + 32));
 }
 
 // Releases the (3D) buffers of a sample.

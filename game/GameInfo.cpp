@@ -1,5 +1,13 @@
 #include "port/movie.h"
 #include "port/sys.h"
+// The original sums the two packed DWORDs, including both high shorts.
+inline int OptionMenu_AddPackedScreenRectangleWords(int *pWords)
+{
+    int value = pWords[1];
+    value += pWords[0];
+    return value;
+}
+
 #include "GameInfo.h"
 #include "Menu.h"
 #include "Graphics.h"
@@ -886,7 +894,7 @@ void CGameInfo::ApplyStageOptionUnlockFlags(void) {
     bool bVar6 = false;
 
     do {
-        if (((int)piVar4 < (int)(m_gameInfo.field_0x38f8 + 44)) && (*piVar4 & 2) != 0) {
+        if (((INT_PTR)piVar4 < (INT_PTR)(m_gameInfo.field_0x38f8 + 44)) && (*piVar4 & 2) != 0) {
             *piVar4 = *piVar4 & 0xfd;
         }
 
@@ -1087,13 +1095,13 @@ void NetworkChat_ClearLog(void)
         p += 256;
         pp++;
     // 0x817c84 in the original (g_unk0x00817c84, the next global).
-    } while ((int)p < (int)g_unk0x00817784[5]);
+    } while ((INT_PTR)p < (INT_PTR)g_unk0x00817784[5]);
     g_unk0x00817780 = -1;
 }
 
 int Network_FindSessionPlayerIndex(NetPlayerID *pId, char *pIndex);
 SessionPlayerRecord *Network_GetActiveSessionPlayerRecord(BYTE index);
-char Network_SendPlayerMessage(int to, int guaranteed, int data, int size);
+char Network_SendPlayerMessage(int to, int guaranteed, void *data, int size);
 
 // GLOBAL: CMR2 0x00523bbc
 char g_chatLineFormat[] = "%s > %s";
@@ -1135,7 +1143,7 @@ void NetworkChat_SendLine(char *text)
 
     message[0] = 0;
     strcpy(message + 1, text);
-    Network_SendPlayerMessage(0, 0, (int)message, 0x101);
+    Network_SendPlayerMessage(0, 0, message, 0x101);
     NetworkChat_AppendLine(NULL, text, 1);
 }
 
@@ -1303,13 +1311,13 @@ int g_unk0x0082af78[4];
 // GLOBAL: CMR2 0x0082af90
 int g_unk0x0082af90[4];
 // GLOBAL: CMR2 0x0082b1b4
-int g_unk0x0082b1b4;
+SceneNode *g_unk0x0082b1b4;
 // GLOBAL: CMR2 0x0082b1bc
 int g_unk0x0082b1bc;
 // GLOBAL: CMR2 0x0082b488
-BYTE g_unk0x0082b488[0x1e0];
+Menu g_unk0x0082b488;
 // GLOBAL: CMR2 0x0082ba28
-BYTE g_unk0x0082ba28[0x1e0];
+Menu g_unk0x0082ba28;
 // GLOBAL: CMR2 0x0082bee8
 BYTE g_unk0x0082bee8[8][7];
 // GLOBAL: CMR2 0x0082bf20
@@ -1569,17 +1577,17 @@ void OptionMenu_HandleNetworkNotification(NetPlayerID *pId, BYTE *pData)
     }
 }
 
-int Network_PollReceivedMessageBuffer(int param1, void **param2);
+int Network_PollReceivedMessageBuffer(DWORD *param1, void **param2);
 
 // Drains the pending network messages: those coming from the system id (0) go to
 // the player-list handler, the rest to the option notification handler.
 // FUNCTION: CMR2 0x00500ba0
 void GameInfo_ProcessNetworkMessages(void)
 {
-    int senderId;
+    DWORD senderId;
     void *pMessage;
 
-    while (Network_PollReceivedMessageBuffer((int)&senderId, &pMessage) != 0) {
+    while (Network_PollReceivedMessageBuffer(&senderId, &pMessage) != 0) {
         if (senderId == 0)
             OptionMenu_HandleItemNotification((int)&senderId, (int *)pMessage);
         else
@@ -1631,9 +1639,9 @@ void OptionMenu_EnterCountryState(CallbackStateMachine *p1, BYTE p2)
         if (i == CGameInfo::GetActiveOptionSlot()) {
             OptionPreview_SetWheelNodesVisible(i, 1);
             OptionPreview_SetTargetModelAngles(i, &g_previewPartRotationPresets[OptionMenu_GetColumnWeight(
-                             OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14])], 0);
+                             OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max)], 0);
             OptionMenu_SetTargetLayoutPairs(i, &g_previewProjectedPartQuads[OptionMenu_GetColumnWeight(
-                             OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14])].points[0].x, 1);
+                             OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max)].points[0].x, 1);
         } else {
             OptionPreview_SetWheelNodesVisible(i, 0);
         }
@@ -1673,7 +1681,7 @@ void OptionMenu_SetSlotSelector(int index, int value)
 }
 
 // FUNCTION: CMR2 0x00501510
-int OptionMenu_GetBackgroundRoot(void)
+SceneNode *OptionMenu_GetBackgroundRoot(void)
 {
     return g_unk0x0082b1b4;
 }
@@ -1765,15 +1773,15 @@ void OptionMenu_FinishRecordTransitions(void)
 }
 
 // FUNCTION: CMR2 0x00502210
-BYTE *OptionMenu_GetStatusMenu(void)
+Menu *OptionMenu_GetStatusMenu(void)
 {
-    return g_unk0x0082ba28;
+    return &g_unk0x0082ba28;
 }
 
 // FUNCTION: CMR2 0x00502220
-BYTE *OptionMenu_GetAdvancedOptionsMenu(void)
+Menu *OptionMenu_GetAdvancedOptionsMenu(void)
 {
-    return g_unk0x0082b488;
+    return &g_unk0x0082b488;
 }
 
 // FUNCTION: CMR2 0x00502990
@@ -2180,7 +2188,7 @@ void OptionPreview_ProjectReferencePartQuads(int param1)
             pOut++;
         }
         pAngles++;
-    } while ((int)pAngles < (int)(g_previewPartRotationPresets + 12)); // 0x527420 in the original
+    } while ((INT_PTR)pAngles < (INT_PTR)(g_previewPartRotationPresets + 12)); // 0x527420 in the original
 }
 
 // FUNCTION: CMR2 0x0050f1c0
@@ -2953,7 +2961,7 @@ void FrontendText_ReloadFonts(void)
         Font_Reload(pName, CGenericFileLoader::GetGenericFile(), i);
         pName += 20;
         i++;
-    } while ((int)pName < (int)g_frontendFontNames[4]);
+    } while ((INT_PTR)pName < (INT_PTR)g_frontendFontNames[4]);
 }
 
 // FUNCTION: CMR2 0x004f48b0
@@ -3644,21 +3652,21 @@ void FixInterp_StartToZero(FixInterp *p)
 }
 
 // GLOBAL: CMR2 0x0082b668
-BYTE g_unk0x0082b668[sizeof(Menu)];
+Menu g_unk0x0082b668;
 
 // FUNCTION: CMR2 0x00502500
-BYTE *OptionMenu_GetControlSetupMenu(void)
+Menu *OptionMenu_GetControlSetupMenu(void)
 {
-    return g_unk0x0082b668;
+    return &g_unk0x0082b668;
 }
 
 // GLOBAL: CMR2 0x0082b848
-BYTE g_unk0x0082b848[sizeof(Menu)];
+Menu g_unk0x0082b848;
 
 // FUNCTION: CMR2 0x00502510
-BYTE *OptionMenu_GetValueSliderMenu(void)
+Menu *OptionMenu_GetValueSliderMenu(void)
 {
-    return g_unk0x0082b848;
+    return &g_unk0x0082b848;
 }
 
 BYTE *RallyData_GetDriverSkillRecord(int index);
@@ -3698,16 +3706,16 @@ void OptionMenu_ResetRecords(void);
 // FUNCTION: CMR2 0x00502520
 void OptionMenu_ResetModeCursor(void)
 {
-    ((Menu *)g_unk0x0082b668)->cursor = 0;
-    ((Menu *)OptionMenu_GetControlSetupMenu())->items[Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1)].max = 0;
-    ((Menu *)OptionMenu_GetControlSetupMenu())->items[Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2)].max = 0;
+    (&g_unk0x0082b668)->cursor = 0;
+    (OptionMenu_GetControlSetupMenu())->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max = 0;
+    (OptionMenu_GetControlSetupMenu())->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max = 0;
     OptionMenu_ResetRecords();
 }
 
 // GLOBAL: CMR2 0x0052aa60
-int g_unk0x0052aa60;
+Texture *g_unk0x0052aa60;
 // GLOBAL: CMR2 0x0052aa68
-int g_unk0x0052aa68;
+Texture *g_unk0x0052aa68;
 // GLOBAL: CMR2 0x0052aa70
 Menu g_menu0x0052aa70;
 // GLOBAL: CMR2 0x0052af41
@@ -3715,9 +3723,9 @@ BYTE g_unk0x0052af41;
 // GLOBAL: CMR2 0x0052af44
 Menu *g_pMenu0x0052af44;
 // GLOBAL: CMR2 0x0052af4c
-int g_unk0x0052af4c;
+Texture *g_unk0x0052af4c;
 // GLOBAL: CMR2 0x0052af50
-int g_unk0x0052af50;
+Texture *g_unk0x0052af50;
 extern BYTE g_unk0x0052af58[2];
 
 // In-race network menus (built by 0x402c40..0x404000).
@@ -3816,13 +3824,13 @@ void InRaceMenu_EnterNetworkOptions(Menu *pMenu, char param)
 // FUNCTION: CMR2 0x00402f70
 void InRaceMenu_ReturnToPauseItem(Menu *pMenu, int param)
 {
-    Menu_SetNextAction((int)&g_menu0x0052ad60);
+    Menu_SetNextAction(&g_menu0x0052ad60);
 }
 
 // FUNCTION: CMR2 0x00402f80
 void InRaceMenu_ReturnToPauseUpdate(Menu *pMenu)
 {
-    Menu_SetNextAction((int)&g_menu0x0052ad60);
+    Menu_SetNextAction(&g_menu0x0052ad60);
 }
 
 void InRaceMenu_ApplyNetworkOptions(Menu *pMenu, int param);
@@ -3850,7 +3858,7 @@ void InRaceMenu_BuildNetworkOptions(void)
     Menu_AddItemType3(&g_menu0x00529ed8, 0, 0x35, 2, 0, 0, 0, 0, 2);
     Menu_AddItemType3(&g_menu0x00529ed8, 0, 0x39, 2, 0, 0, 0, 0, 4);
     Menu_AddItemType2(&g_menu0x00529ed8, 0, 0x3b, &g_menu0x0052ad60,
-                      (int)(MenuCallback)InRaceMenu_ApplyNetworkOptions, -1);
+                      (MenuItemAction)InRaceMenu_ApplyNetworkOptions, -1);
     Menu_SetCallbacks(&g_menu0x00529ed8, (MenuCallback)InRaceMenu_EnterNetworkOptions, NULL,
                       (MenuCallback)InRaceMenu_DrawLabelAndValueRows, NULL);
     Menu_ValidateCursor(&g_menu0x00529ed8, 0);
@@ -3890,7 +3898,7 @@ void InRaceMenu_BuildCameraOffsetOptions(void)
     Menu_AddItemType3(&g_menu0x0052a870, 0, 0x5f, 0x15, 10, 0, 0, 0, 1);
     Menu_AddItemType3(&g_menu0x0052a870, 0, 0x60, 0x15, 10, 0, 0, 0, 2);
     Menu_AddItemType3(&g_menu0x0052a870, 0, 0x61, 0x15, 10, 0, 0, 0, 3);
-    Menu_AddItemType4(&g_menu0x0052a870, 0, 0x62, (int)InRaceMenu_ResetCameraDefaults, 4);
+    Menu_AddItemType4(&g_menu0x0052a870, 0, 0x62, (MenuItemAction)InRaceMenu_ResetCameraDefaults, 4);
     Menu_AddItemType2(&g_menu0x0052a870, 0, 0x3b, &g_menu0x00529ed8, 0, 5);
     Menu_SetCallbacks(&g_menu0x0052a870, (MenuCallback)InRaceMenu_EnterCameraOffsetOptions,
                       (MenuCallback)InRaceMenu_UpdateCameraOffsets, (MenuCallback)InRaceMenu_DrawSliderRows,
@@ -4005,18 +4013,18 @@ BYTE g_unk0x00536ac8;
 // entry) or runs the fade-in sequence of the next group, then forwards the
 // event to the stage-list object.
 // FUNCTION: CMR2 0x00401000
-void GameInfo_EnterStageGroup(BYTE *param1, int param2)
+void GameInfo_EnterStageGroup(CallbackStateMachine *param1, int param2)
 {
     int i;
 
     if ((char)param2 == 0) {
         if ((BYTE)Race_LoadSelectedStage() == 0) {
             i = 0;
-            if (*param1 > 0) {
+            if (param1->count > 0) {
                 do {
-                    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, i, 1, 3);
+                    CGame::PromoteCallbackEntryByRule(param1, i, 1, 3);
                     i++;
-                } while (i < (int)*param1);
+                } while (i < (int)param1->count);
             }
             CGame::SetFrontendResourceMode(0);
             Race_ReleaseFrameResources();
@@ -4031,13 +4039,13 @@ void GameInfo_EnterStageGroup(BYTE *param1, int param2)
         CGame::RegisterCallback((void *)RallyData_FreeChallengeSceneObjects, 0);
         RallyData_DrawLoadingProgress(0x55, 1, 0xff);
     }
-    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 0, 2);
+    CGame::PromoteCallbackEntryByRule(param1, param2, 0, 2);
 }
 
 // Leaves a stage group: tears the stage list down or runs the fade-out
 // sequence, then forwards the event to the stage-list object.
 // FUNCTION: CMR2 0x004010a0
-void GameInfo_LeaveStageGroup(BYTE *param1, int param2)
+void GameInfo_LeaveStageGroup(CallbackStateMachine *param1, int param2)
 {
     int i;
 
@@ -4045,11 +4053,11 @@ void GameInfo_LeaveStageGroup(BYTE *param1, int param2)
         RallyData_RestoreAllCarRaceRecords();
         if ((BYTE)Race_LoadStageGeometry() == 0) {
             i = 0;
-            if (*param1 > 0) {
+            if (param1->count > 0) {
                 do {
-                    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, i, 1, 3);
+                    CGame::PromoteCallbackEntryByRule(param1, i, 1, 3);
                     i++;
-                } while (i < (int)*param1);
+                } while (i < (int)param1->count);
             }
             CGame::SetFrontendResourceMode(0);
             Race_ReleaseFrameResources();
@@ -4064,7 +4072,7 @@ void GameInfo_LeaveStageGroup(BYTE *param1, int param2)
     }
     g_unk0x005297f0 = 1;
     g_unk0x00536ac8 = 1;
-    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 0, 2);
+    CGame::PromoteCallbackEntryByRule(param1, param2, 0, 2);
 }
 
 void NetPlayers_SendCarClass(BYTE);
@@ -4090,7 +4098,7 @@ int g_unk0x005298f4;
 // Advances the in-race menu cascade one step: refreshes the per-player window
 // entries and moves to the next state when the race is over.
 // FUNCTION: CMR2 0x00401150
-void InRaceMenu_AdvanceCascade(int param1, int param2)
+void InRaceMenu_AdvanceCascade(CallbackStateMachine *param1, int param2)
 {
     int i;
 
@@ -4108,7 +4116,7 @@ void InRaceMenu_AdvanceCascade(int param1, int param2)
             StageTiming_RestoreDeviceStageResources();
             g_unk0x005298f4 = 1;
             g_unk0x005297f0 = 0;
-            if (**(char **)(StageUI_GetRaceResultTable() + 4) != '\r')
+            if ((char)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[0].packedState != '\r')
                 ForceFeedback_ActivateIdleSlots();
         }
         i = 0;
@@ -4125,25 +4133,25 @@ void InRaceMenu_AdvanceCascade(int param1, int param2)
             } while (i < (BYTE)RallyDataState());
         }
         g_unk0x005298f4--;
-        Race_UpdatePlayerViewAndDrivenCars(**(BYTE **)(param1 + 4), 0);
+        Race_UpdatePlayerViewAndDrivenCars((BYTE)param1->records[0].packedState, 0);
     }
     if (g_unk0x005298f4 <= 0) {
         if ((BYTE)CGameInfo::GetGameInfoSessionFlag() != 0) {
-            CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 6, 2);
+            CGame::PromoteCallbackEntryByRule(param1, param2, 6, 2);
             return;
         }
         if (CGameInfo::GetConfiguredGameMode() == 4) {
             CGameInfo::SetInputAndGamePaused(1);
-            CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 5, 2);
+            CGame::PromoteCallbackEntryByRule(param1, param2, 5, 2);
             return;
         }
         if ((BYTE)RallyData_IsChampionshipFinalStage() != 0) {
             RallyData_CopyCountryPlayerDefaults();
             RallyData_ClearDriverGroupRecords();
-            CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 1, 2);
+            CGame::PromoteCallbackEntryByRule(param1, param2, 1, 2);
             return;
         }
-        CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, param2, 0, 2);
+        CGame::PromoteCallbackEntryByRule(param1, param2, 0, 2);
     }
 }
 
@@ -4189,7 +4197,7 @@ void InRaceMenu_BuildCarSetup(void)
     }
 void InRaceMenu_ApplyDefaultCarSetup(Menu *pMenu, int param);
 
-    Menu_AddItemType4(&g_menu0x0052aa70, 0, 0x62, (int)InRaceMenu_ApplyDefaultCarSetup, 5);
+    Menu_AddItemType4(&g_menu0x0052aa70, 0, 0x62, (MenuItemAction)InRaceMenu_ApplyDefaultCarSetup, 5);
     Menu_AddItemType2(&g_menu0x0052aa70, 0, 0x3b, &g_menu0x00529ed8, 0, 6);
     Menu_SetCallbacks(&g_menu0x0052aa70, (MenuCallback)InRaceMenu_EnterCarSetup,
                       (MenuCallback)InRaceMenu_EncodeCarSetup, (MenuCallback)InRaceMenu_DrawCarSetupChoices,
@@ -4452,6 +4460,7 @@ void InRaceMenu_UpdateStateMachineFrame(CallbackStateMachine *param1)
     int first;
     int second;
     int result;
+    Menu *pNext;
     int i;
     DeviceInfo *pDev;
 
@@ -4531,9 +4540,9 @@ updateMenus:
     } else {
         if (g_pMenu0x0052af44 != NULL)
             Menu_SetFlags(g_pMenu0x0052af44, 1, 1, 1, 1);
-        result = Menu_Update(g_pMenu0x0052af44, pDev->field_0x8);
-        if (result != 0)
-            g_pMenu0x0052af48 = (Menu *)result;
+        pNext = Menu_Update(g_pMenu0x0052af44, pDev->field_0x8);
+        if (pNext != NULL)
+            g_pMenu0x0052af48 = pNext;
     }
 
     if (CGameInfo::GetGameModeOptionBit19() == 0)
@@ -4642,25 +4651,25 @@ int InRaceMenu_IsPlayerEditingCarSetup(unsigned int param1)
 }
 
 // FUNCTION: CMR2 0x004055e0
-int InRaceMenu_GetUpArrowTexture(void)
+Texture *InRaceMenu_GetUpArrowTexture(void)
 {
     return g_unk0x0052aa60;
 }
 
 // FUNCTION: CMR2 0x004055f0
-int InRaceMenu_GetDownArrowTexture(void)
+Texture *InRaceMenu_GetDownArrowTexture(void)
 {
     return g_unk0x0052aa68;
 }
 
 // FUNCTION: CMR2 0x00405600
-int InRaceMenu_GetRoundBoxTexture(void)
+Texture *InRaceMenu_GetRoundBoxTexture(void)
 {
     return g_unk0x0052af4c;
 }
 
 // FUNCTION: CMR2 0x00405610
-int InRaceMenu_GetCurtainTexture(void)
+Texture *InRaceMenu_GetCurtainTexture(void)
 {
     return g_unk0x0052af50;
 }
@@ -4715,22 +4724,22 @@ void DrawRectOutline(short *pRect, BYTE *pColour)
     edge[1] = pRect[1];
     edge[2] = pRect[2];
     edge[3] = 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, edge, pColour, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, edge, pColour, 2);
     edge[0] = pRect[2] + pRect[0];
     edge[1] = pRect[1];
     edge[2] = 1;
     edge[3] = pRect[3] + 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, edge, pColour, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, edge, pColour, 2);
     edge[0] = pRect[0];
     edge[1] = pRect[3] + pRect[1];
     edge[2] = pRect[2];
     edge[3] = 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, edge, pColour, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, edge, pColour, 2);
     edge[0] = pRect[0];
     edge[1] = pRect[1];
     edge[2] = 1;
     edge[3] = pRect[3];
-    Sprite_FillRect((int)g_pGraphics + 0x150, edge, pColour, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, edge, pColour, 2);
 }
 
 void View_SetShake(int view, int start);
@@ -4800,9 +4809,9 @@ void InRaceMenu_DrawHeaderBar(void)
     rect[2] = 1;
     rect[1] = (short)((int)(g_pGraphics->resY * 0x25) / 0x1e0);
     rect[3] = (short)((int)(g_pGraphics->resY * 0x2d) / 0x1e0);
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, (BYTE *)&g_unk0x00516074, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, (BYTE *)&g_unk0x00516074, 2);
     rect[0] = rect[0] + 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, (BYTE *)&g_unk0x00516084, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, (BYTE *)&g_unk0x00516084, 2);
     Font_DrawText(2, CFrontend::GetTextString(0x18), y + (int)(g_pGraphics->resY * 10) / 0x1e0,
                   (int)(g_pGraphics->resY * 0x45) / 0x1e0, &g_unk0x00516074, 0x11);
 }
@@ -4816,19 +4825,19 @@ void InRaceMenu_DrawOptionList(Menu *pMenu)
     short rect[4];
     int i;
     int y;
-    int string1;
-    int string2;
+    char *string1;
+    char *string2;
 
     rect[0] = 0;
     rect[1] = 0;
     rect[2] = (short)g_pGraphics->resX;
     rect[3] = (short)g_pGraphics->resY;
     Font_SetBlendMode(2);
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, (BYTE *)&g_unk0x0051608c, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, (BYTE *)&g_unk0x0051608c, 2);
     InRaceMenu_DrawHeaderBar();
     rect[0] = (short)((int)(g_pGraphics->resX * 0x70) / 0x280);
-    rect[2] = *(short *)(g_unk0x0052aa60 + 0x120);
-    rect[3] = *(short *)(g_unk0x0052aa60 + 0x122);
+    rect[2] = g_unk0x0052aa60->width;
+    rect[3] = g_unk0x0052aa60->height;
     y = (int)(g_pGraphics->resY * 0xaa) / 0x1e0;
     i = 0;
     if (pMenu->itemCount > 0) {
@@ -4836,27 +4845,27 @@ void InRaceMenu_DrawOptionList(Menu *pMenu)
         do {
             rect[1] = (short)(y - (int)(g_pGraphics->resY * 0xd) / 0x1e0);
             if (i != 2) {
-                string1 = pItem->stringId;
+                string1 = pItem->text;
                 if (string1 != 0) {
                     string2 = string1;
                 } else {
-                    string1 = (int)CFrontend::GetTextString(pItem->id);
-                    string2 = (int)CFrontend::GetTextString(pItem->id + 1);
+                    string1 = CFrontend::GetTextString(pItem->id);
+                    string2 = CFrontend::GetTextString(pItem->id + 1);
                 }
                 if (pMenu->cursor == i) {
-                    Font_DrawText(1, (char *)string1, (int)(g_pGraphics->resX * 0x86) / 0x280, y,
+                    Font_DrawText(1, string1, (int)(g_pGraphics->resX * 0x86) / 0x280, y,
                                   &g_unk0x00516074, 0x11);
-                    Font_DrawText(0, (char *)string2, (int)(g_pGraphics->resX * 0x86) / 0x280,
+                    Font_DrawText(0, string2, (int)(g_pGraphics->resX * 0x86) / 0x280,
                                   (int)(g_pGraphics->resY * 0xf) / 0x1e0 + y, &g_unk0x00516074, 0x11);
-                    Sprite_Queue((SpriteRect *)(g_unk0x0052aa60 + 0x11c), (SpriteRect *)rect,
-                                 (Texture *)g_unk0x0052aa60, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516074, 8);
+                    Sprite_Queue((SpriteRect *)&g_unk0x0052aa60->field_0x11c, (SpriteRect *)rect,
+                                 g_unk0x0052aa60, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516074, 8);
                 } else {
-                    Font_DrawText(1, (char *)string1, (int)(g_pGraphics->resX * 0x86) / 0x280, y,
+                    Font_DrawText(1, string1, (int)(g_pGraphics->resX * 0x86) / 0x280, y,
                                   &g_unk0x00516078, 0x11);
-                    Font_DrawText(0, (char *)string2, (int)(g_pGraphics->resX * 0x86) / 0x280,
+                    Font_DrawText(0, string2, (int)(g_pGraphics->resX * 0x86) / 0x280,
                                   (int)(g_pGraphics->resY * 0xf) / 0x1e0 + y, &g_unk0x00516078, 0x11);
-                    Sprite_Queue((SpriteRect *)(g_unk0x0052aa68 + 0x11c), (SpriteRect *)rect,
-                                 (Texture *)g_unk0x0052aa68, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516078, 8);
+                    Sprite_Queue((SpriteRect *)&g_unk0x0052aa68->field_0x11c, (SpriteRect *)rect,
+                                 g_unk0x0052aa68, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516078, 8);
                 }
                 y = y + (int)(g_pGraphics->resY * 0x36) / 0x1e0;
             }
@@ -4875,47 +4884,47 @@ void InRaceMenu_DrawMenuRows(Menu *pMenu)
     short rect[4];
     int i;
     int y;
-    int string1;
-    int string2;
+    char *string1;
+    char *string2;
     int *pColour;
-    int texture;
+    Texture *texture;
 
     rect[0] = 0;
     rect[1] = 0;
     rect[2] = (short)g_pGraphics->resX;
     rect[3] = (short)g_pGraphics->resY;
     Font_SetBlendMode(2);
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, (BYTE *)&g_unk0x0051608c, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, (BYTE *)&g_unk0x0051608c, 2);
     InRaceMenu_DrawHeaderBar();
     rect[0] = (short)((int)(g_pGraphics->resX * 0x70) / 0x280);
-    rect[2] = *(short *)(g_unk0x0052aa60 + 0x120);
-    rect[3] = *(short *)(g_unk0x0052aa60 + 0x122);
+    rect[2] = g_unk0x0052aa60->width;
+    rect[3] = g_unk0x0052aa60->height;
     y = (int)(g_pGraphics->resY * 0xaa) / 0x1e0;
     pItem = pMenu->items;
     for (i = 0; i < pMenu->itemCount; i++, pItem++) {
         rect[1] = (short)(y - (int)(g_pGraphics->resY * 0xd) / 0x1e0);
-        string1 = pItem->stringId;
+        string1 = pItem->text;
         string2 = string1;
         if (string1 == 0) {
-            string1 = (int)CFrontend::GetTextString(pItem->id);
-            string2 = (int)CFrontend::GetTextString(pItem->id + 1);
+            string1 = CFrontend::GetTextString(pItem->id);
+            string2 = CFrontend::GetTextString(pItem->id + 1);
         }
         if (pMenu->cursor == i) {
-            Font_DrawText(1, (char *)string1, (int)(g_pGraphics->resX * 0x86) / 0x280, y,
+            Font_DrawText(1, string1, (int)(g_pGraphics->resX * 0x86) / 0x280, y,
                           &g_unk0x00516074, 0x11);
-            Font_DrawText(0, (char *)string2, (int)(g_pGraphics->resX * 0x86) / 0x280,
+            Font_DrawText(0, string2, (int)(g_pGraphics->resX * 0x86) / 0x280,
                           (int)(g_pGraphics->resY * 0xf) / 0x1e0 + y, &g_unk0x00516074, 0x11);
             pColour = &g_unk0x00516074;
             texture = g_unk0x0052aa60;
         } else {
-            Font_DrawText(1, (char *)string1, (int)(g_pGraphics->resX * 0x86) / 0x280, y,
+            Font_DrawText(1, string1, (int)(g_pGraphics->resX * 0x86) / 0x280, y,
                           &g_unk0x00516078, 0x11);
-            Font_DrawText(0, (char *)string2, (int)(g_pGraphics->resX * 0x86) / 0x280,
+            Font_DrawText(0, string2, (int)(g_pGraphics->resX * 0x86) / 0x280,
                           (int)(g_pGraphics->resY * 0xf) / 0x1e0 + y, &g_unk0x00516078, 0x11);
             pColour = &g_unk0x00516078;
             texture = g_unk0x0052aa68;
         }
-        Sprite_Queue((SpriteRect *)(texture + 0x11c), (SpriteRect *)rect, (Texture *)texture,
+        Sprite_Queue((SpriteRect *)&texture->field_0x11c, (SpriteRect *)rect, texture,
                      2, 0, NULL, NULL, (BYTE *)pColour, 8);
         y = y + (int)(g_pGraphics->resY * 0x36) / 0x1e0;
     }
@@ -4941,18 +4950,18 @@ void InRaceMenu_DrawNetworkPlayerList(Menu *pMenu)
     char single;
     bool twoLines;
     int *pColour;
-    int texture;
+    Texture *texture;
 
     g_unk0x0052ad58[0] = 0;
     g_unk0x0052ad58[1] = 0;
     g_unk0x0052ad58[2] = (short)g_pGraphics->resX;
     g_unk0x0052ad58[3] = (short)g_pGraphics->resY;
     Font_SetBlendMode(2);
-    Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x0052ad58, (BYTE *)&g_unk0x0051608c, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x0052ad58, (BYTE *)&g_unk0x0051608c, 2);
     InRaceMenu_DrawHeaderBar();
     g_unk0x0052ad58[0] = (short)((int)(g_pGraphics->resX * 0x70) / 0x280);
-    g_unk0x0052ad58[2] = *(short *)(g_unk0x0052aa60 + 0x120);
-    g_unk0x0052ad58[3] = *(short *)(g_unk0x0052aa60 + 0x122);
+    g_unk0x0052ad58[2] = g_unk0x0052aa60->width;
+    g_unk0x0052ad58[3] = g_unk0x0052aa60->height;
     for (i = 0; i < pMenu->itemCount; i++) {
         MenuItem *pItem = &pMenu->items[i];
         if (pItem->visible) {
@@ -4968,8 +4977,8 @@ void InRaceMenu_DrawNetworkPlayerList(Menu *pMenu)
                 pColour = &g_unk0x00516078;
                 texture = g_unk0x0052aa68;
             }
-            Sprite_Queue((SpriteRect *)(texture + 0x11c), (SpriteRect *)g_unk0x0052ad58,
-                         (Texture *)texture, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516078, 8);
+            Sprite_Queue((SpriteRect *)&texture->field_0x11c, (SpriteRect *)g_unk0x0052ad58,
+                         texture, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516078, 8);
             twoLines = true;
             if (pItem->value != 0) {
                 sub[0] = CFrontend::GetTextString(pItem->id);
@@ -5030,11 +5039,11 @@ void InRaceMenu_DrawPlayerClassRows(Menu *pMenu)
     rect[2] = (short)g_pGraphics->resX;
     rect[3] = (short)g_pGraphics->resY;
     Font_SetBlendMode(2);
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, (BYTE *)&g_unk0x0051608c, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, (BYTE *)&g_unk0x0051608c, 2);
     InRaceMenu_DrawHeaderBar();
     rect[0] = (short)((int)(g_pGraphics->resX * 0x70) / 0x280);
-    rect[2] = *(short *)(g_unk0x0052aa60 + 0x120);
-    rect[3] = *(short *)(g_unk0x0052aa60 + 0x122);
+    rect[2] = g_unk0x0052aa60->width;
+    rect[3] = g_unk0x0052aa60->height;
     pItem = pMenu->items;
     for (i = 0; i < pMenu->itemCount; i++, pItem++) {
         pColour = pMenu->cursor == i ? &g_unk0x00516074 : &g_unk0x00516078;
@@ -5061,11 +5070,11 @@ void InRaceMenu_DrawPlayerClassRows(Menu *pMenu)
                            + ((int)(g_pGraphics->resY * 0x36) / 0x1e0) * i)
                           - (int)(g_pGraphics->resY * 0xd) / 0x1e0);
         if (pMenu->cursor == i) {
-            Sprite_Queue((SpriteRect *)(g_unk0x0052aa60 + 0x11c), (SpriteRect *)rect,
-                         (Texture *)g_unk0x0052aa60, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516074, 8);
+            Sprite_Queue((SpriteRect *)&g_unk0x0052aa60->field_0x11c, (SpriteRect *)rect,
+                         g_unk0x0052aa60, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516074, 8);
         } else {
-            Sprite_Queue((SpriteRect *)(g_unk0x0052aa68 + 0x11c), (SpriteRect *)rect,
-                         (Texture *)g_unk0x0052aa68, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516078, 8);
+            Sprite_Queue((SpriteRect *)&g_unk0x0052aa68->field_0x11c, (SpriteRect *)rect,
+                         g_unk0x0052aa68, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516078, 8);
         }
     }
     Font_SetBlendMode(2);
@@ -5102,7 +5111,7 @@ void InRaceMenu_RebuildMainPage(int param)
         Menu_AddItemType2(&g_menu0x0052ad60, 0, 0xf, &g_menu0x00529af8, 0, 3);
     }
     Menu_AddItemType2(&g_menu0x0052ad60, 0, 0x11, &g_menu0x0052a0c0, 0, 6);
-    Menu_AddItemType4(&g_menu0x0052ad60, 0, 0x13, (int)InRaceMenu_ResumeWithSound, 7);
+    Menu_AddItemType4(&g_menu0x0052ad60, 0, 0x13, (MenuItemAction)InRaceMenu_ResumeWithSound, 7);
     Menu_SetCallbacks(&g_menu0x0052ad60, (MenuCallback)InRaceMenu_RememberOptionCursor, (MenuCallback)InRaceMenu_SkipBlankOptionRow,
                       (MenuCallback)InRaceMenu_DrawOptionList, NULL);
     if ((BYTE)param != 0)
@@ -5149,7 +5158,7 @@ void InRaceMenu_BuildCameraModeOptions(void)
 {
     Menu_Init(&g_menu0x0052a490, 0, 0, 0, &g_menu0x0052ad60, NULL, 1, 0, 1);
     Menu_AddItemType3(&g_menu0x0052a490, 0, 0x3c, 2, 0, 0, 0, 0, 0);;
-    Menu_AddItemType4(&g_menu0x0052a490, 0, 0x3b, (int)InRaceMenu_ReturnToPauseItem, -1);
+    Menu_AddItemType4(&g_menu0x0052a490, 0, 0x3b, (MenuItemAction)InRaceMenu_ReturnToPauseItem, -1);
     Menu_SetCallbacks(&g_menu0x0052a490, (MenuCallback)CGame::NoOpSecondaryStateCallback,
                       (MenuCallback)InRaceMenu_ReturnToPauseUpdate, (MenuCallback)InRaceMenu_DrawNetworkPlayerList, NULL);
     Menu_ValidateCursor(&g_menu0x0052a490, 0);
@@ -5175,10 +5184,10 @@ void InRaceMenu_BuildSoundOptions(void)
 void InRaceMenu_BuildPausePage(void)
 {
     Menu_Init(&g_menu0x00529af8, 0, 0, 0, &g_menu0x0052ad60, NULL, 1, 0, 1);
-    Menu_AddItemType4(&g_menu0x00529af8, 0, 0xf, (int)GameMenu_RequestStageRestart, 3);
+    Menu_AddItemType4(&g_menu0x00529af8, 0, 0xf, (MenuItemAction)GameMenu_RequestStageRestart, 3);
     if (CGameInfo::GetConfiguredGameMode() == 2 || CGameInfo::GetConfiguredGameMode() == 3 ||
         CGameInfo::GetConfiguredGameMode() == 0xa || CGameInfo::GetConfiguredGameMode() == 9)
-        Menu_AddItemType4(&g_menu0x00529af8, 0, 0x8b, (int)GameMenu_RequestNetworkRestart, 4);
+        Menu_AddItemType4(&g_menu0x00529af8, 0, 0x8b, (MenuItemAction)GameMenu_RequestNetworkRestart, 4);
     Menu_AddItemType1(&g_menu0x00529af8, 0, 0xa6, 0, -1);
     Menu_SetCallbacks(&g_menu0x00529af8, (MenuCallback)InRaceMenu_SelectLastItem, NULL, (MenuCallback)InRaceMenu_DrawMenuRows,
                       NULL);
@@ -5190,7 +5199,7 @@ void InRaceMenu_BuildPausePage(void)
 void InRaceMenu_BuildQuitPage(void)
 {
     Menu_Init(&g_menu0x0052a2a8, 0, 0, 0, &g_menu0x0052ad60, NULL, 1, 0, 1);
-    Menu_AddItemType4(&g_menu0x0052a2a8, 0, 0xf6, (int)GameMenu_RequestNetworkLeave, 3);
+    Menu_AddItemType4(&g_menu0x0052a2a8, 0, 0xf6, (MenuItemAction)GameMenu_RequestNetworkLeave, 3);
     Menu_AddItemType1(&g_menu0x0052a2a8, 0, 0xa6, 0, -1);
     Menu_SetCallbacks(&g_menu0x0052a2a8, (MenuCallback)InRaceMenu_SelectLastItem, NULL, (MenuCallback)InRaceMenu_DrawMenuRows,
                       NULL);
@@ -5202,7 +5211,7 @@ void InRaceMenu_BuildQuitPage(void)
 void InRaceMenu_BuildLeavePage(void)
 {
     Menu_Init(&g_menu0x0052a0c0, 0, 0, 0, &g_menu0x0052ad60, NULL, 1, 0, 1);
-    Menu_AddItemType4(&g_menu0x0052a0c0, 0, 0xa8, (int)GameMenu_RequestNetworkQuit, 3);
+    Menu_AddItemType4(&g_menu0x0052a0c0, 0, 0xa8, (MenuItemAction)GameMenu_RequestNetworkQuit, 3);
     Menu_AddItemType1(&g_menu0x0052a0c0, 0, 0xaa, 0, -1);
     Menu_SetCallbacks(&g_menu0x0052a0c0, (MenuCallback)InRaceMenu_SelectLastItem, NULL, (MenuCallback)InRaceMenu_DrawMenuRows,
                       NULL);
@@ -5235,8 +5244,8 @@ void InRaceMenu_ResetAndBuildPages(void)
 void InRaceMenu_BuildPlayerOptions(void)
 {
     Menu_Init(&g_menu0x00529918, 0, 0, 0, &g_menu0x0052ad60, NULL, 1, 0, 1);
-    Menu_AddItemType2(&g_menu0x00529918, 0, 0x58, &g_menu0x00529ed8, (int)InRaceMenu_SelectPlayer, 0);
-    Menu_AddItemType2(&g_menu0x00529918, 0, 0x5a, &g_menu0x00529ed8, (int)InRaceMenu_SelectPlayer, 1);
+    Menu_AddItemType2(&g_menu0x00529918, 0, 0x58, &g_menu0x00529ed8, (MenuItemAction)InRaceMenu_SelectPlayer, 0);
+    Menu_AddItemType2(&g_menu0x00529918, 0, 0x5a, &g_menu0x00529ed8, (MenuItemAction)InRaceMenu_SelectPlayer, 1);
     Menu_SetCallbacks(&g_menu0x00529918, NULL, NULL, (MenuCallback)InRaceMenu_DrawOptionList, NULL);
     Menu_ValidateCursor(&g_menu0x00529918, 0);
 }
@@ -5277,22 +5286,22 @@ void OptionMenu_RefreshStageSetup(void)
 // FUNCTION: CMR2 0x00502310
 void OptionMenu_RebuildOptions(void)
 {
-    Menu_Init((Menu *)g_unk0x0082b668, 0, -1, 0, (Menu *)g_unk0x0082b668, NULL, 1, 0, 0);
-    Menu_AddItemType3((Menu *)g_unk0x0082b668, 0, 0x48, (BYTE)CGameInfo::GetPreviewLayoutMode(), 0, 0, 0,
-                      (int)OptionMenu_ResetValueAnimation, 0);;
-    Menu_AddItemType3((Menu *)g_unk0x0082b668, 0, 0x47, 7, 0, 1, 0, (int)OptionMenu_AdvanceSelectedOption, 1);;
-    Menu_AddItemType3((Menu *)g_unk0x0082b668, 0, 0x46, 0xb, 0, 1, 0, (int)OptionMenu_ApplyHighlightedValue, 2);;
-    Menu_AddItemType3((Menu *)g_unk0x0082b668, 0, 0x3c, 1, 0, 0, 0, (int)OptionMenu_RestartCountdown, 3);;
+    Menu_Init(&g_unk0x0082b668, 0, -1, 0, &g_unk0x0082b668, NULL, 1, 0, 0);
+    Menu_AddItemType3(&g_unk0x0082b668, 0, 0x48, (BYTE)CGameInfo::GetPreviewLayoutMode(), 0, 0, 0,
+                      (MenuItemAction)OptionMenu_ResetValueAnimation, 0);;
+    Menu_AddItemType3(&g_unk0x0082b668, 0, 0x47, 7, 0, 1, 0, (MenuItemAction)OptionMenu_AdvanceSelectedOption, 1);;
+    Menu_AddItemType3(&g_unk0x0082b668, 0, 0x46, 0xb, 0, 1, 0, OptionMenu_ApplyHighlightedValue, 2);;
+    Menu_AddItemType3(&g_unk0x0082b668, 0, 0x3c, 1, 0, 0, 0, (MenuItemAction)OptionMenu_RestartCountdown, 3);;
     if (CGameInfo::GetConfiguredGameMode() == 0)
-        Menu_AddItemType3((Menu *)g_unk0x0082b668, 0, 0xd3, 2, 0, 0, 0, (int)OptionMenu_LoadGameItem, 4);;
-    Menu_AddItemType3((Menu *)g_unk0x0082b668, 0, 0x88, 2, 1, 1, 0, (int)OptionMenu_RestartEmptyItemRecords, 5);;
-    Menu_SetCallbacks((Menu *)g_unk0x0082b668, (MenuCallback)OptionMenu_ConsumeRefreshRequest, (MenuCallback)OptionMenu_UpdateMessagesAndRecordStates,
+        Menu_AddItemType3(&g_unk0x0082b668, 0, 0xd3, 2, 0, 0, 0, OptionMenu_LoadGameItem, 4);;
+    Menu_AddItemType3(&g_unk0x0082b668, 0, 0x88, 2, 1, 1, 0, (MenuItemAction)OptionMenu_RestartEmptyItemRecords, 5);;
+    Menu_SetCallbacks(&g_unk0x0082b668, (MenuCallback)OptionMenu_ConsumeRefreshRequest, (MenuCallback)OptionMenu_UpdateMessagesAndRecordStates,
                       (MenuCallback)OptionMenu_DispatchRecordEditState, (MenuCallback)OptionMenu_IncrementSharedValue);
-    Menu_ValidateCursor((Menu *)g_unk0x0082b668, 0);
+    Menu_ValidateCursor(&g_unk0x0082b668, 0);
     OptionMenu_ResetRecords();
     OptionMenu_LoadPartTextures();
     OptionPreview_UpdateAllSlots();
-    Menu_SetFlags((Menu *)g_unk0x0082b668, 0, 0, 0, 0);
+    Menu_SetFlags(&g_unk0x0082b668, 0, 0, 0, 0);
 }
 
 // Builds the in-race option menus and switches the active menu to the first one.
@@ -5306,7 +5315,7 @@ void OptionMenu_BuildAndActivatePages(void)
     OptionMenu_BuildStatusMenu();
     OptionMenu_BuildAdvancedOptions();
     g_pMenu0x00831778 = NULL;
-    g_pMenu0x0083177c = (Menu *)OptionMenu_GetControlSetupMenu();
+    g_pMenu0x0083177c = OptionMenu_GetControlSetupMenu();
 }
 
 
@@ -5355,18 +5364,18 @@ void InRaceMenu_LoadTextures(void)
     bool loaded;
 
     sprintf(CFrontend::m_stringDest, g_strAr640ATga, CInstallInfo::GetGameCDPath());
-    g_unk0x0052aa60 = (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile1(), CFrontend::m_stringDest,
+    g_unk0x0052aa60 = CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile1(), CFrontend::m_stringDest,
                                                      &loaded, 0, 0, 0);
     sprintf(CFrontend::m_stringDest, g_strAr640DTga, CInstallInfo::GetGameCDPath());
-    g_unk0x0052aa68 = (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile1(), CFrontend::m_stringDest,
+    g_unk0x0052aa68 = CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile1(), CFrontend::m_stringDest,
                                                      &loaded, 0, 0, 0);
     if (CGameInfo::GetConfiguredGameMode() == 4) {
         sprintf(CFrontend::m_stringDest, g_strRoCxTga, CInstallInfo::GetGameCDPath());
-        g_unk0x0052af4c = (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
+        g_unk0x0052af4c = CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile0(),
                                                          CFrontend::m_stringDest, &loaded, 0, 0, 0);
     }
     sprintf(CFrontend::m_stringDest, g_strCrtnaTga, CInstallInfo::GetGameCDPath());
-    g_unk0x0052af50 = (int)CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile1(), CFrontend::m_stringDest,
+    g_unk0x0052af50 = CTexture::FindLoadTexture((GenericFile *)StageTiming_GetStageFile1(), CFrontend::m_stringDest,
                                                      &loaded, 0, 0, 0);
 }
 
@@ -5431,16 +5440,16 @@ void OptionMenu_DrawBoxEdges(short *pRect, BYTE *pColour)
     edge[2] = pRect[2];
     edge[3] = 1;
     edge[1] = pRect[1];
-    Sprite_FillRect((int)g_pGraphics + 0x150, edge, pColour, 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, edge, pColour, 3);
     edge[1] = pRect[3] + pRect[1] - 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, edge, pColour, 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, edge, pColour, 3);
     edge[1] = pRect[1];
     edge[3] = pRect[3];
     edge[2] = 1;
     edge[0] = pRect[0];
-    Sprite_FillRect((int)g_pGraphics + 0x150, edge, pColour, 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, edge, pColour, 3);
     edge[0] = pRect[2] + pRect[0] - 1;
-    Sprite_FillRect((int)g_pGraphics + 0x150, edge, pColour, 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, edge, pColour, 3);
 }
 
 // Returns the byte at column type of the 7-byte option record index,
@@ -5508,7 +5517,7 @@ int OptionMenu_FindFirstDetailedSlot(void)
     int found;
 
     found = 0;
-    for (i = 0; i < (char)OptionMenu_GetControlSetupMenu()[6]; i++) {
+    for (i = 0; i < (char)OptionMenu_GetControlSetupMenu()->itemCount; i++) {
         if (g_unk0x0082a90c[i] != 3) {
             found = 1;
             break;
@@ -5831,7 +5840,7 @@ int OptionMenu_TransformHudPointToScreen(Unk0x0082c6c8 *p, short *pX, short *pY)
 // FUNCTION: CMR2 0x00501390
 BYTE OptionMenu_UpdateBackgroundRoot(void)
 {
-    SceneNode_Destroy((SceneNode *)g_unk0x0082b1b4);
+    SceneNode_Destroy(g_unk0x0082b1b4);
     return 1;
 }
 
@@ -5976,11 +5985,11 @@ void OptionMenu_LoadArchives(void)
 char g_str0x00527050[] = "*** WORLD CREATED: 0x%08X ***\n";
 // Camera node of the option menu's background world (0x82b1b0).
 // GLOBAL: CMR2 0x0082b1b0
-int g_unk0x0082b1b0;
+SceneNode *g_unk0x0082b1b0;
 
 void Scene_SetAmbient(BYTE *pColour, int boost);
 SceneNode *Scene_CreateLight(int type, int r, int g, int b, FixVector *pPosition, FixAngles *pAngles, SceneNode *pParent);
-int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, int unused, int param);
+int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, void *pRect, int param);
 
 // Builds the option menu's background world: root node, camera, ambient and key
 // light, then registers the release callback.
@@ -6013,16 +6022,16 @@ void OptionMenu_CreateBackgroundWorld(void)
     colour[1] = 0xc8;
     colour[2] = 0xc8;
     colour[3] = 0xff;
-    g_unk0x0082b1b4 = (int)SceneNode_CreateRoot();
+    g_unk0x0082b1b4 = SceneNode_CreateRoot();
     sprintf(CFrontend::m_stringDest, g_str0x00527050, g_unk0x0082b1b4);
     puts(CFrontend::m_stringDest);
-    g_unk0x0082b1b0 = (int)SceneType2_Create(&translation, &angles, NULL, (SceneNode *)g_unk0x0082b1b4);
-    for (pNode = (SceneNode *)g_unk0x0082b1b4; pNode != NULL; pNode = pNode->pParent)
+    g_unk0x0082b1b0 = SceneType2_Create(&translation, &angles, NULL, g_unk0x0082b1b4);
+    for (pNode = g_unk0x0082b1b4; pNode != NULL; pNode = pNode->pParent)
         pNode->dirty = 1;
     Scene_SetAmbient(colour, 0);
-    Scene_CreateLight(2, 0x10000, 0x10000, 0x10000, &lightPosition, &angles, (SceneNode *)g_unk0x0082b1b4);
+    Scene_CreateLight(2, 0x10000, 0x10000, 0x10000, &lightPosition, &angles, g_unk0x0082b1b4);
     CGraphics::SetProjection(0x30978, 0x4326e, 0xfa0000, 0x10000);
-    Game_PrepareScene((SceneNode *)g_unk0x0082b1b4, (SceneNode *)g_unk0x0082b1b0, (int)view, 0);
+    Game_PrepareScene(g_unk0x0082b1b4, g_unk0x0082b1b0, view, 0);
     CGame::RegisterCallback(OptionMenu_UpdateBackgroundRoot, NULL);
 }
 // Releases the three option menu textures and clears their handles.
@@ -6179,30 +6188,25 @@ BYTE g_unk0x00831884;
 // FUNCTION: CMR2 0x004ff5b0
 void OptionMenu_FillValueSlider(void)
 {
-    BYTE *pMode;
-    int index;
     unsigned int value;
 
-    index = Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1);
-    index *= 5;
-    pMode = OptionMenu_GetControlSetupMenu();
-    value = pMode[0x1f + index * 4];
+    value = OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max;
     switch (value) {
     case 0:
-        OptionMenu_GetValueSliderMenu()[0x1e] = 7;
+        OptionMenu_GetValueSliderMenu()->items[0].min = 7;
         break;
     case 1:
-        OptionMenu_GetValueSliderMenu()[0x1e] = 5;
+        OptionMenu_GetValueSliderMenu()->items[0].min = 5;
         break;
     case 2:
     case 3:
     case 4:
     case 5:
     case 6:
-        OptionMenu_GetValueSliderMenu()[0x1e] = 0xb;
+        OptionMenu_GetValueSliderMenu()->items[0].min = 0xb;
         break;
     }
-    OptionMenu_GetValueSliderMenu()[0x1f] = (BYTE)OptionMenu_GetScaledWorkingValue(CGameInfo::GetActiveOptionSlot(), value);
+    OptionMenu_GetValueSliderMenu()->items[0].max = (BYTE)OptionMenu_GetScaledWorkingValue(CGameInfo::GetActiveOptionSlot(), value);
 }
 
 // Frees the option menu sound buffer and stops the streaming sound.
@@ -6247,7 +6251,7 @@ void OptionMenu_RequestRefresh(int unused, int unused2)
 }
 
 // GLOBAL: CMR2 0x0082bc08
-BYTE g_unk0x0082bc08[0x1e0];
+Menu g_unk0x0082bc08;
 
 void OptionMenu_DrawStatusLine(int unused);
 void OptionMenu_SelectItemAndRefresh(char *pItem, int unused);
@@ -6263,10 +6267,10 @@ void OptionMenu_DrawRallyInfoScreen(unsigned int);
 // FUNCTION: CMR2 0x00502240
 void OptionMenu_BuildStatusMenu(void)
 {
-    Menu_Init((Menu *)g_unk0x0082ba28, 0, -1, 0, (Menu *)g_unk0x0082b668, NULL, 1, 0, 0);
-    Menu_AddItemType1((Menu *)g_unk0x0082ba28, 0, -1, 0, -1);
-    Menu_SetCallbacks((Menu *)g_unk0x0082ba28, (MenuCallback)OptionMenu_RequestRefresh, NULL, (MenuCallback)OptionMenu_DrawStatusLine, NULL);
-    Menu_ValidateCursor((Menu *)g_unk0x0082ba28, 0);
+    Menu_Init(&g_unk0x0082ba28, 0, -1, 0, &g_unk0x0082b668, NULL, 1, 0, 0);
+    Menu_AddItemType1(&g_unk0x0082ba28, 0, -1, 0, -1);
+    Menu_SetCallbacks(&g_unk0x0082ba28, (MenuCallback)OptionMenu_RequestRefresh, NULL, (MenuCallback)OptionMenu_DrawStatusLine, NULL);
+    Menu_ValidateCursor(&g_unk0x0082ba28, 0);
 }
 
 // Builds the option menu's advanced-options list with its device and accept
@@ -6274,32 +6278,32 @@ void OptionMenu_BuildStatusMenu(void)
 // FUNCTION: CMR2 0x005022a0
 void OptionMenu_BuildAdvancedOptions(void)
 {
-    Menu_Init((Menu *)g_unk0x0082b488, 0, -1, 0, (Menu *)g_unk0x0082b668, NULL, 0, 0, 1);
-    Menu_AddItemType1((Menu *)g_unk0x0082b488, 0, 0x100, (int)OptionMenu_LoadSelectedSavedGame, -1);
-    Menu_AddItemType1((Menu *)g_unk0x0082b488, 0, 0x101, 0, -1);
-    Menu_SetCallbacks((Menu *)g_unk0x0082b488, (MenuCallback)OptionMenu_SelectItemAndRefresh, NULL, (MenuCallback)OptionMenu_DrawValueSelectionRows, NULL);
-    Menu_ValidateCursor((Menu *)g_unk0x0082b488, 0);
+    Menu_Init(&g_unk0x0082b488, 0, -1, 0, &g_unk0x0082b668, NULL, 0, 0, 1);
+    Menu_AddItemType1(&g_unk0x0082b488, 0, 0x100, (MenuItemAction)OptionMenu_LoadSelectedSavedGame, -1);
+    Menu_AddItemType1(&g_unk0x0082b488, 0, 0x101, 0, -1);
+    Menu_SetCallbacks(&g_unk0x0082b488, (MenuCallback)OptionMenu_SelectItemAndRefresh, NULL, (MenuCallback)OptionMenu_DrawValueSelectionRows, NULL);
+    Menu_ValidateCursor(&g_unk0x0082b488, 0);
 }
 
 // Builds the option menu's control-setup screen.
 // FUNCTION: CMR2 0x00502440
 void OptionMenu_BuildControlSetup(void)
 {
-    Menu_Init((Menu *)g_unk0x0082bc08, 0, -1, 0, (Menu *)g_unk0x0082b668, NULL, 1, 0, 0);
-    Menu_SetCallbacks((Menu *)g_unk0x0082bc08, NULL, (MenuCallback)RallyData_ValidateIndex, (MenuCallback)OptionMenu_DrawRaisedRallyInfo,
+    Menu_Init(&g_unk0x0082bc08, 0, -1, 0, &g_unk0x0082b668, NULL, 1, 0, 0);
+    Menu_SetCallbacks(&g_unk0x0082bc08, NULL, (MenuCallback)RallyData_ValidateIndex, (MenuCallback)OptionMenu_DrawRaisedRallyInfo,
                       (MenuCallback)OptionMenu_IncrementSharedValue);
-    Menu_ValidateCursor((Menu *)g_unk0x0082bc08, 0);
-    Menu_SetFlags((Menu *)g_unk0x0082bc08, 0, 0, 0, 1);
+    Menu_ValidateCursor(&g_unk0x0082bc08, 0);
+    Menu_SetFlags(&g_unk0x0082bc08, 0, 0, 0, 1);
 }
 
 // Builds the option menu's slider screen.
 // FUNCTION: CMR2 0x005024a0
 void OptionMenu_BuildValueSliders(void)
 {
-    Menu_Init((Menu *)g_unk0x0082b848, 0, -1, 0, (Menu *)g_unk0x0082b668, NULL, 1, 0, 1);
-    Menu_AddItemType3((Menu *)g_unk0x0082b848, 0, -1, 0x65, 0, 0, 0, (int)OptionMenu_ApplyFirstModeItem, 0);;
-    Menu_SetCallbacks((Menu *)g_unk0x0082b848, NULL, (MenuCallback)RallyData_ValidateIndex, (MenuCallback)OptionMenu_DrawRallyInfoScreen, NULL);
-    Menu_ValidateCursor((Menu *)g_unk0x0082b848, 0);
+    Menu_Init(&g_unk0x0082b848, 0, -1, 0, &g_unk0x0082b668, NULL, 1, 0, 1);
+    Menu_AddItemType3(&g_unk0x0082b848, 0, -1, 0x65, 0, 0, 0, (MenuItemAction)OptionMenu_ApplyFirstModeItem, 0);;
+    Menu_SetCallbacks(&g_unk0x0082b848, NULL, (MenuCallback)RallyData_ValidateIndex, (MenuCallback)OptionMenu_DrawRallyInfoScreen, NULL);
+    Menu_ValidateCursor(&g_unk0x0082b848, 0);
 }
 
 // Marks the given item selected and requests a refresh.
@@ -6429,7 +6433,7 @@ void OptionMenu_DrawThreeColourGradientStrips(short *pRect, int unused, unsigned
         else if (b < 0)
             b = 0;
         colour[2] = b;
-        Sprite_FillRect((int)g_pGraphics + 0x150, strip, colour, 3);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, strip, colour, 3);
         strip[0] += strip[2];
     }
 }
@@ -6477,16 +6481,16 @@ void OptionMenu_Start(char param1)
 
 // Starts the fade of the option menu once more than 50 frames have passed.
 // FUNCTION: CMR2 0x00501350
-void OptionMenu_StartDelayedFade(int param1, int unused)
+void OptionMenu_StartDelayedFade(CallbackStateMachine *param1, int unused)
 {
     unsigned int delta = CMain::GetFrameDelta() - g_unk0x0082b0a4;
 
     if (delta > 0x32) {
         if (g_unk0x0082a938 != 0) {
-            CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, 0, 2, 2);
+            CGame::PromoteCallbackEntryByRule(param1, 0, 2, 2);
             return;
         }
-        CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)param1, 0, 0, 2);
+        CGame::PromoteCallbackEntryByRule(param1, 0, 0, 2);
     }
 }
 
@@ -6494,8 +6498,8 @@ void OptionMenu_StartDelayedFade(int param1, int unused)
 // GLOBAL: CMR2 0x0052704c
 int g_unk0x0052704c = 0x00acb49c;
 
-int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, int unused, int param);
-int Game_DrawSceneViewport(int, int, void *, int, BYTE);
+int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, void *pRect, int param);
+int Game_DrawSceneViewport(struct SceneNode *pRoot, struct SceneNode *pCamera, void *pRect, int bit, BYTE flag);
 void Graphics_PresentFrameAndResetCounters(void);
 
 // Clears the screen to a colour fading from the stored menu colour to grey over
@@ -6507,9 +6511,9 @@ void OptionMenu_CopyDefaultValues(void);
 void OptionMenu_SetBackgroundViewport(void);
 void Graphics_PresentFrameAndResetCounters(void);
 void OptionPreview_SetWheelNodesVisible(int index, char visible);
-int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, int unused, int param);
+int Game_PrepareScene(SceneNode *pRoot, SceneNode *pCamera, void *pRect, int param);
 void OptionMenu_DrawActivePage(void);
-int Game_DrawSceneViewport(int a, int b, void *c, int d, BYTE e);
+int Game_DrawSceneViewport(struct SceneNode *pRoot, struct SceneNode *pCamera, void *pRect, int bit, BYTE flag);
 
 
 // FUNCTION: CMR2 0x005010a0
@@ -6583,7 +6587,7 @@ void OptionMenu_DrawBackgroundState(CallbackStateMachine *p1, BYTE state)
     CGraphics::ClearZBuffer();
     CGraphics::SetProjection(0x30978, 0x4326e, 0xfa0000, 0x10000);
     OptionMenu_DrawActivePage();
-    Game_PrepareScene((SceneNode *)g_unk0x0082b1b4, (SceneNode *)g_unk0x0082b1b0, (int)&rect[0], 0);
+    Game_PrepareScene(g_unk0x0082b1b4, g_unk0x0082b1b0, &rect[0], 0);
     Game_DrawSceneViewport(g_unk0x0082b1b4, g_unk0x0082b1b0, &rect[0], 0, 1);
     Graphics_PresentFrameAndResetCounters();
 }
@@ -6613,7 +6617,7 @@ void OptionMenu_FadeBackgroundToGrey(int param1, int unused)
     CGraphics::SetProjection(0x30978, 0x4326e, 0xfa0000, 0x10000);
     // The globals are the root and camera scene nodes; the third argument is a
     // temporary 4-short rectangle covering the middle of the screen.
-    Game_PrepareScene((SceneNode *)g_unk0x0082b1b4, (SceneNode *)g_unk0x0082b1b0, (int)rect, 0);
+    Game_PrepareScene(g_unk0x0082b1b4, g_unk0x0082b1b0, rect, 0);
     Game_DrawSceneViewport(g_unk0x0082b1b4, g_unk0x0082b1b0, rect, 0, 1);
     Graphics_PresentFrameAndResetCounters();
 }
@@ -6640,7 +6644,7 @@ void OptionMenu_FadeToStoredColour(int param1, int unused)
     CGraphics::ClearZBuffer();
     CGraphics::SetProjection(0x30978, 0x4326e, 0xfa0000, 0x10000);
     CMain::GetFrameDelta();
-    Game_PrepareScene((SceneNode *)g_unk0x0082b1b4, (SceneNode *)g_unk0x0082b1b0, (int)rect, 0);
+    Game_PrepareScene(g_unk0x0082b1b4, g_unk0x0082b1b0, rect, 0);
     Game_DrawSceneViewport(g_unk0x0082b1b4, g_unk0x0082b1b0, rect, 0, 1);
     Graphics_PresentFrameAndResetCounters();
 }
@@ -6689,15 +6693,9 @@ void OptionMenu_CopyDefaultValues(void)
 // FUNCTION: CMR2 0x005000b0
 void OptionMenu_AdvanceSelectedOption(int unused, int unused2)
 {
-    BYTE *pMode;
-    int index;
-
     OptionMenu_FillValueSlider();
-    index = Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1);
-    index *= 5;
-    pMode = OptionMenu_GetControlSetupMenu();
-    if (OptionMenu_IsSlotValueAboveBase(CGameInfo::GetActiveOptionSlot(), pMode[0x1f + index * 4]) != 0) {
-        Menu_SetNextAction((int)OptionMenu_GetValueSliderMenu());
+    if (OptionMenu_IsSlotValueAboveBase(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max) != 0) {
+        Menu_SetNextAction(OptionMenu_GetValueSliderMenu());
         return;
     }
     CGameInfo::StartOptionMenuTimeout();
@@ -7034,8 +7032,8 @@ void OptionPreview_BuildCornerHeightTransform(int index)
 
     pRec = &g_previewMeshRecords[index];
     pList = &g_previewDeformGeometry[index];
-    if (OptionMenu_FindFirstDetailedSlot() == 1 && OptionMenu_GetControlSetupMenu()[Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14 + 0x1f] == 2) {
-        t = (unsigned char)OptionMenu_GetValueSliderMenu()[0x1f] << 16;
+    if (OptionMenu_FindFirstDetailedSlot() == 1 && OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max == 2) {
+        t = (unsigned char)OptionMenu_GetValueSliderMenu()->items[0].max << 16;
         t = FixMul(t, 0x1999);
     } else {
         t = (int)(char)OptionMenu_GetScaledWorkingValue(index, 2) << 16;
@@ -7263,7 +7261,7 @@ void OptionPreview_UpdateWheelMeshVariants(int param1)
             for (w = 0; w < 4; w++) {
                 pMesh = (Mesh *)PREVIEW_SCENE_AT_OFFSET(off)->wheelNodes[0]->pObject;
                 for (k = 0; k < pMesh->triangleCount; k++) {
-                    pTex = CGraphics::m_pTextureManager->textureBuffer[((int *)&pMesh->pTriangles[k])[1]];
+                    pTex = CGraphics::m_pTextureManager->textureBuffer[pMesh->pTriangles[k].textureIndex];
                     if (OptionPreview_UsesLowWheelVariant(PREVIEW_SCENE_AT_OFFSET(off)->modelClass, g_previewWheelVariant[param1]) != 0) {
                         if (strncmp(pTex->name + strlen(pTex->name) - 9, g_strWheelVariantN, 1) == 0) {
                             strncpy(pTex->name + strlen(pTex->name) - 9, g_strWheelVariantL, 1);
@@ -8319,14 +8317,14 @@ void OptionMenu_IncrementSharedValue(Menu *pMenu, char param)
 // FUNCTION: CMR2 0x005003d0
 void OptionMenu_ApplyFirstModeItem(Menu *pMenu, int param)
 {
-    int index = Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1);
-    int value = OptionMenu_GetColumnUnitId(((Menu *)OptionMenu_GetControlSetupMenu())->items[index].max);
+    int index = Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1);
+    int value = OptionMenu_GetColumnUnitId((OptionMenu_GetControlSetupMenu())->items[index].max);
     int option = pMenu->items[0].max;
 
     if (OptionMenu_GetColumnDirtyFlag(CGameInfo::GetActiveOptionSlot(), value) &&
         OptionMenu_DoesValueMatch(CGameInfo::GetActiveOptionSlot(), value, option)) {
         OptionMenu_RestoreDefaultValue(CGameInfo::GetActiveOptionSlot(), value);
-        Menu_SetNextAction((int)pMenu->pParent);
+        Menu_SetNextAction(pMenu->pParent);
         return;
     }
     if (!OptionMenu_DoesValueMatch(CGameInfo::GetActiveOptionSlot(), value, option)) {
@@ -8335,7 +8333,7 @@ void OptionMenu_ApplyFirstModeItem(Menu *pMenu, int param)
             return;
         OptionMenu_SetWorkingValue(CGameInfo::GetActiveOptionSlot(), value, option);
     }
-    Menu_SetNextAction((int)pMenu->pParent);
+    Menu_SetNextAction(pMenu->pParent);
 }
 
 // Colour pair used by the highlighted option rows and the value at 0x52737c.
@@ -8566,14 +8564,14 @@ void OptionMenu_ApplyRallyRecordGroup(int param_1, int param_2)
 // FUNCTION: CMR2 0x00500360
 void OptionMenu_ApplySecondModeItem(Menu *pMenu, int param)
 {
-    int index = Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2);
+    int index = Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2);
 
     if (OptionMenu_GetRecordGroupAppliedFlag(CGameInfo::GetActiveOptionSlot(),
-                     OptionMenu_GetColumnWeight(((Menu *)OptionMenu_GetControlSetupMenu())->items[index].max))) {
+                     OptionMenu_GetColumnWeight((OptionMenu_GetControlSetupMenu())->items[index].max))) {
         OptionMenu_ApplyRallyRecordGroup(CGameInfo::GetActiveOptionSlot(),
-                     OptionMenu_GetColumnWeight(((Menu *)OptionMenu_GetControlSetupMenu())->items[index].max));
+                     OptionMenu_GetColumnWeight((OptionMenu_GetControlSetupMenu())->items[index].max));
     }
-    Menu_SetNextAction((int)pMenu->pParent);
+    Menu_SetNextAction(pMenu->pParent);
 }
 
 // Callback of the option menu: applies the highlighted item when the confirm
@@ -8612,7 +8610,7 @@ void OptionMenu_ConfirmHighlightedItem(Menu *pMenu)
 
 #include "Sprite.h"
 
-extern int g_unk0x0082ca20[9];
+extern Texture *g_unk0x0082ca20[9];
 extern int g_unk0x0082c6bc;
 extern int g_unk0x0082c698[6];
 extern BYTE g_unk0x005270e4[8];
@@ -8650,7 +8648,7 @@ void OptionMenu_DrawCountryFlags(void)
     else
         width = 0x136;
     width = width * (int)g_pGraphics->resX / 0x280;
-    pTexture = (Texture *)g_unk0x0082ca20[0];
+    pTexture = g_unk0x0082ca20[0];
     dest.x = (short)width - pTexture->width / 2;
     dest.w = pTexture->width;
     dest.h = pTexture->height;
@@ -8667,7 +8665,7 @@ void OptionMenu_DrawCountryFlags(void)
             dest.y = dest.y - g_unk0x00527254[g_unk0x0082c698[i]];
         else
             dest.y = dest.y - g_unk0x00527260[g_unk0x0082c698[i]];
-        pTexture = (Texture *)g_unk0x0082ca20[g_unk0x0082c698[i]];
+        pTexture = g_unk0x0082ca20[g_unk0x0082c698[i]];
         Sprite_Queue((SpriteRect *)&pTexture->field_0x11c, &dest, pTexture, 3, 0, NULL, NULL,
                      g_unk0x005270e4, 8);
     }
@@ -8695,7 +8693,7 @@ void InRaceMenu_DrawLabelAndValueRows(Menu *pMenu)
     char single;
     bool twoLines;
     int *pColour;
-    int texture;
+    Texture *texture;
 
     g_unk0x0052ad58[0] = 0;
     g_unk0x0052ad58[1] = 0;
@@ -8703,11 +8701,11 @@ void InRaceMenu_DrawLabelAndValueRows(Menu *pMenu)
     y = (int)(g_pGraphics->resY * 0xaa) / 0x1e0;
     g_unk0x0052ad58[3] = (short)g_pGraphics->resY;
     Font_SetBlendMode(2);
-    Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x0052ad58, (BYTE *)&g_unk0x0051608c, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x0052ad58, (BYTE *)&g_unk0x0051608c, 2);
     InRaceMenu_DrawHeaderBar();
     g_unk0x0052ad58[0] = (short)((int)(g_pGraphics->resX * 0x70) / 0x280);
-    g_unk0x0052ad58[2] = *(short *)(g_unk0x0052aa60 + 0x120);
-    g_unk0x0052ad58[3] = *(short *)(g_unk0x0052aa60 + 0x122);
+    g_unk0x0052ad58[2] = g_unk0x0052aa60->width;
+    g_unk0x0052ad58[3] = g_unk0x0052aa60->height;
     g_unk0x0052ad58[1] = (short)((int)(g_pGraphics->resY * 0xaa) / 0x1e0
                                  - (int)(g_pGraphics->resY * 0xd) / 0x1e0);
     for (i = 0; i < pMenu->itemCount; i++) {
@@ -8722,8 +8720,8 @@ void InRaceMenu_DrawLabelAndValueRows(Menu *pMenu)
                 pColour = &g_unk0x00516078;
                 texture = g_unk0x0052aa68;
             }
-            Sprite_Queue((SpriteRect *)(texture + 0x11c), (SpriteRect *)g_unk0x0052ad58,
-                         (Texture *)texture, 2, 0, NULL, NULL, (BYTE *)pColour, 8);
+            Sprite_Queue((SpriteRect *)&texture->field_0x11c, (SpriteRect *)g_unk0x0052ad58,
+                         texture, 2, 0, NULL, NULL, (BYTE *)pColour, 8);
             twoLines = true;
             switch (pItem->value) {
             case 1:
@@ -8806,12 +8804,12 @@ void InRaceMenu_DrawSliderRows(Menu *pMenu)
     Font_SetBlendMode(2);
     *(DWORD *)fade = g_unk0x0051608c;
     fade[3] = 0x73;
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, fade, 2);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, fade, 2);
     InRaceMenu_DrawHeaderBar();
     maxWidth = 0;
     rect[0] = (short)((int)(g_pGraphics->resX * 0x70) / 0x280);
-    rect[2] = *(short *)(g_unk0x0052aa60 + 0x120);
-    rect[3] = *(short *)(g_unk0x0052aa60 + 0x122);
+    rect[2] = g_unk0x0052aa60->width;
+    rect[3] = g_unk0x0052aa60->height;
     for (k = 0; k < pMenu->itemCount; k++) {
         if (pMenu->items[k].id == 0x62)
             break;
@@ -8861,7 +8859,7 @@ void InRaceMenu_DrawSliderRows(Menu *pMenu)
                                  - (int)(g_pGraphics->resY * 0xc) / 0x1e0);
                 bar[2] = (short)((int)(g_pGraphics->resX * 0x17) / 0x280);
                 bar[3] = (short)((int)(g_pGraphics->resY * 0xe) / 0x1e0);
-                Sprite_FillRect((int)g_pGraphics + 0x150, bar, (BYTE *)pColour, 2);
+                Sprite_FillRect(&g_pGraphics->field309_0x150, bar, (BYTE *)pColour, 2);
                 break;
             default:
                 y = (int)(g_pGraphics->resY * 0xaa) / 0x1e0
@@ -8874,11 +8872,11 @@ void InRaceMenu_DrawSliderRows(Menu *pMenu)
                               + ((int)(g_pGraphics->resY * 0x2a) / 0x1e0) * i
                               - (int)(g_pGraphics->resY * 0xd) / 0x1e0);
             if (pMenu->cursor == i)
-                Sprite_Queue((SpriteRect *)(g_unk0x0052aa60 + 0x11c), (SpriteRect *)rect,
-                             (Texture *)g_unk0x0052aa60, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516074, 8);
+                Sprite_Queue((SpriteRect *)&g_unk0x0052aa60->field_0x11c, (SpriteRect *)rect,
+                             g_unk0x0052aa60, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516074, 8);
             else
-                Sprite_Queue((SpriteRect *)(g_unk0x0052aa68 + 0x11c), (SpriteRect *)rect,
-                             (Texture *)g_unk0x0052aa68, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516078, 8);
+                Sprite_Queue((SpriteRect *)&g_unk0x0052aa68->field_0x11c, (SpriteRect *)rect,
+                             g_unk0x0052aa68, 2, 0, NULL, NULL, (BYTE *)&g_unk0x00516078, 8);
             i++;
             pItem++;
         } while (i < pMenu->itemCount);
@@ -8907,17 +8905,17 @@ void InRaceMenu_DrawCarSetupChoices(Menu *pMenu)
     int index;
     int *pColour;
     int *pSubColour;
-    int texture;
+    Texture *texture;
 
     rect[0] = 0;
     rect[1] = 0;
     rect[2] = (short)g_pGraphics->resX;
     rect[3] = (short)g_pGraphics->resY;
     Font_SetBlendMode(2);
-    Sprite_FillRect((int)g_pGraphics + 0x150, rect, (BYTE *)&g_unk0x0051608c, 4);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, rect, (BYTE *)&g_unk0x0051608c, 4);
     rect[0] = (short)((int)(g_pGraphics->resX * 0x70) / 0x280);
-    rect[2] = *(short *)(g_unk0x0052aa60 + 0x120);
-    rect[3] = *(short *)(g_unk0x0052aa60 + 0x122);
+    rect[2] = g_unk0x0052aa60->width;
+    rect[3] = g_unk0x0052aa60->height;
     i = 0;
     if (pMenu->itemCount > 0) {
         pItem = pMenu->items;
@@ -9012,8 +9010,8 @@ void InRaceMenu_DrawCarSetupChoices(Menu *pMenu)
                 pColour = &g_unk0x00516078;
                 texture = g_unk0x0052aa68;
             }
-            Sprite_Queue((SpriteRect *)(texture + 0x11c), (SpriteRect *)rect,
-                         (Texture *)texture, 2, 0, NULL, NULL, (BYTE *)pColour, 8);
+            Sprite_Queue((SpriteRect *)&texture->field_0x11c, (SpriteRect *)rect,
+                         texture, 2, 0, NULL, NULL, (BYTE *)pColour, 8);
             i++;
             pItem++;
         } while (i < pMenu->itemCount);
@@ -9077,10 +9075,10 @@ void OptionMenu_DrawSeparators(int param1)
         g_controlsLine[3] = (short)((int)(g_pGraphics->resY * 0xf5) / 0x1e0) - g_controlsLine[1];
         // Drawn first: the bounds below read the line after Sprite_FillRect.
         if (i % 2 == 0) {
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_controlsLine,
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_controlsLine,
                             (BYTE *)&g_unk0x00526ffc, 4);
         } else {
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_controlsLine,
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_controlsLine,
                             (BYTE *)&g_unk0x00526ffc, 1);
         }
         if (i == 0) {
@@ -9115,7 +9113,7 @@ void OptionMenu_DrawSeparators(int param1)
         g_unk0x0082ace8.pad[0] = (short)minX;
         g_unk0x0082ace8.pad[1] = (short)((int)(g_pGraphics->resY * 0xf5) / 0x1e0);
         g_unk0x0082ace8.pad[2] = (short)(maxX - minX + 1);
-        Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x0082ace8.pad, (BYTE *)&g_unk0x00526ffc, 1);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x0082ace8.pad, (BYTE *)&g_unk0x00526ffc, 1);
     }
     centre = minX + (maxX - minX) / 2;
     g_controlsLine[0] = (short)centre;
@@ -9123,16 +9121,16 @@ void OptionMenu_DrawSeparators(int param1)
     if (centre <= (int)(g_pGraphics->resX * 0xe4) / 0x280) {
         g_controlsLine[3] = (short)((int)(g_pGraphics->resY * 0xff) / 0x1e0) -
                             (short)((int)(g_pGraphics->resY * 0xf5) / 0x1e0);
-        Sprite_FillRect((int)g_pGraphics + 0x150, g_controlsLine, (BYTE *)&g_unk0x00526ffc, 1);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, g_controlsLine, (BYTE *)&g_unk0x00526ffc, 1);
         return;
     }
     g_controlsLine[3] = (short)((int)(g_pGraphics->resY * 0x114) / 0x1e0) -
                         (short)((int)(g_pGraphics->resY * 0xf5) / 0x1e0);
-    Sprite_FillRect((int)g_pGraphics + 0x150, g_controlsLine, (BYTE *)&g_unk0x00526ffc, 1);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, g_controlsLine, (BYTE *)&g_unk0x00526ffc, 1);
     g_unk0x0082ace8.pad[0] = (short)((int)(g_pGraphics->resX * 0xe5) / 0x280);
     g_unk0x0082ace8.pad[1] = (short)((int)(g_pGraphics->resY * 0x114) / 0x1e0);
     g_unk0x0082ace8.pad[2] = (short)(centre - g_unk0x0082ace8.pad[0] + 1);
-    Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x0082ace8.pad, (BYTE *)&g_unk0x00526ffc, 1);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x0082ace8.pad, (BYTE *)&g_unk0x00526ffc, 1);
 }
 
 // 0x50-byte entry of 0x82c6c8 as seen by the option panel animation: the source
@@ -9252,14 +9250,14 @@ void OptionMenu_SelectDisplaySlot(int param_1)
             param_1 = param_1 % g_unk0x0082c694;
             CGameInfo::SwitchOptionPreviewMode(param_1);
         }
-        Menu_SetFlags((Menu *)OptionMenu_GetControlSetupMenu(), 1, 1, 1, 1);
+        Menu_SetFlags(OptionMenu_GetControlSetupMenu(), 1, 1, 1, 1);
         if ((signed char)g_unk0x0082ca1c != param_1) {
             CGameInfo::SelectIdleOptionPreviewEntry((BYTE)(param_1 % g_unk0x0082c694));
             OptionMenu_AnimateSelectedPanel();
             return;
         }
     } else {
-        Menu_SetFlags((Menu *)OptionMenu_GetControlSetupMenu(), 0, 0, 0, 0);
+        Menu_SetFlags(OptionMenu_GetControlSetupMenu(), 0, 0, 0, 0);
     }
     OptionMenu_AnimateSelectedPanel();
 }
@@ -9288,7 +9286,7 @@ void OptionMenu_SelectAndAnimateSlot(int param_1, int param_2)
 // FUNCTION: CMR2 0x0050a8a0
 void OptionMenu_DrawRecalledRallyEntry(int param_1, int param_2)
 {
-    int value = OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14];
+    int value = OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max;
     OptionMenu_DrawAnimatedScreenRows(7, value, 2, g_unk0x005293a0, 0xf2, param_2);
 }
 
@@ -9296,7 +9294,7 @@ void OptionMenu_DrawRecalledRallyEntry(int param_1, int param_2)
 // FUNCTION: CMR2 0x0050a8e0
 void OptionMenu_DrawModeStageList(int param_1)
 {
-    int value = OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2) * 0x14];
+    int value = OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max;
     OptionMenu_DrawAnimatedScreenRows(0xb, value, 1, g_unk0x005293a0, 0xaa, 0);
 }
 
@@ -9307,7 +9305,7 @@ void OptionMenu_DrawModeTitle(void)
     OptionMenu_DrawTransitionTextShortCoords(4, 0, 0, CFrontend::GetTextString(0x133),
                  (int)g_pGraphics->resX * 0xf0 / 0x280, (int)g_pGraphics->resY * 200 / 0x1e0,
                  g_unk0x00527380, g_unk0x0052738c, 0x11);
-    int value = OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 5) * 0x14];
+    int value = OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 5)].max;
     OptionMenu_DrawAnimatedScreenRows(2, value, 3, 0xf0, 0xd7, 0);
 }
 
@@ -9365,7 +9363,7 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
     int i;
     int width;
 
-    index = OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14];
+    index = OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max;
     pColour = &g_unk0x0052737c;
     g_unk0x00831660[0] = (short)((int)g_pGraphics->resX * 0x1c / 0x280);
     g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x160 / 0x1e0);
@@ -9373,7 +9371,7 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
     g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0);
     if (!(char)param_2)
         pColour = &g_unk0x00527380[2];
-    Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)&g_unk0x005273b8, 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)&g_unk0x005273b8, 3);
     if ((char)param_2 != '\0' && (CMain::GetFrameDelta() / 0x14 & 1) == 0) {
         g_unk0x00831660[0] -= 3;
         g_unk0x00831660[2] += 6;
@@ -9399,16 +9397,16 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 != '\0')
             OptionMenu_DrawBoxEdges(g_unk0x00831660, (BYTE *)&g_unk0x00527380[2]);
-        if (OptionMenu_GetValueSliderMenu()[0x1f] == 6)
+        if (OptionMenu_GetValueSliderMenu()->items[0].max == 6)
             g_unk0x00831660[0] = (short)((int)g_pGraphics->resX * 0x151 / 0x280);
         else
-            g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()[0x1f] * 0x1824 / 0x78 + 0x1c) *
+            g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()->items[0].max * 0x1824 / 0x78 + 0x1c) *
                                          (int)g_pGraphics->resX / 0x280);
         g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x160 / 0x1e0 + 1);
         g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0x12 / 0x280);
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 == '\0' || (CMain::GetFrameDelta() / 0x14 & 1) == 0)
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)pColour, 3);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)pColour, 3);
         g_unk0x00831660[2] = 1;
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0x1a / 0x1e0);
         g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x16f / 0x1e0);
@@ -9446,7 +9444,7 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
                 else
                     x -= Font_GetTextWidth(1, (BYTE *)CFrontend::m_stringDest) / 2;
                 g_unk0x00831660[0] = (short)((centre + x) / 2);
-                Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660,
+                Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660,
                                 (BYTE *)&g_unk0x00527380[2], 3);
             }
         }
@@ -9462,16 +9460,16 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 != '\0')
             OptionMenu_DrawBoxEdges(g_unk0x00831660, (BYTE *)&g_unk0x00527380[2]);
-        if (OptionMenu_GetValueSliderMenu()[0x1f] == 4)
+        if (OptionMenu_GetValueSliderMenu()->items[0].max == 4)
             g_unk0x00831660[0] = (short)((int)g_pGraphics->resX * 0x151 / 0x280);
         else
-            g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()[0x1f] * 0x1e2d / 100 + 0x1c) *
+            g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()->items[0].max * 0x1e2d / 100 + 0x1c) *
                                          (int)g_pGraphics->resX / 0x280);
         g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x160 / 0x1e0 + 1);
         g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0x12 / 0x280);
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 == '\0' || (CMain::GetFrameDelta() / 0x14 & 1) == 0)
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)pColour, 3);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)pColour, 3);
         Font_DrawText(1, CFrontend::GetTextString(0xc9),
                       (int)g_pGraphics->resX * 0x1c / 0x280,
                       (int)g_pGraphics->resY * 0x16c / 0x1e0, g_unk0x00527380, 9);
@@ -9487,13 +9485,13 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 != '\0')
             OptionMenu_DrawBoxEdges(g_unk0x00831660, (BYTE *)&g_unk0x00527380[2]);
-        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()[0x1f] * 0x135 / 10 + 0x1c) *
+        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()->items[0].max * 0x135 / 10 + 0x1c) *
                                      (int)g_pGraphics->resX / 0x280);
         g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x160 / 0x1e0 + 1);
         g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0x12 / 0x280);
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 == '\0' || (CMain::GetFrameDelta() / 0x14 & 1) == 0)
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)pColour, 3);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)pColour, 3);
         Font_DrawText(1, CFrontend::GetTextString(0xcb),
                       (int)g_pGraphics->resX * 0x1c / 0x280,
                       (int)g_pGraphics->resY * 0x16c / 0x1e0, g_unk0x00527380, 9);
@@ -9509,13 +9507,13 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 != '\0')
             OptionMenu_DrawBoxEdges(g_unk0x00831660, (BYTE *)&g_unk0x00527380[2]);
-        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()[0x1f] * 0x135 / 10 + 0x1c) *
+        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()->items[0].max * 0x135 / 10 + 0x1c) *
                                      (int)g_pGraphics->resX / 0x280);
         g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x160 / 0x1e0 + 1);
         g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0x12 / 0x280);
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 == '\0' || (CMain::GetFrameDelta() / 0x14 & 1) == 0)
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)pColour, 3);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)pColour, 3);
         Font_DrawText(1, CFrontend::GetTextString(0xce),
                       (int)g_pGraphics->resX * 0x1c / 0x280,
                       (int)g_pGraphics->resY * 0x16c / 0x1e0, g_unk0x00527380, 9);
@@ -9531,13 +9529,13 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 != '\0')
             OptionMenu_DrawBoxEdges(g_unk0x00831660, (BYTE *)&g_unk0x00527380[2]);
-        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()[0x1f] * 0x135 / 10 + 0x1c) *
+        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()->items[0].max * 0x135 / 10 + 0x1c) *
                                      (int)g_pGraphics->resX / 0x280);
         g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x160 / 0x1e0 + 1);
         g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0x12 / 0x280);
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 == '\0' || (CMain::GetFrameDelta() / 0x14 & 1) == 0)
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)pColour, 3);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)pColour, 3);
         Font_DrawText(1, CFrontend::GetTextString(0xce),
                       (int)g_pGraphics->resX * 0x1c / 0x280,
                       (int)g_pGraphics->resY * 0x16c / 0x1e0, g_unk0x00527380, 9);
@@ -9553,13 +9551,13 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 != '\0')
             OptionMenu_DrawBoxEdges(g_unk0x00831660, (BYTE *)&g_unk0x00527380[2]);
-        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()[0x1f] * 0x135 / 10 + 0x1c) *
+        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()->items[0].max * 0x135 / 10 + 0x1c) *
                                      (int)g_pGraphics->resX / 0x280);
         g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x160 / 0x1e0 + 1);
         g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0x12 / 0x280);
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 == '\0' || (CMain::GetFrameDelta() / 0x14 & 1) == 0)
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)pColour, 3);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)pColour, 3);
         Font_DrawText(1, CFrontend::GetTextString(0xd2),
                       (int)g_pGraphics->resX * 0x1c / 0x280,
                       (int)g_pGraphics->resY * 0x16c / 0x1e0, g_unk0x00527380, 9);
@@ -9575,13 +9573,13 @@ void OptionMenu_DrawGameInfoLayout(int param_1, int param_2)
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 != '\0')
             OptionMenu_DrawBoxEdges(g_unk0x00831660, (BYTE *)&g_unk0x00527380[2]);
-        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()[0x1f] * 0x135 / 10 + 0x1c) *
+        g_unk0x00831660[0] = (short)((OptionMenu_GetValueSliderMenu()->items[0].max * 0x135 / 10 + 0x1c) *
                                      (int)g_pGraphics->resX / 0x280);
         g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x160 / 0x1e0 + 1);
         g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0x12 / 0x280);
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((char)param_2 == '\0' || (CMain::GetFrameDelta() / 0x14 & 1) == 0)
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)pColour, 3);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)pColour, 3);
         Font_DrawText(1, CFrontend::GetTextString(0xcf),
                       (int)g_pGraphics->resX * 0x1c / 0x280,
                       (int)g_pGraphics->resY * 0x16c / 0x1e0, g_unk0x00527380, 9);
@@ -9720,9 +9718,9 @@ void OptionMenu_DrawValueSelectionRows(unsigned int param_1)
     g_unk0x00831660[3] = 1;
     OptionMenu_EaseRecordBar(0, g_unk0x00831660, 1, 1);
     if (sel == 0)
-        Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)&colour, 1);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)&colour, 1);
     else
-        Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)&g_unk0x00527380[2], 1);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)&g_unk0x00527380[2], 1);
     for (i = 0; i < (int)*(signed char *)(param_1 + 6); i++) {
         if (g_unk0x0083166c != 0) {
             if (CGameInfo::GetScreenWidth() < 0x400 || !CFrontend::IsTextureWidthSupported(0x400) ||
@@ -9756,11 +9754,11 @@ void OptionMenu_DrawValueSelectionRows(unsigned int param_1)
             (short)((int)g_pGraphics->resY * 0x18 / 0x1e0 * (i + 1) + yBase);
         if (i == sel || i + 1 == sel) {
             if (CGameInfo::IsOptionMenuTimeoutPulseOn() != 0)
-                Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)&g_unk0x00527378, 1);
+                Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)&g_unk0x00527378, 1);
             else
-                Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)&colour, 1);
+                Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)&colour, 1);
         } else {
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)&g_unk0x00527380[2], 1);
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)&g_unk0x00527380[2], 1);
         }
     }
 }
@@ -9780,22 +9778,16 @@ void OptionMenu_DispatchRecordEditState(unsigned int param_1)
         OptionMenu_DrawResultsRallyInfo(0);
         OptionMenu_DrawSeparators(CGameInfo::GetActiveOptionSlot());
         if (g_unk0x00529430 !=
-            OptionMenu_GetColumnLabelId(OptionMenu_GetControlSetupMenu()[0x1f +
-                                        Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14])) {
+            OptionMenu_GetColumnLabelId(OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max)) {
             OptionPreview_SetTargetModelAngles(CGameInfo::GetActiveOptionSlot(),
                          &g_previewPartRotationPresets[OptionMenu_GetColumnLabelId(
-                             OptionMenu_GetControlSetupMenu()[0x1f +
-                                            Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14])],
+                             OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max)],
                          0);
             OptionMenu_SetTargetLayoutPairs(CGameInfo::GetActiveOptionSlot(),
                          &g_previewProjectedPartQuads[OptionMenu_GetColumnLabelId(
-                             OptionMenu_GetControlSetupMenu()[0x1f +
-                                            Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14])].points[0].x,
+                             OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max)].points[0].x,
                          0);
-            g_unk0x00529430 = OptionMenu_GetColumnLabelId(OptionMenu_GetControlSetupMenu()[0x1f +
-                                                           Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(),
-                                                                         1) *
-                                                               0x14]);
+            g_unk0x00529430 = OptionMenu_GetColumnLabelId(OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max);
             return;
         }
         break;
@@ -9805,22 +9797,16 @@ void OptionMenu_DispatchRecordEditState(unsigned int param_1)
         OptionMenu_DrawResultsRallyInfo(1);
         OptionMenu_DrawSeparators(CGameInfo::GetActiveOptionSlot());
         if (g_unk0x00529430 !=
-            OptionMenu_GetColumnWeight(OptionMenu_GetControlSetupMenu()[0x1f +
-                                        Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2) * 0x14])) {
+            OptionMenu_GetColumnWeight(OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max)) {
             OptionPreview_SetTargetModelAngles(CGameInfo::GetActiveOptionSlot(),
                          &g_previewPartRotationPresets[OptionMenu_GetColumnWeight(
-                             OptionMenu_GetControlSetupMenu()[0x1f +
-                                            Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2) * 0x14])],
+                             OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max)],
                          0);
             OptionMenu_SetTargetLayoutPairs(CGameInfo::GetActiveOptionSlot(),
                          &g_previewProjectedPartQuads[OptionMenu_GetColumnWeight(
-                             OptionMenu_GetControlSetupMenu()[0x1f +
-                                            Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2) * 0x14])].points[0].x,
+                             OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max)].points[0].x,
                          0);
-            g_unk0x00529430 = OptionMenu_GetColumnWeight(OptionMenu_GetControlSetupMenu()[0x1f +
-                                                           Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(),
-                                                                         2) *
-                                                               0x14]);
+            g_unk0x00529430 = OptionMenu_GetColumnWeight(OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max);
             return;
         }
         break;
@@ -9887,13 +9873,13 @@ void OptionMenu_DrawResultsRallyInfo(int param_1)
     g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0xff / 0x1e0);
     g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0xc9 / 0x280);
     g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0x5d / 0x1e0);
-    Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, g_colour0x005273b0, 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, g_colour0x005273b0, 3);
     g_unk0x00831660[0] = g_unk0x00831660[0] + g_unk0x00831660[2];
     g_unk0x00831660[3] = g_unk0x00831660[3] + g_unk0x00831660[1];
     g_unk0x00831660[1] = (short)((int)g_pGraphics->resY * 0x12a / 0x1e0);
     g_unk0x00831660[3] = g_unk0x00831660[3] - g_unk0x00831660[1];
     g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0x7e / 0x280);
-    Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, g_colour0x005273b0 + 4, 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, g_colour0x005273b0 + 4, 3);
     x = g_unk0x00831660[2] / 2 + g_unk0x00831660[0];
     y = (int)g_pGraphics->resY * 0x124 / 0x1e0;
     if (param_1 != 0)
@@ -9906,10 +9892,10 @@ void OptionMenu_DrawResultsRallyInfo(int param_1)
     Font_DrawText(1, CFrontend::m_stringDest, x, y, g_unk0x00527380, 0x11);
     if (param_1 != 0) {
         tex = g_unk0x0083137c[OptionMenu_GetColumnWeight(
-            OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2) * 0x14])];
+            OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max)];
     } else {
         tex = g_unk0x0083137c[OptionMenu_GetColumnLabelId(
-            OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14])];
+            OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max)];
     }
     if (tex != NULL) {
         g_unk0x00831660[0] = (short)((int)g_pGraphics->resX * 0x2c / 0x280);
@@ -9931,12 +9917,12 @@ void OptionMenu_DrawResultsRallyInfo(int param_1)
                       (int)g_pGraphics->resY * 0x17c / 0x1e0, g_unk0x00527380, 0x11);
         sprintf(CFrontend::m_stringDest, g_str0x00524e20);
         Font_DrawText(0, CFrontend::m_stringDest,
-                      *(int *)&g_unk0x00831660[0] + *(int *)&g_unk0x00831660[2],
+                      OptionMenu_AddPackedScreenRectangleWords((int *)g_unk0x00831660),
                       (int)g_pGraphics->resY * 0x17c / 0x1e0, g_unk0x00527380, 0x14);
         Font_DrawText(1, CFrontend::GetTextString(0xf9),
                       g_unk0x00831660[2] / 2 + *(int *)&g_unk0x00831660[0],
                       (int)g_pGraphics->resY * 0x17c / 0x1e0, g_unk0x00527380, 0x12);
-        int idx = OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2) * 0x14];
+        int idx = OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max;
         t = FixDiv(OptionMenu_GetRecordPercentage(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight(idx), 1) << 16,
                    0x640000);
         if (t <= -1)
@@ -9961,13 +9947,13 @@ void OptionMenu_DrawResultsRallyInfo(int param_1)
         g_unk0x00831660[2] = (short)((int)g_pGraphics->resX * 0x12 / 0x280);
         g_unk0x00831660[3] = (short)((int)g_pGraphics->resY * 0xd / 0x1e0 - 2);
         if ((CMain::GetFrameDelta() / 0x14 & 1) == 0)
-            Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660,
+            Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660,
                             (BYTE *)&g_unk0x0052737c, 3);
         w = OptionMenu_GetColumnWeight(idx);
         t = OptionMenu_GetRecordGroupWeight(w);
         base = 0xc;
     } else {
-        int idx = OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1) * 0x14];
+        int idx = OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max;
         base = 0xad;
         t = g_unk0x005293c0[idx] * 6000;
         w = idx;
@@ -10011,7 +9997,7 @@ void OptionMenu_DrawStageSelectionPanel(int param_1)
     for (i = 0; i < CGameInfo::GetPreviewLayoutMode(); i++) {
         sprintf(CFrontend::m_stringDest, g_stageNumberFormat,
                 (RallyDataStageIndex() & 0xff) + 1 + i);
-        if (i == OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 0) * 0x14]) {
+        if (i == OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 0)].max) {
             Font_DrawText(0, CFrontend::m_stringDest,
                           (int)g_pGraphics->resX * 0x25f / 0x280,
                           (int)g_pGraphics->resY * 0xb4 / 0x1e0 +
@@ -10025,13 +10011,13 @@ void OptionMenu_DrawStageSelectionPanel(int param_1)
                           g_unk0x00527380, 0xc);
         }
     }
-    pRec = RallyData_GetDriverSettingPair(OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 0) * 0x14]);
+    pRec = RallyData_GetDriverSettingPair(OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 0)].max);
     sprintf(CFrontend::m_stringDest, g_str0x0052960c,
             CFrontend::GetTextString(*pRec + 0x9d));
     Font_DrawText(0, CFrontend::m_stringDest,
                   (int)g_pGraphics->resX * 100 / 0x280,
                   (int)g_pGraphics->resY * 400 / 0x1e0, g_unk0x00527380, 9);
-    OptionMenu_SelectAndAnimateSlot(OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 0) * 0x14], 1);
+    OptionMenu_SelectAndAnimateSlot(OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 0)].max, 1);
 }
 
 // Draws the bottom panel of the options screen: the animated strip of all the
@@ -10043,7 +10029,7 @@ void OptionMenu_DrawSlotStripPanel(int param_1)
     SpriteRect local;
 
     OptionMenu_DrawAnimatedScreenRows((short)CGameInfo::GetPreviewLayoutMode(),
-                 OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 0) * 0x14],
+                 OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 0)].max,
                  0, g_unk0x005293a0, 0x124, 0);
     if (g_unk0x00831668 != 0) {
         g_unk0x00831660[0] = (short)(g_unk0x005293a0 * (int)g_pGraphics->resX / 0x280);
@@ -10057,7 +10043,7 @@ void OptionMenu_DrawSlotStripPanel(int param_1)
         Sprite_Queue(&local, (SpriteRect *)g_unk0x00831660, g_unk0x00831668,
                      1, 0, NULL, NULL, g_colour0x005273a8, 8);
     }
-    OptionMenu_SelectAndAnimateSlot(OptionMenu_GetControlSetupMenu()[0x1f + Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 0) * 0x14],
+    OptionMenu_SelectAndAnimateSlot(OptionMenu_GetControlSetupMenu()->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 0)].max,
                  0);
 }
 
@@ -10152,7 +10138,7 @@ void OptionMenu_DrawResultsOptions(int param_1)
         FixMul(0x10000 - f, (int)(__int64)((double)(colour >> 16 & 0xff) * CGraphics::m_65536));
         break;
     }
-    while (i < (signed char)OptionMenu_GetControlSetupMenu()[6]) {
+    while (i < (signed char)OptionMenu_GetControlSetupMenu()->itemCount) {
         a = OptionMenu_FindFirstDetailedSlot();
         b = OptionMenu_FindFirstDetailedSlot();
         if (CGameInfo::GetConfiguredGameMode() != 0 && i == 4)
@@ -10161,21 +10147,21 @@ void OptionMenu_DrawResultsOptions(int param_1)
             b--;
         if (a == i)
             OptionMenu_DrawTransitionText(6, 0, 0,
-                         CFrontend::GetTextString(*(short *)(OptionMenu_GetControlSetupMenu() + i * 0x14 + 0x18)),
+                         CFrontend::GetTextString(OptionMenu_GetControlSetupMenu()->items[i].id),
                          x, (int)g_pGraphics->resY * 0x2c / 0x1e0, &colour, g_unk0x00527380, 0x11);
         else
             Font_DrawText(0,
-                          CFrontend::GetTextString(*(short *)(OptionMenu_GetControlSetupMenu() + i * 0x14 + 0x18)),
+                          CFrontend::GetTextString(OptionMenu_GetControlSetupMenu()->items[i].id),
                           x, (int)g_pGraphics->resY * 0x2c / 0x1e0, g_unk0x00527380, 0x11);
         x += Font_GetTextWidth(0, (BYTE *)CFrontend::GetTextString(
-                                      *(short *)(OptionMenu_GetControlSetupMenu() + i * 0x14 + 0x18)));
+                                      OptionMenu_GetControlSetupMenu()->items[i].id));
         x += Font_GetTextWidth(0, (BYTE *)((char *)&g_unk0x0051682c[0x44]));
         g_unk0x00831660[0] = (short)x;
-        if (i != (signed char)OptionMenu_GetControlSetupMenu()[6] - 1) {
+        if (i != (signed char)OptionMenu_GetControlSetupMenu()->itemCount - 1) {
             if (a == i || b == i + 1)
-                Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)&colour, 3);
+                Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)&colour, 3);
             else
-                Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660,
+                Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660,
                                 (BYTE *)(g_unk0x00527380 + 2), 3);
         }
         x += 2 + Font_GetTextWidth(0, (BYTE *)((char *)&g_unk0x0051682c[0x44]));
@@ -10189,7 +10175,7 @@ void OptionMenu_DrawResultsOptions(int param_1)
     x += Font_GetTextWidth(0, (BYTE *)CFrontend::m_stringDest);
     x += Font_GetTextWidth(0, (BYTE *)((char *)&g_unk0x0051682c[0x44]));
     g_unk0x00831660[0] = (short)x;
-    Sprite_FillRect((int)g_pGraphics + 0x150, g_unk0x00831660, (BYTE *)(g_unk0x00527380 + 2), 3);
+    Sprite_FillRect(&g_pGraphics->field309_0x150, g_unk0x00831660, (BYTE *)(g_unk0x00527380 + 2), 3);
     x += 2 + Font_GetTextWidth(0, (BYTE *)((char *)&g_unk0x0051682c[0x44]));
     Font_DrawText(0, (char *)RallyData_GetRecord((BYTE)CGameInfo::GetActiveOptionSlot()), x,
                   (int)g_pGraphics->resY * 0x2c / 0x1e0, g_unk0x00527380, 0x11);
@@ -10284,7 +10270,7 @@ void OptionMenu_DrawStageSummaryPanel(int param_1, int param_2)
         right = Font_GetTextWidth(0, (BYTE *)CFrontend::m_stringDest) + x;
         right += Font_GetTextWidth(0, (BYTE *)((char *)&g_unk0x0051682c[0x44]));
         bar[0] = (short)right;
-        Sprite_FillRect((int)g_pGraphics + 0x150, bar, (BYTE *)(g_unk0x005297ac + 3), 3);
+        Sprite_FillRect(&g_pGraphics->field309_0x150, bar, (BYTE *)(g_unk0x005297ac + 3), 3);
         right += 2 + Font_GetTextWidth(0, (BYTE *)((char *)&g_unk0x0051682c[0x44]));
         if (param_2 == 10)
             sprintf(CFrontend::m_stringDest, CFrontend::GetTextString(0x13c),
@@ -10535,11 +10521,11 @@ void OptionMenu_LoadSelectedSavedGame(unsigned int param1, unsigned int param2)
 {
     if (SavedGames_WriteSessionImage(g_unk0x0082a924, NULL)) {
         strcpy(g_unk0x0082a93c, CFrontend::GetTextString(0x143));
-        Menu_SetNextAction((int)OptionMenu_GetStatusMenu());
+        Menu_SetNextAction(OptionMenu_GetStatusMenu());
         SavedGames_LoadRecords();
     } else {
         strcpy(g_unk0x0082a93c, CFrontend::GetTextString(0x144));
-        Menu_SetNextAction((int)OptionMenu_GetStatusMenu());
+        Menu_SetNextAction(OptionMenu_GetStatusMenu());
     }
 }
 
@@ -10549,7 +10535,7 @@ void OptionMenu_LoadSelectedSavedGame(unsigned int param1, unsigned int param2)
 void OptionMenu_LoadGameItem(Menu *pMenu, MenuItem *pItem)
 {
     if (g_unk0x0082ab44 != 0) {
-        Menu_SetNextAction((int)OptionMenu_GetAdvancedOptionsMenu());
+        Menu_SetNextAction(OptionMenu_GetAdvancedOptionsMenu());
         return;
     }
     if (pMenu->items[4].max == 0 && SavedGames_GetCount() > 0) {
@@ -10561,12 +10547,12 @@ void OptionMenu_LoadGameItem(Menu *pMenu, MenuItem *pItem)
         if (SavedGames_WriteSessionImage(-1, g_unk0x0082aa44) != 0) {
             strcpy(g_unk0x0082aa44, CMain::m_logFileBlankLine);
             strcpy(g_unk0x0082a93c, CFrontend::GetTextString(0x143));
-            Menu_SetNextAction((int)OptionMenu_GetStatusMenu());
+            Menu_SetNextAction(OptionMenu_GetStatusMenu());
             SavedGames_LoadRecords();
             g_unk0x0082a924 = SavedGames_GetCount() - 1;
         } else {
             strcpy(g_unk0x0082a93c, CFrontend::GetTextString(0x144));
-            Menu_SetNextAction((int)OptionMenu_GetStatusMenu());
+            Menu_SetNextAction(OptionMenu_GetStatusMenu());
         }
     }
 }
@@ -10589,19 +10575,19 @@ void OptionMenu_ConfirmOrRevertHighlightedValue(Menu *pMenu, MenuItem *pItem)
 {
     int index;
 
-    index = Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2);
-    if (OptionMenu_GetSlotSelector(CGameInfo::GetActiveOptionSlot()) - OptionMenu_GetRecordGroupWeight(OptionMenu_GetColumnWeight(((Menu *)OptionMenu_GetControlSetupMenu())->items[index].max)) < 0) {
-        if (OptionMenu_GetRecordGroupAppliedFlag(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight(((Menu *)OptionMenu_GetControlSetupMenu())->items[index].max)) == 0) {
-            if ((int)OptionMenu_GetRecordPercentage(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight(((Menu *)OptionMenu_GetControlSetupMenu())->items[index].max), 0) > 0) {
+    index = Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2);
+    if (OptionMenu_GetSlotSelector(CGameInfo::GetActiveOptionSlot()) - OptionMenu_GetRecordGroupWeight(OptionMenu_GetColumnWeight((OptionMenu_GetControlSetupMenu())->items[index].max)) < 0) {
+        if (OptionMenu_GetRecordGroupAppliedFlag(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight((OptionMenu_GetControlSetupMenu())->items[index].max)) == 0) {
+            if ((int)OptionMenu_GetRecordPercentage(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight((OptionMenu_GetControlSetupMenu())->items[index].max), 0) > 0) {
                 CGameInfo::StartOptionMenuTimeout();
                 return;
             }
             return;
         }
     }
-    if (OptionMenu_GetRecordGroupAppliedFlag(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight(((Menu *)OptionMenu_GetControlSetupMenu())->items[index].max)) == 0)
-        OptionMenu_RevertRallyRecordGroup(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight(((Menu *)OptionMenu_GetControlSetupMenu())->items[index].max));
-    Menu_SetNextAction((int)pMenu->pParent);
+    if (OptionMenu_GetRecordGroupAppliedFlag(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight((OptionMenu_GetControlSetupMenu())->items[index].max)) == 0)
+        OptionMenu_RevertRallyRecordGroup(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight((OptionMenu_GetControlSetupMenu())->items[index].max));
+    Menu_SetNextAction(pMenu->pParent);
 }
 
 // Reverts one option group of the current slot: clears the group's "changed"
@@ -11064,9 +11050,9 @@ void OptionMenu_UpdateMessagesAndRecordStates(Menu *pMenu)
         }
     }
     if (pMenu->cursor != Menu_FindItem(pMenu, 5))
-        ((Menu *)OptionMenu_GetControlSetupMenu())->items[Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 5)].max = 1;
+        (OptionMenu_GetControlSetupMenu())->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 5)].max = 1;
     OptionMenu_ConfirmHighlightedItem(pMenu);
-    value = ((Menu *)OptionMenu_GetControlSetupMenu())->items[Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1)].max;
+    value = (OptionMenu_GetControlSetupMenu())->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max;
     while (OptionMenu_IsSlotEnabled(OptionMenu_GetColumnLabelId(value),
                         CFrontend::GetArchivePrimaryIDEntry(
                             RallyData_GetDriverRecordSelectionValue(CGameInfo::GetActiveOptionSlot()) & 0xff)) == 0) {
@@ -11075,14 +11061,14 @@ void OptionMenu_UpdateMessagesAndRecordStates(Menu *pMenu)
         else
             value--;
     }
-    ((Menu *)OptionMenu_GetControlSetupMenu())->items[Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 1)].max = (BYTE)value;
+    (OptionMenu_GetControlSetupMenu())->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 1)].max = (BYTE)value;
     if (g_unk0x00526f48 != value) {
         OptionMenu_ClearTimeout();
         OptionMenu_ClearRecordTransition(5);
         OptionMenu_ClearRecordTransition(7);
     }
     g_unk0x00526f48 = value;
-    value = ((Menu *)OptionMenu_GetControlSetupMenu())->items[Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2)].max;
+    value = (OptionMenu_GetControlSetupMenu())->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max;
     while (OptionMenu_IsSlotEnabled(OptionMenu_GetColumnWeight(value),
                         CFrontend::GetArchivePrimaryIDEntry(
                             RallyData_GetDriverRecordSelectionValue(CGameInfo::GetActiveOptionSlot()) & 0xff)) == 0) {
@@ -11091,14 +11077,14 @@ void OptionMenu_UpdateMessagesAndRecordStates(Menu *pMenu)
         else
             value--;
     }
-    ((Menu *)OptionMenu_GetControlSetupMenu())->items[Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 2)].max = (BYTE)value;
+    (OptionMenu_GetControlSetupMenu())->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 2)].max = (BYTE)value;
     if (g_unk0x00526f4c != value) {
         OptionMenu_ClearTimeout();
         OptionMenu_ClearRecordTransition(5);
         OptionMenu_ClearRecordTransition(7);
     }
     g_unk0x00526f4c = value;
-    old = ((Menu *)OptionMenu_GetControlSetupMenu())->items[Menu_FindItem((Menu *)OptionMenu_GetControlSetupMenu(), 0)].max;
+    old = (OptionMenu_GetControlSetupMenu())->items[Menu_FindItem(OptionMenu_GetControlSetupMenu(), 0)].max;
     if (g_unk0x00526f50 != old)
         OptionMenu_ClearRecordTransition(7);
     g_unk0x00526f50 = old;
@@ -11118,13 +11104,13 @@ SceneNode *SceneNode_FindByType(SceneNode *, unsigned int);
 #include "Graphics.h"
 #include "FileBuffer.h"
 #include "SceneNode.h"
-int  Sector_BuildC3DModelScene(unsigned int, unsigned int, unsigned int);
+struct SceneNode *Sector_BuildC3DModelScene(void *data, struct SceneNode *parent, struct GenericFile *archive);
 char *Car_GetTextureSetPath(int, int, int);
 int  OptionPreview_UsesWheelVariantSix(int, int);
 int  OptionPreview_UsesLowWheelVariant(int, int);
 void OptionPreview_BuildDeformGeometry(OptionPreviewMeshRecord *, int);
 void OptionPreview_ProjectReferencePartQuads(int);
-int  OptionMenu_GetBackgroundRoot(void);
+SceneNode *OptionMenu_GetBackgroundRoot(void);
 
 
 // Compone el nombre de la geometria del stage (base .c3d con los sufijos A1N/L/S y su .bfl), registra y
@@ -11134,16 +11120,16 @@ int  OptionMenu_GetBackgroundRoot(void);
 int OptionPreview_LoadStageGeometryRecord(int index)
 {
     OptionPreviewSceneRecord *pEntry;
-    int hC3D;
-    int hL;
-    int hS;
-    unsigned int stage;
+    BYTE *hC3D;
+    BYTE *hL;
+    BYTE *hS;
+    SceneNode *stage;
     unsigned char model;
     unsigned char variant;
-    int *pRecord;
-    int root;
-    int nodeL;
-    int nodeS;
+    GenericFile *pRecord;
+    SceneNode *root;
+    SceneNode *nodeL;
+    SceneNode *nodeS;
     int i;
 
     stage = OptionMenu_GetBackgroundRoot();
@@ -11162,27 +11148,27 @@ int OptionPreview_LoadStageGeometryRecord(int index)
     sprintf(g_unk0x00663b60, "%s.c3d", Car_GetTextureSetPath(model, 0, 0));
     if (CGameInfo::GetPreviewMode() == 0) {
         strncpy(g_unk0x00663b60 + strlen(g_unk0x00663b60) - 6, "A1N.c3d", 8);
-        hC3D = (int)CFileBuffer::GetGenericFileBuffer(g_unk0x00663b60, 0);
+        hC3D = (BYTE *)CFileBuffer::GetGenericFileBuffer(g_unk0x00663b60, 0);
         if (!(OptionPreview_UsesLowWheelVariant(variant, 1) == 0)) {
             strncpy(g_unk0x00663b60 + strlen(g_unk0x00663b60) - 5, "L.c3d", 5);
-            hL = (int)CFileBuffer::GetGenericFileBuffer(g_unk0x00663b60, 0);
+            hL = (BYTE *)CFileBuffer::GetGenericFileBuffer(g_unk0x00663b60, 0);
         } else {
-            hL = 0;
+            hL = NULL;
         }
         if (OptionPreview_UsesWheelVariantSix(variant, 6) != 0) {
             strncpy(g_unk0x00663b60 + strlen(g_unk0x00663b60) - 5, "S.c3d", 5);
-            hS = (int)CFileBuffer::GetGenericFileBuffer(g_unk0x00663b60, 0);
+            hS = (BYTE *)CFileBuffer::GetGenericFileBuffer(g_unk0x00663b60, 0);
         } else {
-            hS = 0;
+            hS = NULL;
         }
     } else {
-        hC3D = (int)CFileBuffer::GetGenericFileBuffer(g_unk0x00663b60, 0);
-        hL = 0;
-        hS = 0;
+        hC3D = (BYTE *)CFileBuffer::GetGenericFileBuffer(g_unk0x00663b60, 0);
+        hL = NULL;
+        hS = NULL;
     }
-    g_previewNormalModelBuffers[index] = (BYTE *)hC3D;
-    g_previewLowWheelModelBuffers[index] = (BYTE *)hL;
-    g_previewSixWheelModelBuffers[index] = (BYTE *)hS;
+    g_previewNormalModelBuffers[index] = hC3D;
+    g_previewLowWheelModelBuffers[index] = hL;
+    g_previewSixWheelModelBuffers[index] = hS;
 
     sprintf(g_unk0x00663b60, "%s.bfl", Car_GetTextureSetPath(model, 0, 0));
     if (CGameInfo::GetPreviewMode() == 0)
@@ -11191,50 +11177,50 @@ int OptionPreview_LoadStageGeometryRecord(int index)
     pEntry = &g_previewSceneRecords[index];
     // the .bfl and the geometry relocations go to the 12-byte loader record of
     // this entry (0x831088, cleared on the first call above), not to pEntry
-    pRecord = (int *)&g_unk0x00831088[index];
-    CGenericFileLoader::LoadIntoFileRecord((GenericFile *)pRecord, g_unk0x00663b60);
-    if (hC3D == 0)
+    pRecord = (GenericFile *)&g_unk0x00831088[index];
+    CGenericFileLoader::LoadIntoFileRecord(pRecord, g_unk0x00663b60);
+    if (hC3D == NULL)
         return 0;
 
-    nodeL = 0;
-    nodeS = 0;
-    root = Sector_BuildC3DModelScene(hC3D, stage, (unsigned int)pRecord);
+    nodeL = NULL;
+    nodeS = NULL;
+    root = Sector_BuildC3DModelScene(hC3D, stage, pRecord);
     if (CGameInfo::GetPreviewMode() == 0) {
         Mesh **p = &pEntry->normalWheelMeshes[0];
         for (i = 1; i <= 4; i++)
-            *p++ = (Mesh *)SceneNode_FindByType((SceneNode *)root, (unsigned int)i)->pObject;
-        if (hL != 0) {
+            *p++ = (Mesh *)SceneNode_FindByType(root, (unsigned int)i)->pObject;
+        if (hL != NULL) {
             Mesh **q = &pEntry->lowWheelMeshes[0];
-            nodeL = Sector_BuildC3DModelScene(hL, stage, (unsigned int)pRecord);
+            nodeL = Sector_BuildC3DModelScene(hL, stage, pRecord);
             for (i = 1; i <= 4; i++)
-                *q++ = (Mesh *)SceneNode_FindByType((SceneNode *)nodeL, (unsigned int)i)->pObject;
-            SceneNode_SetViewMaskTree((SceneNode *)nodeL, 0);
+                *q++ = (Mesh *)SceneNode_FindByType(nodeL, (unsigned int)i)->pObject;
+            SceneNode_SetViewMaskTree(nodeL, 0);
         }
-        if (hS != 0) {
+        if (hS != NULL) {
             Mesh **q = &pEntry->sixWheelMeshes[0];
-            nodeS = Sector_BuildC3DModelScene(hS, stage, (unsigned int)pRecord);
+            nodeS = Sector_BuildC3DModelScene(hS, stage, pRecord);
             for (i = 1; i <= 4; i++)
-                *q++ = (Mesh *)SceneNode_FindByType((SceneNode *)nodeS, (unsigned int)i)->pObject;
-            SceneNode_SetViewMaskTree((SceneNode *)nodeS, 0);
+                *q++ = (Mesh *)SceneNode_FindByType(nodeS, (unsigned int)i)->pObject;
+            SceneNode_SetViewMaskTree(nodeS, 0);
         }
     }
-    pEntry->wheelNodes[0] = SceneNode_FindByType((SceneNode *)root, (unsigned int)1);
-    pEntry->wheelNodes[1] = SceneNode_FindByType((SceneNode *)root, (unsigned int)2);
-    pEntry->wheelNodes[2] = SceneNode_FindByType((SceneNode *)root, (unsigned int)3);
-    pEntry->wheelNodes[3] = SceneNode_FindByType((SceneNode *)root, (unsigned int)4);
+    pEntry->wheelNodes[0] = SceneNode_FindByType(root, (unsigned int)1);
+    pEntry->wheelNodes[1] = SceneNode_FindByType(root, (unsigned int)2);
+    pEntry->wheelNodes[2] = SceneNode_FindByType(root, (unsigned int)3);
+    pEntry->wheelNodes[3] = SceneNode_FindByType(root, (unsigned int)4);
     pEntry->modelClass = variant;
-    pEntry->rootNode = (SceneNode *)root;
-    pEntry->bodyNode = SceneNode_FindByType((SceneNode *)root, (unsigned int)5);
-    pEntry->lowWheelRoot = (SceneNode *)nodeL;
-    pEntry->sixWheelRoot = (SceneNode *)nodeS;
+    pEntry->rootNode = root;
+    pEntry->bodyNode = SceneNode_FindByType(root, (unsigned int)5);
+    pEntry->lowWheelRoot = nodeL;
+    pEntry->sixWheelRoot = nodeS;
     OptionPreview_RebuildMeshRecord(index);
     OptionPreview_BuildDeformGeometry(&g_previewMeshRecords[index], index);
     {
-        int h = (int)SceneNode_FindByType((SceneNode *)root, (unsigned int)0xe);
-        if (h != 0) {
-            int tex = *(int *)((char *)CGraphics::m_pTextureManager + *(int *)(*(int *)(*(int *)(h + 0xc) + 0x24) + 4) * 4 + 900);
-            CGraphics::RemapTextureAlpha((Texture *)tex, 0xbf, 0, 0x40, 0, 0x80, 0, index);
-            CGraphics::RemapTextureAlpha((Texture *)tex, 0xe0, 0, 0xe0, 0, 0xe0, 0, index);
+        SceneNode *h = SceneNode_FindByType(root, (unsigned int)0xe);
+        if (h != NULL) {
+            Texture *tex = CGraphics::m_pTextureManager->textureBuffer[((Mesh *)h->pObject)->pTriangles->textureIndex];
+            CGraphics::RemapTextureAlpha(tex, 0xbf, 0, 0x40, 0, 0x80, 0, index);
+            CGraphics::RemapTextureAlpha(tex, 0xe0, 0, 0xe0, 0, 0xe0, 0, index);
         }
     }
     g_previewPreviousAnimationTime = 0;

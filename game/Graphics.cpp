@@ -1,5 +1,6 @@
 #include "port/sys.h"
 #include <stdio.h>
+#include <stddef.h>
 #include <math.h>
 #include <string.h>
 #include "Graphics.h"
@@ -2678,8 +2679,7 @@ float g_unk0x006dfdf8;
 
 FixMatrix *FloatMatrix_ToFix(FixMatrix *pOut, GfxMatrix *pIn);
 GfxMatrix *FixMatrix_ToFloat(GfxMatrix *pOut, FixMatrix *pIn);
-struct Unk0x004a3e20;
-void Frontend_SetObjectField118(Unk0x004a3e20 *pObject, int value);
+void Frontend_SetObjectField118(struct Texture *pTexture, int value);
 extern unsigned int g_unk0x006de95c[20];
 extern unsigned short g_unk0x006dd9bc[2000];
 
@@ -2727,10 +2727,10 @@ void Mesh_DrawEnvMapped(Mesh *pMesh)
         Graphics_SwitchAlphaBlendAndTest(1);
         CGraphics::SetTextureAddressClamp(0);
         Frontend_SetObjectField118(
-            (Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer2[g_unk0x006de95c[(pMesh->flags >> 15) & 7]],
+            CGraphics::m_pTextureManager->textureBuffer2[g_unk0x006de95c[(pMesh->flags >> 15) & 7]],
             0xb);
         CGraphics::ApplyTextureStageChange(
-            0, (int)CGraphics::m_pTextureManager->textureBuffer2[g_unk0x006de95c[(pMesh->flags >> 15) & 7]]);
+            0, CGraphics::m_pTextureManager->textureBuffer2[g_unk0x006de95c[(pMesh->flags >> 15) & 7]]);
         if ((g_unk0x005210b8 >= 0 || (int)g_unk0x006de95c[(pMesh->flags >> 15) & 7] >= 0) &&
             triangleCount > 0) {
             for (i = 0; i < triangleCount; i++) {
@@ -2743,10 +2743,10 @@ void Mesh_DrawEnvMapped(Mesh *pMesh)
                     currentTexture = *(int *)((BYTE *)&pMesh->pTriangles[i] + 4 + textureIndex * 4);
                     if (currentTexture > -1) {
                         Frontend_SetObjectField118(
-                            (Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[currentTexture], 5);
+                            CGraphics::m_pTextureManager->textureBuffer[currentTexture], 5);
                         if (g_unk0x005210bc != 0)
                             CGraphics::ApplyTextureStageChange(
-                                1, (int)CGraphics::m_pTextureManager->textureBuffer[currentTexture]);
+                                1, CGraphics::m_pTextureManager->textureBuffer[currentTexture]);
                     }
                 }
                 if (currentTexture > -1) {
@@ -2760,9 +2760,9 @@ void Mesh_DrawEnvMapped(Mesh *pMesh)
                 texture = *(int *)((BYTE *)&pMesh->pTriangles[triangleCount - 1] + 4 + textureIndex * 4);
                 if (texture > -1) {
                     Frontend_SetObjectField118(
-                        (Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[texture], 5);
+                        CGraphics::m_pTextureManager->textureBuffer[texture], 5);
                     if (g_unk0x005210bc != 0)
-                        CGraphics::ApplyTextureStageChange(1, (int)CGraphics::m_pTextureManager->textureBuffer[texture]);
+                        CGraphics::ApplyTextureStageChange(1, CGraphics::m_pTextureManager->textureBuffer[texture]);
                     Gfx_DrawIndexedPrimitiveVB(GFX_TRIANGLELIST, CGraphics::m_pTextureManager->pVertexBuffers[pMesh->vertexBufferIndex], pMesh->vertexOffset, pMesh->field_0x10, g_unk0x006dd9bc, count);
                 }
             }
@@ -2798,8 +2798,8 @@ void Graphics_SetRecordField2C(BYTE *p, int value)
 }
 
 // Shadow volumes: up to 9 cylinders built from meshes, cached by mesh name.
-extern int g_sceneLightState2[10];
-extern BYTE g_sceneLightFlag2;
+extern Mesh *g_shadowCylinders[10];
+extern BYTE g_shadowCylinderCount;
 // 4096 / (360 * 65536): 16.16 degrees to a sine table index.
 extern double g_fixedDegreesToAngle12;
 
@@ -2835,18 +2835,18 @@ Mesh *Mesh_GetShadowCylinder(Mesh *pMesh)
     int i;
     int n;
 
-    count = g_sceneLightFlag2;
+    count = g_shadowCylinderCount;
     pFound = NULL;
     for (i = 0; i < count; i++) {
-        if (strcmp((char *)g_sceneLightState2[i], (char *)pMesh) == 0) {
-            pFound = (Mesh *)g_sceneLightState2[i];
+        if (strcmp((char *)g_shadowCylinders[i], (char *)pMesh) == 0) {
+            pFound = g_shadowCylinders[i];
             i = count;
         }
     }
     if (pFound != NULL)
         return pFound;
 
-    if (g_sceneLightFlag2 < 9) {
+    if (g_shadowCylinderCount < 9) {
         pVerts = (MeshVertexF *)pMesh->pVertexData;
         radius = 0.0f;
         minZ = 0.0f;
@@ -2880,7 +2880,7 @@ Mesh *Mesh_GetShadowCylinder(Mesh *pMesh)
         }
 
         pCyl = (Mesh *)CFileBuffer::AllocateLockedBuffer(0x108);
-        g_sceneLightState2[g_sceneLightFlag2++] = (int)pCyl;
+        g_shadowCylinders[g_shadowCylinderCount++] = pCyl;
         memset(pCyl, 0, 0x108);
         strcpy((char *)pCyl, (char *)pMesh);
         pCyl->field_0x10 = 22;
@@ -3286,7 +3286,7 @@ void Graphics_ResetInterpolationTimers(void)
     do {
         *p = 5;
         p += 0x30;
-    } while ((int)p < (int)g_unk0x00521138[32]);
+    } while ((INT_PTR)p < (INT_PTR)g_unk0x00521138[32]);
 }
 
 // FUNCTION: CMR2 0x004bc470
@@ -3582,7 +3582,7 @@ char g_str0x00521118[4] = "B2";
 // skipped when the record type is 6.
 // match 62%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x004b9910
-void Graphics_LoadTextureRecordList(int param1, int param2, unsigned int param3, int param4, int param5)
+void Graphics_LoadTextureRecordList(int param1, int param2, unsigned int param3, int param4, GenericFile *archive)
 {
     unsigned short *pEntry;
     unsigned int remaining;
@@ -3613,7 +3613,7 @@ void Graphics_LoadTextureRecordList(int param1, int param2, unsigned int param3,
                     } else {
                         flags = param4 != 10 ? 0x90 : 0;
                     }
-                    CTexture::FindLoadTexture((GenericFile *)param5, fileName, 0, 0, 0, flags);
+                    CTexture::FindLoadTexture(archive, fileName, 0, 0, 0, flags);
 nextEntry:
                     pEntry += 4;
                     i++;
@@ -3918,7 +3918,7 @@ void Scene_GetLightColour(DWORD *pColour, int level);
 // previous one when both use the same texture.
 // match 70%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x004b11c0
-void Billboard_Add(BillboardDef *pDef, unsigned short *pTexture)
+void Billboard_Add(BillboardDef *pDef, Texture *pTexture)
 {
     BillboardQuad *pQuad;
     float left;
@@ -3953,7 +3953,7 @@ void Billboard_Add(BillboardDef *pDef, unsigned short *pTexture)
     pQuad->corner[2].z = top;
     pQuad->corner[3].y = -right;
     pQuad->corner[3].z = bottom;
-    pQuad->texture = *pTexture;
+    pQuad->texture = pTexture->textureId;
     pQuad->pos.x = (float)pDef->pos.x * CGraphics::m_oneOver65536;
     pQuad->pos.y = (float)pDef->pos.y * CGraphics::m_oneOver65536;
     pQuad->pos.z = (float)pDef->pos.z * CGraphics::m_oneOver65536;
@@ -4116,7 +4116,7 @@ void Billboard_Draw(SceneNode *pCamera)
     CGraphics::SetZWriteEnable(0);
     g_billboardRun = g_billboardRuns[0];
     for (i = 0; i < (unsigned int)g_unk0x006dd788; i++) {
-        CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[g_billboardRun[1]]);
+        CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[g_billboardRun[1]]);
         Gfx_DrawIndexedPrimitive(GFX_TRIANGLELIST, (GfxVertex *)&g_billboardVerts[first * 4], g_billboardRun[0] * 4, g_unk0x006db200, g_billboardRun[0] * 6);
         first += g_billboardRun[0];
         g_billboardRun += 2;
@@ -4313,9 +4313,9 @@ void Graphics_DrawProjectedQuad(GlowLight *pSurface, FixVector *pPoint, FixVecto
     for (i = 0; i < 4; i++)
         *(DWORD *)g_projectedQuad[i].colour = *(DWORD *)colour;
     Quad2D_QueueFixedTriangle(0, &g_projectedQuad[0], &g_projectedQuad[1], &g_projectedQuad[2],
-                              pSurface->pTexture, (Quad2D *)0xe);
+                              pSurface->pTexture, 0xe);
     Quad2D_QueueFixedTriangle(0, &g_projectedQuad[0], &g_projectedQuad[2], &g_projectedQuad[3],
-                              pSurface->pTexture, (Quad2D *)0xe);
+                              pSurface->pTexture, 0xe);
 }
 
 // FUNCTION: CMR2 0x004b1970
@@ -4406,9 +4406,9 @@ void Graphics_DrawLayerQuad(GlowLight *pSurface, FixVector *pTarget)
         *(DWORD *)g_layerQuad[i].colour = *(DWORD *)colour;
     }
     Quad2D_QueueFixedTriangle(0, &g_layerQuad[0], &g_layerQuad[1], &g_layerQuad[2],
-                              pSurface->pLayerTexture, (Quad2D *)0x16);
+                              pSurface->pLayerTexture, 0x16);
     Quad2D_QueueFixedTriangle(0, &g_layerQuad[0], &g_layerQuad[2], &g_layerQuad[3],
-                              pSurface->pLayerTexture, (Quad2D *)0x16);
+                              pSurface->pLayerTexture, 0x16);
 }
 // Reserves a free glow slot and copies its position, direction, and draw settings.
 // Free glow light slot, or NULL when all are in use.
@@ -4426,9 +4426,9 @@ static inline GlowLight *Glow_FindFreeSlot(void)
 }
 
 // FUNCTION: CMR2 0x004ae2f0
-GlowLight *Glow_Add(int type, FixVector *pos, FixVector *dir, int unused1,
+GlowLight *Glow_Add(int type, FixVector *pos, FixVector *dir, FixVector *unused1,
                     int sizeX, int sizeY, Texture *billboardTexture, Texture *layerTexture,
-                    int intensity, SceneNode *node, BYTE projectedBrightness, int unused2,
+                    int intensity, SceneNode *node, BYTE projectedBrightness, FixVector *unused2,
                     int projectedSizeScale)
 {
     GlowLight *light;
@@ -4612,7 +4612,7 @@ void Glow_Draw(SceneNode *pCamera, BYTE view)
             d = g_glowBillboard.left;
             g_glowBillboard.left = FixMul(d, len);
         }
-        Billboard_Add(&g_glowBillboard, (unsigned short *)pLight->pTexture);
+        Billboard_Add(&g_glowBillboard, pLight->pTexture);
         if (pLight->layerIntensity != 0)
             Graphics_DrawLayerQuad(pLight, &camPos);
     projected:
@@ -4947,8 +4947,8 @@ void ParticleEdit_Select(int index)
         g_pEditParticleType->colour[0] = 0xff;
         g_pEditParticleType->colour[1] = 0xff;
         g_pEditParticleType->colour[2] = 0xff;
-        g_pEditParticleType->field0x38 = 0;
-        g_pEditParticleType->field0x4c = 0;
+        g_pEditParticleType->texture = NULL;
+        g_pEditParticleType->frames = NULL;
         g_pEditParticleType->field0x50 = 0;
         g_pEditParticleType->field0x54 = 0;
         g_pEditParticleType->field0x58 = 0;
@@ -4956,7 +4956,7 @@ void ParticleEdit_Select(int index)
         g_pEditParticleType->callback = NULL;
         g_pEditParticleType->field0x6c = 0;
         g_pEditParticleType->update = NULL;
-        g_pEditParticleType->field0x5c = 0;
+        g_pEditParticleType->draw = 0;
         g_pEditParticleType->flags &= 0xfe;
         g_pEditParticleType->flags &= 0xfd;
         g_pEditParticleType->flags &= 0xfb;
@@ -4972,7 +4972,7 @@ void ParticleEdit_Select(int index)
         g_pEditParticleType->spread.x = 0;
         g_pEditParticleType->spread.y = 0;
         g_pEditParticleType->spread.z = 0;
-        g_pEditParticleType->field0x38 = 0;
+        g_pEditParticleType->texture = NULL;
         return;
     }
     g_pEditParticleType = NULL;
@@ -4994,10 +4994,10 @@ void ParticleEdit_CopyTemplate(int index)
 }
 
 // FUNCTION: CMR2 0x004afb70
-void ParticleEdit_SetTextureParams(int a, int b, int c, int d, int e)
+void ParticleEdit_SetTextureParams(Texture *texture, int b, int c, int d, int e)
 {
     if (g_pEditParticleType != NULL) {
-        g_pEditParticleType->field0x38 = a;
+        g_pEditParticleType->texture = texture;
         g_pEditParticleType->field0x3c = b;
         g_pEditParticleType->field0x40 = c;
         g_pEditParticleType->field0x44 = d;
@@ -5006,10 +5006,10 @@ void ParticleEdit_SetTextureParams(int a, int b, int c, int d, int e)
 }
 
 // FUNCTION: CMR2 0x004afbc0
-void ParticleEdit_SetExtendedParams(int a, int b, int c, int d, BYTE flag4, BYTE flag8, int e, int f, int g, int h)
+void ParticleEdit_SetExtendedParams(Texture **frames, int b, int c, int d, BYTE flag4, BYTE flag8, int e, int f, int g, int h)
 {
     if (g_pEditParticleType != NULL) {
-        g_pEditParticleType->field0x4c = a;
+        g_pEditParticleType->frames = frames;
         g_pEditParticleType->field0x50 = b;
         g_pEditParticleType->field0x54 = c;
         g_pEditParticleType->field0x58 = d;
@@ -5103,16 +5103,16 @@ void ParticleEdit_SetSpread(int x, int y, int z, BYTE flag)
 }
 
 // FUNCTION: CMR2 0x004aff10
-void ParticleEdit_SetCallbacks(int field0x5c, void (*update)(void *, ParticleType *, int),
+void ParticleEdit_SetCallbacks(ParticleDrawCallback draw, void (*update)(void *, ParticleType *, int),
                                void (*postUpdate)(void *, ParticleType *, int),
-                               void (*callback)(void *, ParticleType *, int), int field0x6c)
+                               ParticleInitCallback callback, int field0x6c)
 {
     if (g_pEditParticleType != NULL) {
         g_pEditParticleType->postUpdate = postUpdate;
         g_pEditParticleType->callback = callback;
         g_pEditParticleType->field0x6c = field0x6c;
         g_pEditParticleType->update = update;
-        g_pEditParticleType->field0x5c = field0x5c;
+        g_pEditParticleType->draw = draw;
     }
 }
 
@@ -5392,14 +5392,15 @@ void Particle_Interpolate(int t)
 //   pb-9    size         pb-5    field0x50   pb-2    type0x53   pb-1  field0x54
 //   pb+2    active       pb+0    field0x55   pb+4..6 colour      pb+0xb field0x60
 // match 40%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
+#define DRAW_PARTICLE (*(Particle *)(pb - offsetof(Particle, field0x55)))
 // FUNCTION: CMR2 0x004b0480
-void Particle_DrawAll(int param, BYTE view)
+void Particle_DrawAll(SceneNode *pCamera, BYTE view)
 {
     BillboardDef def;
     ParticleType *pType;
     int frame;
     int elapsed;
-    int texture;
+    Texture *texture;
     int i;
     BYTE mask;
     BYTE *pb;
@@ -5407,73 +5408,75 @@ void Particle_DrawAll(int param, BYTE view)
     def.flags &= 0xfe;
     mask = 1 << view;
     if (g_particleCount > 0) {
-        pb = (BYTE *)g_particles + 0x55;
-        for (i = 0; i < g_particleCount; i++, pb += 0x68) {
-            if (pb[2] == 0 || (pb[0] & mask) == 0)
+        pb = (BYTE *)g_particles + offsetof(Particle, field0x55);
+        for (i = 0; i < g_particleCount; i++, pb += sizeof(Particle)) {
+            if (DRAW_PARTICLE.active == 0 || (DRAW_PARTICLE.field0x55 & mask) == 0)
                 continue;
-            pType = *(ParticleType **)(pb - 0x55);
-            if (pType->field0x5c != 0) {
-                ((void (*)(void *, ParticleType *, int))pType->field0x5c)(pb - 0x55, pType, param);
+            pType = DRAW_PARTICLE.pType;
+            if (pType->draw != 0) {
+                pType->draw(&DRAW_PARTICLE, pType, pCamera);
                 continue;
             }
-            if ((int *)pType->field0x4c != NULL) {
+            if (pType->frames != NULL) {
                 frame = 0;
-                elapsed = pType->lifetime - *(int *)(pb - 0x11);
+                elapsed = pType->lifetime - DRAW_PARTICLE.age;
                 if (elapsed > pType->field0x54 && pType->field0x58 > 0) {
                     frame = FixDiv(elapsed - pType->field0x54, pType->field0x58) >> 16;
                     if (pType->directionFlags & 8)
-                        frame += ((unsigned int)(pb - 0x55) & 0xffff) % (unsigned int)pType->field0x50;
+                        frame += ((UINT_PTR)&DRAW_PARTICLE & 0xffff) % (unsigned int)pType->field0x50;
                     if (frame >= pType->field0x50 && (pType->directionFlags & 4) == 0) {
-                        texture = ((int *)pType->field0x4c)[pType->field0x50 - 1];
+                        texture = pType->frames[pType->field0x50 - 1];
                         goto draw;
                     }
                     frame %= pType->field0x50;
                 }
-                texture = ((int *)pType->field0x4c)[frame];
+                texture = pType->frames[frame];
             } else {
-                texture = *(int *)(pb + 0xb);
+                texture = DRAW_PARTICLE.texture;
             }
         draw:
-            if (texture == 0)
+            if (texture == NULL)
                 continue;
-            if (*(int *)(pb - 9) == 0x10000) {
+            if (DRAW_PARTICLE.size == 0x10000) {
                 def.top = pType->field0x3c;
                 def.left = pType->field0x40;
                 def.bottom = pType->field0x44;
                 def.right = pType->field0x48;
             } else {
-                def.top = FixMul(pType->field0x3c, *(int *)(pb - 9));
-                def.left = FixMul(*(int *)(pb - 9), pType->field0x40);
-                def.bottom = FixMul(pType->field0x44, *(int *)(pb - 9));
-                def.right = FixMul(pType->field0x48, *(int *)(pb - 9));
+                def.top = FixMul(pType->field0x3c, DRAW_PARTICLE.size);
+                def.left = FixMul(DRAW_PARTICLE.size, pType->field0x40);
+                def.bottom = FixMul(pType->field0x44, DRAW_PARTICLE.size);
+                def.right = FixMul(pType->field0x48, DRAW_PARTICLE.size);
             }
             if ((pType->flags & 0x20) != 0)
-                def.field_0x20 = *(short *)(pb - 5);
+                def.field_0x20 = DRAW_PARTICLE.field0x50;
             else
                 def.field_0x20 = 0;
-            def.pos = *(FixVector *)(pb - 0x39);
-            if (*(int *)(pb - 0x15) != 0) {
-                def.pos.x += *(int *)(*(int *)(pb - 0x15) + 0x30);
-                def.pos.y += *(int *)(*(int *)(pb - 0x15) + 0x34);
-                def.pos.z += *(int *)(*(int *)(pb - 0x15) + 0x38);
+            def.pos = DRAW_PARTICLE.vector0x1c;
+            if (DRAW_PARTICLE.attachmentMatrix != 0) {
+                def.pos.x += DRAW_PARTICLE.attachmentMatrix->position.x;
+                def.pos.y += DRAW_PARTICLE.attachmentMatrix->position.y;
+                def.pos.z += DRAW_PARTICLE.attachmentMatrix->position.z;
             }
             def.flags ^= (pType->directionFlags ^ def.flags) & 2;
-            def.r = pb[4];
-            def.g = pb[5];
-            def.b = pb[6];
-            def.a = pb[-2];
-            def.shade = pb[-1];
-            Billboard_Add(&def, (unsigned short *)texture);
+            def.r = DRAW_PARTICLE.colour[0];
+            def.g = DRAW_PARTICLE.colour[1];
+            def.b = DRAW_PARTICLE.colour[2];
+            def.a = DRAW_PARTICLE.type0x53;
+            def.shade = DRAW_PARTICLE.field0x54;
+            Billboard_Add(&def, texture);
         }
     }
 }
+
+#undef DRAW_PARTICLE
 
 // Allocates and initialises a particle, optionally orienting its random spread
 // around the supplied position vector.
 // FUNCTION: CMR2 0x004b07a0
 void Particle_Spawn(int typeIndex, FixVector *pSource, FixVector *pPosition,
-                    int field0x48, int field0x40, BYTE *pColour,
-                    BYTE field0x54, int callbackParam, BYTE field0x55)
+                    int field0x48, FixMatrix *attachmentMatrix, BYTE *pColour,
+                    BYTE field0x54, void *callbackParam, BYTE field0x55)
 {
     ParticleType *pType = NULL;
     bool hasBasis;
@@ -5599,7 +5602,7 @@ particleFound:
     pParticle->vector0x1c = pParticle->sourceVector;
     pParticle->vector0x28 = pParticle->sourceVector;
     pParticle->field0x48 = field0x48;
-    pParticle->field0x40 = field0x40;
+    pParticle->attachmentMatrix = attachmentMatrix;
 
     if ((pType->directionFlags & 1) != 0) {
         if (hasBasis) {
@@ -5649,7 +5652,7 @@ particleFound:
     }
     {
         int zero = 0;
-        if (pColour != (BYTE *)zero) {
+        if (pColour != NULL) {
             pParticle->colour[0] = pColour[0];
             pParticle->colour[1] = pColour[1];
             pParticle->colour[2] = pColour[2];
@@ -5660,12 +5663,12 @@ particleFound:
         }
         if ((pType->directionFlags & 2) != 0)
             pParticle->field0x54 = field0x54;
-        pParticle->field0x60 = pType->field0x38;
+        pParticle->texture = pType->texture;
         pParticle->field0x55 = field0x55;
         pParticle->active = 1;
         pParticle->field0x58 = (BYTE)zero;
         pParticle->field0x50 = (short)zero;
-        if (pType->callback != (void (*)(void *, ParticleType *, int))zero)
+        if (pType->callback != NULL)
             pType->callback(pParticle, pType, callbackParam);
     }
 }
@@ -5762,7 +5765,7 @@ void CGraphics::InvalidateBlendStateCache(void)
 }
 int CGraphics::m_unk0x00520b28 = -1;
 unsigned int CGraphics::m_unk0x0065fa24;
-int CGraphics::m_unk0x0065fa38;
+Texture *CGraphics::m_unk0x0065fa38;
 
 // Sets render states 0x13/0x14 when the pair changes.
 // FUNCTION: CMR2 0x004a3e40
@@ -5776,8 +5779,7 @@ void CGraphics::SetCachedSourceDestinationBlend(int param1, int param2)
     m_unk0x00520b20 = param2;
 }
 
-struct Unk0x004a3e20;
-void Frontend_SetObjectField118(Unk0x004a3e20 *pObject, int value);
+void Frontend_SetObjectField118(struct Texture *pTexture, int value);
 
 // Creates a texture from file data already in memory (DDS or TGA).
 // FUNCTION: CMR2 0x004a48c0
@@ -5800,7 +5802,7 @@ Texture *CGraphics::CreateTextureFromImageData(char *name, void *pData, unsigned
             m_pTextureManager->textureBuffer[i] = (Texture *)CFileBuffer::AllocateLockedBuffer(0x130);
             pTexture = m_pTextureManager->textureBuffer[i];
             pTexture->textureId = i;
-            Frontend_SetObjectField118((Unk0x004a3e20 *)pTexture, 0);
+            Frontend_SetObjectField118(pTexture, 0);
             if (pTexture == NULL)
                 return NULL;
             m_textureCount++;
@@ -5849,7 +5851,7 @@ Texture *CGraphics::LoadDDSThenTGATexture(char *name, unsigned int flags)
             pTexture = m_pTextureManager->textureBuffer[i];
             pTexture->textureId = i;
             pTexture->pArchive = NULL;
-            Frontend_SetObjectField118((Unk0x004a3e20 *)pTexture, 0);
+            Frontend_SetObjectField118(pTexture, 0);
             if (pTexture == NULL)
                 return NULL;
             m_textureCount++;
@@ -6236,170 +6238,168 @@ Texture *CGraphics::LoadTGABumpMap(BYTE *pTGA, Texture *pTexture)
 // no texture): colour/alpha operations, filters, blend render states and
 // texture coordinate set.
 // FUNCTION: CMR2 0x004a3e90
-void CGraphics::ConfigureTextureStageBlendMode(int param1, int param2)
+void CGraphics::ConfigureTextureStageBlendMode(int stage, Texture *pTexture)
 {
-    Texture *pTexture;
     float value;
 
-    pTexture = (Texture *)param2;
     if (pTexture == NULL) {
         g_unk0x00520b18 = -1;
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageColorOp(param1, GFX_TOP_DISABLE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_DISABLE);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_DISABLE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_DISABLE);
         return;
     }
     switch (pTexture->blendMode) {
     case 0:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageColorOp(param1, GFX_TOP_MODULATE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_MODULATE);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_MODULATE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_MODULATE);
         if (g_pGraphics->field913_0x3bc & 1)
-            Gfx_SetStageMipFilter(param1, GFX_MIPFILTER_POINT);
+            Gfx_SetStageMipFilter(stage, GFX_MIPFILTER_POINT);
         else if (g_pGraphics->field913_0x3bc & 2)
-            Gfx_SetStageMipFilter(param1, GFX_MIPFILTER_LINEAR);
+            Gfx_SetStageMipFilter(stage, GFX_MIPFILTER_LINEAR);
         else
-            Gfx_SetStageMipFilter(param1, GFX_MIPFILTER_NONE);
-        Gfx_SetStageMaxMipLevel(param1, 0);
+            Gfx_SetStageMipFilter(stage, GFX_MIPFILTER_NONE);
+        Gfx_SetStageMaxMipLevel(stage, 0);
         SetCachedSourceDestinationBlend(5, 6);
-        SetTexCoordIndex(param1, 0);
+        SetTexCoordIndex(stage, 0);
         break;
     case 1:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageColorOp(param1, GFX_TOP_MODULATE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_DISABLE);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_MODULATE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_DISABLE);
         SetCachedSourceDestinationBlend(2, 2);
-        SetTexCoordIndex(param1, 0);
+        SetTexCoordIndex(stage, 0);
         break;
     case 2:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageColorOp(param1, GFX_TOP_MODULATE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_MODULATE);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_MODULATE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_MODULATE);
         SetCachedSourceDestinationBlend(5, 2);
-        SetTexCoordIndex(param1, 0);
+        SetTexCoordIndex(stage, 0);
         break;
     case 3:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageColorOp(param1, GFX_TOP_MODULATE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_MODULATE);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_MODULATE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_MODULATE);
         SetCachedSourceDestinationBlend(1, 4);
-        SetTexCoordIndex(param1, 0);
+        SetTexCoordIndex(stage, 0);
         break;
     case 4:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageColorOp(param1, GFX_TOP_MODULATE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_SELECTARG2);
-        SetTexCoordIndex(param1, 1);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_MODULATE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_SELECTARG2);
+        SetTexCoordIndex(stage, 1);
         break;
     case 5:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_CURRENT);
-        Gfx_SetStageColorOp(param1, GFX_TOP_SELECTARG2);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_CURRENT);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_SELECTARG1);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_CURRENT);
+        Gfx_SetStageColorOp(stage, GFX_TOP_SELECTARG2);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_CURRENT);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_SELECTARG1);
         SetCachedSourceDestinationBlend(5, 2);
-        SetTexCoordIndex(param1, 0);
+        SetTexCoordIndex(stage, 0);
         break;
     case 6:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_CURRENT);
-        Gfx_SetStageColorOp(param1, GFX_TOP_SELECTARG1);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_CURRENT);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_DISABLE);
-        SetTexCoordIndex(param1, 0);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_CURRENT);
+        Gfx_SetStageColorOp(stage, GFX_TOP_SELECTARG1);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_CURRENT);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_DISABLE);
+        SetTexCoordIndex(stage, 0);
         break;
     case 7:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE | GFX_TA_COMPLEMENT);
-        Gfx_SetStageColorArg2(param1, GFX_TA_CURRENT);
-        Gfx_SetStageColorOp(param1, GFX_TOP_ADDSIGNED);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_CURRENT);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_DISABLE);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE | GFX_TA_COMPLEMENT);
+        Gfx_SetStageColorArg2(stage, GFX_TA_CURRENT);
+        Gfx_SetStageColorOp(stage, GFX_TOP_ADDSIGNED);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_CURRENT);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_DISABLE);
         SetCachedSourceDestinationBlend(9, 3);
-        SetTexCoordIndex(param1, 1);
+        SetTexCoordIndex(stage, 1);
         break;
     case 8:
-        Gfx_SetStageColorOp(param1, GFX_TOP_BUMPENVMAPLUMINANCE);
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_BUMPENVMAPLUMINANCE);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
         value = m_bumpScale;
-        Gfx_SetStageBumpEnvMat(param1, 0, value);
+        Gfx_SetStageBumpEnvMat(stage, 0, value);
         value = 0.0f;
-        Gfx_SetStageBumpEnvMat(param1, 1, value);
+        Gfx_SetStageBumpEnvMat(stage, 1, value);
         value = 0.0f;
-        Gfx_SetStageBumpEnvMat(param1, 2, value);
+        Gfx_SetStageBumpEnvMat(stage, 2, value);
         value = m_bumpScale;
-        Gfx_SetStageBumpEnvMat(param1, 3, value);
+        Gfx_SetStageBumpEnvMat(stage, 3, value);
         value = 1.0f;
-        Gfx_SetStageBumpEnvLScale(param1, value);
+        Gfx_SetStageBumpEnvLScale(stage, value);
         value = 0.0f;
-        Gfx_SetStageBumpEnvLOffset(param1, value);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_CURRENT);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_DISABLE);
-        SetTexCoordIndex(param1, 0);
+        Gfx_SetStageBumpEnvLOffset(stage, value);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_CURRENT);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_DISABLE);
+        SetTexCoordIndex(stage, 0);
         break;
     case 9:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_CURRENT);
-        Gfx_SetStageColorOp(param1, GFX_TOP_MODULATE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_CURRENT);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_DISABLE);
-        Gfx_SetStageMagFilter(param1, GFX_FILTER_LINEAR);
-        Gfx_SetStageMinFilter(param1, GFX_FILTER_LINEAR);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_CURRENT);
+        Gfx_SetStageColorOp(stage, GFX_TOP_MODULATE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_CURRENT);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_DISABLE);
+        Gfx_SetStageMagFilter(stage, GFX_FILTER_LINEAR);
+        Gfx_SetStageMinFilter(stage, GFX_FILTER_LINEAR);
         SetCachedSourceDestinationBlend(2, 2);
-        SetTexCoordIndex(param1, 1);
+        SetTexCoordIndex(stage, 1);
         break;
     case 10:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE | GFX_TA_ALPHAREPLICATE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageColorOp(param1, GFX_TOP_MODULATE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_MODULATE);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE | GFX_TA_ALPHAREPLICATE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_MODULATE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_MODULATE);
         SetCachedSourceDestinationBlend(5, 6);
-        SetTexCoordIndex(param1, 0);
+        SetTexCoordIndex(stage, 0);
         break;
     case 11:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageColorOp(param1, GFX_TOP_MODULATE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_SELECTARG2);
-        Gfx_SetStageTexCoordIndex(param1, GFX_TCI_CAMERASPACEREFLECTIONVECTOR | 1);
-        Gfx_SetStageTextureTransform(param1, GFX_TTFF_COUNT3);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_MODULATE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_SELECTARG2);
+        Gfx_SetStageTexCoordIndex(stage, GFX_TCI_CAMERASPACEREFLECTIONVECTOR | 1);
+        Gfx_SetStageTextureTransform(stage, GFX_TTFF_COUNT3);
         break;
     case 0xff:
-        Gfx_SetStageColorArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageColorArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageColorOp(param1, GFX_TOP_MODULATE);
-        Gfx_SetStageAlphaArg1(param1, GFX_TA_TEXTURE);
-        Gfx_SetStageAlphaArg2(param1, GFX_TA_DIFFUSE);
-        Gfx_SetStageAlphaOp(param1, GFX_TOP_MODULATE);
+        Gfx_SetStageColorArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageColorArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageColorOp(stage, GFX_TOP_MODULATE);
+        Gfx_SetStageAlphaArg1(stage, GFX_TA_TEXTURE);
+        Gfx_SetStageAlphaArg2(stage, GFX_TA_DIFFUSE);
+        Gfx_SetStageAlphaOp(stage, GFX_TOP_MODULATE);
         SetCachedSourceDestinationBlend(5, 6);
-        SetTexCoordIndex(param1, 0);
+        SetTexCoordIndex(stage, 0);
         break;
     }
     g_unk0x00520b18 = pTexture->blendMode;
@@ -6407,18 +6407,18 @@ void CGraphics::ConfigureTextureStageBlendMode(int param1, int param2)
 
 // Applies a texture stage change and forwards it to the render states.
 // FUNCTION: CMR2 0x004a4850
-void CGraphics::ApplyTextureStageChange(int param1, int param2)
+void CGraphics::ApplyTextureStageChange(int stage, Texture *pTexture)
 {
-    if (m_unk0x0065fa38 == param2 && m_unk0x00520b28 == param1)
+    if (m_unk0x0065fa38 == pTexture && m_unk0x00520b28 == stage)
         return;
-    m_unk0x0065fa38 = param2;
-    m_unk0x00520b28 = param1;
-    if (param2 != 0) {
-        Gfx_SetTexture((DWORD)param1, ((Texture *)(intptr_t)param2)->pSurface);
-        ConfigureTextureStageBlendMode(param1, param2);
+    m_unk0x0065fa38 = pTexture;
+    m_unk0x00520b28 = stage;
+    if (pTexture != NULL) {
+        Gfx_SetTexture((DWORD)stage, pTexture->pSurface);
+        ConfigureTextureStageBlendMode(stage, pTexture);
     } else {
-        Gfx_SetTexture((DWORD)param1, NULL);
-        ConfigureTextureStageBlendMode(param1, 0);
+        Gfx_SetTexture((DWORD)stage, NULL);
+        ConfigureTextureStageBlendMode(stage, NULL);
     }
     m_unk0x0065fa24++;
 }
@@ -6507,7 +6507,7 @@ int Graphics_ReserveCubeMapsAndLoadEnvironment(char *name, int count, GenericFil
         return (int)pTexture;
     {
         g_unk0x005210b8 = *pTexture;
-        Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 4);
+        Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 4);
         return 1;
     }
 }
@@ -6592,17 +6592,17 @@ void Graphics_DrawCubeMappedShadowTriangles(Mesh *pMesh)
             currentTexture = *(int *)((BYTE *)&pMesh->pTriangles[i] + 4 + textureIndex * 4);
             if (currentTexture > -1) {
                 if ((g_pGraphics->field913_0x3bc & 0x10) != 0) {
-                    Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[currentTexture], 8);
-                    CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[currentTexture]);
-                    Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 9);
+                    Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[currentTexture], 8);
+                    CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[currentTexture]);
+                    Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 9);
                     if (g_unk0x005210bc != 0)
-                        CGraphics::ApplyTextureStageChange(1, (int)CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8]);
+                        CGraphics::ApplyTextureStageChange(1, CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8]);
                 } else {
-                    Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 4);
-                    CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8]);
-                    Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[currentTexture], 5);
+                    Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 4);
+                    CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8]);
+                    Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[currentTexture], 5);
                     if (g_unk0x005210bc != 0)
-                        CGraphics::ApplyTextureStageChange(1, (int)CGraphics::m_pTextureManager->textureBuffer[currentTexture]);
+                        CGraphics::ApplyTextureStageChange(1, CGraphics::m_pTextureManager->textureBuffer[currentTexture]);
                 }
             }
         }
@@ -6618,17 +6618,17 @@ void Graphics_DrawCubeMappedShadowTriangles(Mesh *pMesh)
     texture = *(int *)((BYTE *)&pMesh->pTriangles[triangleCount - 1] + 4 + textureIndex * 4);
     if (texture > -1) {
         if ((g_pGraphics->field913_0x3bc & 0x10) != 0) {
-            Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[texture], 8);
-            CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[texture]);
-            Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 9);
+            Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[texture], 8);
+            CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[texture]);
+            Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 9);
             if (g_unk0x005210bc != 0)
-                CGraphics::ApplyTextureStageChange(1, (int)CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8]);
+                CGraphics::ApplyTextureStageChange(1, CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8]);
             } else {
-            Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 4);
-            CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8]);
-            Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[texture], 5);
+            Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 4);
+            CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8]);
+            Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[texture], 5);
             if (g_unk0x005210bc != 0)
-                CGraphics::ApplyTextureStageChange(1, (int)CGraphics::m_pTextureManager->textureBuffer[texture]);
+                CGraphics::ApplyTextureStageChange(1, CGraphics::m_pTextureManager->textureBuffer[texture]);
         }
         Gfx_DrawIndexedPrimitiveVB(GFX_TRIANGLELIST, CGraphics::m_pTextureManager->pVertexBuffers[pMesh->vertexBufferIndex], pMesh->vertexOffset, pMesh->field_0x10, g_unk0x006dd9bc, count);
     }
@@ -6736,7 +6736,7 @@ void Graphics_DrawMeshPartsByTexture(Mesh *pMesh)
         ppPart = pMesh->pParts;
         do {
             pPart = *ppPart;
-            CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[pPart->texture]);
+            CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[pPart->texture]);
             Gfx_DrawIndexedPrimitiveVB(GFX_TRIANGLELIST, CGraphics::m_pTextureManager->pVertexBuffers[pMesh->vertexBufferIndex], pMesh->vertexOffset + pPart->minIndex, pMesh->field_0x10 - pPart->minIndex, pPart->pData, pPart->indexCount);
             CGame::m_unk0x0059ce18 += pPart->indexCount / 3;
             i++;
@@ -6758,8 +6758,8 @@ void Graphics_MarkTexturesAndDrawMeshParts(Mesh *pMesh)
         ppPart = pMesh->pParts;
         do {
             pPart = *ppPart;
-            Frontend_SetObjectField118((Unk0x004a3e20 *)CGraphics::m_pTextureManager->textureBuffer[pPart->texture], 10);
-            CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[pPart->texture]);
+            Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[pPart->texture], 10);
+            CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[pPart->texture]);
             Gfx_DrawIndexedPrimitiveVB(GFX_TRIANGLELIST, CGraphics::m_pTextureManager->pVertexBuffers[pMesh->vertexBufferIndex], pMesh->vertexOffset + pPart->minIndex, pMesh->field_0x10 - pPart->minIndex, pPart->pData, pPart->indexCount);
             CGame::m_unk0x0059ce18 += pPart->indexCount / 3;
             i++;
@@ -6789,7 +6789,7 @@ void Graphics_DrawMeshTextureBatches(Mesh *pMesh)
                 Gfx_DrawIndexedPrimitiveVB(GFX_TRIANGLELIST, CGraphics::m_pTextureManager->pVertexBuffers[pMesh->vertexBufferIndex], pMesh->vertexOffset, pMesh->field_0x10, g_unk0x0059be74, count);
             }
             count = 0;
-            CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[texture]);
+            CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[texture]);
             currentTexture = texture;
         }
         g_unk0x0059be74[count++] = pTri->vertexIndex[0];
@@ -6801,7 +6801,7 @@ void Graphics_DrawMeshTextureBatches(Mesh *pMesh)
     if (count != 0) {
         MeshTriangle *pLast = &pMesh->pTriangles[total - 1];
         int texture = *(int *)((BYTE *)pLast + 4 + pLast->field_0x2c * 4);
-        CGraphics::ApplyTextureStageChange(0, (int)CGraphics::m_pTextureManager->textureBuffer[texture]);
+        CGraphics::ApplyTextureStageChange(0, CGraphics::m_pTextureManager->textureBuffer[texture]);
         Gfx_DrawIndexedPrimitiveVB(GFX_TRIANGLELIST, CGraphics::m_pTextureManager->pVertexBuffers[pMesh->vertexBufferIndex], pMesh->vertexOffset, pMesh->field_0x10, g_unk0x0059be74, count);
     }
 }

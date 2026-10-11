@@ -24,7 +24,7 @@ extern double g_unk0x00511308;
 void *CarInfo_GetSection(Car *pCar, int section);
 int Track_GetGroundHeightSurface(FixVector *pPoint, FixVector *pNormal, short *pTri, short *pSurfaceClass,
                                  unsigned short *pSurface, int defaultY);
-int RallyData_GetChallengeRenderState(void);
+SceneNode *RallyData_GetChallengeRenderState(void);
 int Car_UsesNarrowWheels(Car *pCar, int param2);
 void Scene_GetShadowColour(DWORD *pColour, int *pLevel);
 void CarShadow_OffsetPointsTowardsCamera(int view, CarContact *pContact);
@@ -200,7 +200,7 @@ void CarPhysics_UpdateWheelContactPatches(Car *pCar)
     if (CGameInfo::IsActiveCheatEnabled(6))
         FixVecScale(&offset, &offset, 0x28000);
     for (wheel = 0; wheel < 4; wheel++) {
-        if (*(int *)((BYTE *)pCar->pWheelNodes[wheel] + 8) == RallyData_GetChallengeRenderState())
+        if (pCar->pWheelNodes[wheel]->pParent == RallyData_GetChallengeRenderState())
             continue;
         FixMatrix_GetPosition(&local, &g_physWheels[wheel]);
         FixMatrix_RotateVector(&pos, &local, &g_physBody->body);
@@ -416,7 +416,7 @@ void CarContact_BuildBodyPatch(Car *pCar, CarContact *pContact)
     *(DWORD *)vertices[0].colour = *(DWORD *)(c0); \
     *(DWORD *)vertices[1].colour = *(DWORD *)(c1); \
     *(DWORD *)vertices[2].colour = *(DWORD *)(c2); \
-    Quad2D_QueueFixedTriangle(0, &vertices[0], &vertices[1], &vertices[2], NULL, (Quad2D *)10)
+    Quad2D_QueueFixedTriangle(0, &vertices[0], &vertices[1], &vertices[2], NULL, 10)
 
 // Octagon around the body patch (its corners cut at 5% / 95% of each edge)
 // and the solid core, 60% of its size.
@@ -496,7 +496,7 @@ void CarPhysics_DrawBodyWheelAndSkidShadows(Car *pCar, int view)
     // Wheels.
     if (g_physContactView.wheelPatchesEnabled != 0) {
         for (i = 0; i < 4; i++) {
-            if (*(int *)((BYTE *)pCar->pWheelNodes[i] + 8) == RallyData_GetChallengeRenderState() ||
+            if (pCar->pWheelNodes[i]->pParent == RallyData_GetChallengeRenderState() ||
                 g_physContactView.wheelGrip[i] == 0)
                 continue;
             alpha = g_physContactView.wheelGrip[i];

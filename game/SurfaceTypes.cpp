@@ -1,3 +1,5 @@
+#include "SoundCurve.h"
+#include <windows.h>
 #include "SurfaceTypes.h"
 #include "FixedPoint.h"
 #include "StageTiming.h"
@@ -7,6 +9,7 @@
 #include "GameInfo.h"
 #include "Input.h"
 #include <stdio.h>
+#include <stddef.h>
 #include "InstallInfo.h"
 #include "RallyData.h"
 #include "Frontend.h"
@@ -173,6 +176,21 @@ BYTE g_surfaceDragIndex[48] = {
 
 #define FIX_ABS(x) ((x) < 0 ? -(x) : (x))
 
+// Typed views of the original interior cursors. offsetof follows the field,
+// while the cursor arrays in Car keep the complete walks in one allocation.
+inline CarCornerGrip *CarSurfaceGripOutput(int *p) {
+    return (CarCornerGrip *)((BYTE *)p - offsetof(CarCornerGrip, gripB));
+}
+inline CarWheelSurface *CarSurfaceWheelOutput(int *p) {
+    return (CarWheelSurface *)((BYTE *)p - offsetof(CarWheelSurface, drag));
+}
+inline CarCornerGrip *CarSurfacePairedGripOutput(int *p) {
+    return (CarCornerGrip *)((BYTE *)p - offsetof(CarCornerGrip, grip2B));
+}
+inline CarWheelSurface *CarSurfacePairedWheelOutput(BYTE *p) {
+    return (CarWheelSurface *)(p - offsetof(CarWheelSurface, effect) - 1);
+}
+
 // Rebuilds the per-corner grip parameters of a car by blending the surface it
 // stands on with the next one, and smooths the resulting rolling noise level.
 // match 48%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
@@ -181,10 +199,10 @@ void Car_UpdateSurfaceParams(Car *pCar, int blend)
 {
     int i = 7;
     short noise = 0;
-    int *pComp = &pCar->field_0x8b8[1];
+    int *pComp = &pCar->surfaceCompressionWords[(offsetof(Car, field_0x8b8) + sizeof(int) - offsetof(Car, surfaceCompressionWords)) / sizeof(int)];
     short noiseNext = 0;
-    short *pSurf = (short *)((BYTE *)pCar + 0xabc);
-    int *pOut = &pCar->cornerGrip[7].gripB;
+    short *pSurf = &pCar->wheelSurface[7];
+    int *pOut = &pCar->surfaceOutputWords[(offsetof(Car, cornerGrip) + 7 * sizeof(CarCornerGrip) + offsetof(CarCornerGrip, gripB)) / sizeof(int)];
     short s0;
     unsigned short next;
     int s1;
@@ -230,11 +248,11 @@ void Car_UpdateSurfaceParams(Car *pCar, int blend)
         v678 = FixMul(diff, blend) + g_surface0x51e678[s0];
 
         if (i >= 4) {
-            pOut[0] = gripB;
-            pOut[-1] = gripA;
-            pOut[1] = grip2A;
+            CarSurfaceGripOutput(pOut)->gripB = gripB;
+            CarSurfaceGripOutput(pOut)->gripA = gripA;
+            CarSurfaceGripOutput(pOut)->grip2A = grip2A;
 store_grip2B:
-            pOut[2] = grip2B;
+            CarSurfaceGripOutput(pOut)->grip2B = grip2B;
         } else {
             int comp = pComp[-4];
 
@@ -245,15 +263,15 @@ store_grip2B:
                     comp = 0x10000;
                 }
                 soft = FixMul(comp, dSoftA);
-                pOut[-1] = soft + gripA;
-                pOut[1] = soft + grip2A;
-                pOut[0] = FixDiv(FixMul(gripA, gripB), pOut[-1]);
-                pOut[2] = FixDiv(FixMul(grip2A, grip2B), pOut[1]);
+                CarSurfaceGripOutput(pOut)->gripA = soft + gripA;
+                CarSurfaceGripOutput(pOut)->grip2A = soft + grip2A;
+                CarSurfaceGripOutput(pOut)->gripB = FixDiv(FixMul(gripA, gripB), CarSurfaceGripOutput(pOut)->gripA);
+                CarSurfaceGripOutput(pOut)->grip2B = FixDiv(FixMul(grip2A, grip2B), CarSurfaceGripOutput(pOut)->grip2A);
             } else {
-                pOut[1] = grip2A;
-                pOut[-1] = gripA;
-                pOut[0] = gripB;
-                pOut[2] = grip2B;
+                CarSurfaceGripOutput(pOut)->grip2A = grip2A;
+                CarSurfaceGripOutput(pOut)->gripA = gripA;
+                CarSurfaceGripOutput(pOut)->gripB = gripB;
+                CarSurfaceGripOutput(pOut)->grip2B = grip2B;
             }
             comp = *pComp;
             if (comp != 0) {
@@ -263,28 +281,28 @@ store_grip2B:
                     comp = 0x10000;
                 }
                 soft = FixMul(comp, dSoftB);
-                grip2B = pOut[2] + soft;
-                pOut[0] = pOut[0] + soft;
+                grip2B = CarSurfaceGripOutput(pOut)->grip2B + soft;
+                CarSurfaceGripOutput(pOut)->gripB = CarSurfaceGripOutput(pOut)->gripB + soft;
                 goto store_grip2B;
             }
         }
 
-        pOut[5] = v2b8;
-        pOut[4] = v738;
-        pOut[7] = v5b8;
-        pOut[6] = v4f8;
-        pOut[3] = v678;
+        CarSurfaceGripOutput(pOut)->field_0x18 = v2b8;
+        CarSurfaceGripOutput(pOut)->field_0x14 = v738;
+        CarSurfaceGripOutput(pOut)->field_0x20 = v5b8;
+        CarSurfaceGripOutput(pOut)->field_0x1c = v4f8;
+        CarSurfaceGripOutput(pOut)->drag = v678;
         i--;
         pSurf--;
         pComp--;
-        pOut -= 9;
+        pOut -= sizeof(CarCornerGrip) / sizeof(*pOut);
         if (i < 0) {
             int level;
             int previous;
             int diff;
 
             i = 4;
-            pOut = &pCar->wheelSurfaceFx[3].drag;
+            pOut = &pCar->surfaceOutputWords[(offsetof(Car, wheelSurfaceFx) + 3 * sizeof(CarWheelSurface) + offsetof(CarWheelSurface, drag)) / sizeof(int)];
             pSurf = &pCar->wheelSurface[3];
             do {
                 int id = *pSurf;
@@ -292,14 +310,14 @@ store_grip2B:
                 int drag;
                 int dragNext;
 
-                *((BYTE *)pOut - 4) = g_surfaceEffect[id][0];
-                *((BYTE *)pOut - 3) = g_surfaceEffect[id][1];
-                drag = FixMul(g_surfaceDrag[g_surfaceDragIndex[id] + pCar->field_0xb29 * 9], 0x51e);
+                CarSurfaceWheelOutput(pOut)->effect[0] = g_surfaceEffect[id][0];
+                CarSurfaceWheelOutput(pOut)->effect[1] = g_surfaceEffect[id][1];
+                drag = FixMul(g_surfaceDrag[g_surfaceDragIndex[id] + pCar->surfaceDragLevel * 9], 0x51e);
                 dragNext = FixMul(g_surfaceDrag[g_surfaceDragIndex[(int)(short)(unsigned short)next] +
-                                                pCar->field_0xb29 * 9], 0x51e);
-                pOut[1] = 0;
-                pOut[0] = FixMul(dragNext - drag, blend) + drag;
-                pOut -= 3;
+                                                pCar->surfaceDragLevel * 9], 0x51e);
+                CarSurfaceWheelOutput(pOut)->extraGrip = 0;
+                CarSurfaceWheelOutput(pOut)->drag = FixMul(dragNext - drag, blend) + drag;
+                pOut -= sizeof(CarWheelSurface) / sizeof(*pOut);
                 noise = noise + (unsigned short)g_surfaceNoise[id];
                 noiseNext = noiseNext + (unsigned short)g_surfaceNoise[(int)(short)(unsigned short)next];
                 pSurf--;
@@ -308,18 +326,18 @@ store_grip2B:
 
             level = FixMul(((int)noiseNext >> 2) * 0x10000 + ((int)noise & 0xfffffffc) * -0x4000, blend);
             level = FixMul(((int)noise & 0xfffffffc) * 0x4000 + level, 0x28f);
-            previous = pCar->field_0xa74;
+            previous = pCar->surfaceNoise;
             diff = level - previous;
-            *(int *)((BYTE *)pCar + 0xa78) = level;
+            pCar->surfaceNoiseTarget = level;
             if (FIX_ABS(diff) < 0x3334) {
-                pCar->field_0xa74 = level;
+                pCar->surfaceNoise = level;
                 return;
             }
             if (diff > 0) {
-                pCar->field_0xa74 = previous + 0x3333;
+                pCar->surfaceNoise = previous + 0x3333;
                 return;
             }
-            pCar->field_0xa74 = previous - 0x3333;
+            pCar->surfaceNoise = previous - 0x3333;
             return;
         }
     }
@@ -347,7 +365,7 @@ void Surface_LoadStageFonts(void)
     Font_InitTable(7);
     i = 0;
     // The original walks the array up to its end (the address of the global that follows it there).
-    for (pName = g_fontNames[0]; (int)pName < (int)g_fontNames[7]; pName += 20) {
+    for (pName = g_fontNames[0]; (INT_PTR)pName < (INT_PTR)g_fontNames[7]; pName += 20) {
         Font_Load(pName, (GenericFile *)StageTiming_GetStageFile1(), i);
         i++;
     }
@@ -384,31 +402,16 @@ int Race_GetResourceState(void);
 
 // Engine sound curves: sample count and input range, then the pitch samples
 // and the volume bytes (the pointers are set by FUN_00478xxx at stage start).
-// NetRace_IsValueWithinCurveRange/ad0/b70 take the curve as an int[4]: count, min, max, samples.
-struct SoundCurve {
-    int count;
-    int min;
-    int max;
-    unsigned short *pSamples;
-    BYTE *pBytes;
-};
+// The range and interpolation consumers use the shared SoundCurve descriptor.
+
 // GLOBAL: CMR2 0x0051ea60
-SoundCurve g_curve0x0051ea60 = { 20, 2000, 3000, 0, 0 };
+SoundCurve g_engineSoundCurve = { 20, 2000, 3000, 0, 0 };
 // GLOBAL: CMR2 0x0051eab8
-SoundCurve g_curve0x0051eab8 = { 126, 2200, 8500, 0, 0 };
+SoundCurve g_engineLoadSoundCurve = { 126, 2200, 8500, 0, 0 };
 // GLOBAL: CMR2 0x0051ec50
-SoundCurve g_curve0x0051ec50 = { 126, 2200, 8500, 0, 0 };
+SoundCurve g_engineWhineSoundCurve = { 126, 2200, 8500, 0, 0 };
 // GLOBAL: CMR2 0x0051ede8
-SoundCurve g_curve0x0051ede8 = { 193, 0, 160, 0, 0 };
-#define g_unk0x0051ea60 ((int *)&g_curve0x0051ea60)
-#define g_pUnk0x0051ea6c g_curve0x0051ea60.pSamples
-#define g_pUnk0x0051ea70 g_curve0x0051ea60.pBytes
-#define g_pUnk0x0051eac4 g_curve0x0051eab8.pSamples
-#define g_pUnk0x0051eac8 g_curve0x0051eab8.pBytes
-#define g_pUnk0x0051ec5c g_curve0x0051ec50.pSamples
-#define g_pUnk0x0051ec60 g_curve0x0051ec50.pBytes
-#define g_pUnk0x0051edf4 g_curve0x0051ede8.pSamples
-#define g_pUnk0x0051edf8 g_curve0x0051ede8.pBytes
+SoundCurve g_speedSoundCurve = { 193, 0, 160, 0, 0 };
 
 // GLOBAL: CMR2 0x0051ea74
 unsigned short g_unk0x0051ea74[21] = {
@@ -607,14 +610,14 @@ void SurfaceSound_ResetPlayerParameters(void)
     }
     g_unk0x0058ddc8 = -1;
     g_unk0x0058ddcc = -1;
-    g_pUnk0x0051ea6c = g_unk0x0051ea74;
-    g_pUnk0x0051ea70 = g_unk0x0051ea9e;
-    g_pUnk0x0051eac4 = g_unk0x0051eacc;
-    g_pUnk0x0051eac8 = g_unk0x0051ebca;
-    g_pUnk0x0051ec5c = g_unk0x0051ec64;
-    g_pUnk0x0051ec60 = g_unk0x0051ed62;
-    g_pUnk0x0051edf4 = g_unk0x0051edfc;
-    g_pUnk0x0051edf8 = g_unk0x0051ef80;
+    g_engineSoundCurve.pSamples = g_unk0x0051ea74;
+    g_engineSoundCurve.pBytes = g_unk0x0051ea9e;
+    g_engineLoadSoundCurve.pSamples = g_unk0x0051eacc;
+    g_engineLoadSoundCurve.pBytes = g_unk0x0051ebca;
+    g_engineWhineSoundCurve.pSamples = g_unk0x0051ec64;
+    g_engineWhineSoundCurve.pBytes = g_unk0x0051ed62;
+    g_speedSoundCurve.pSamples = g_unk0x0051edfc;
+    g_speedSoundCurve.pBytes = g_unk0x0051ef80;
     CGame::RegisterCallback((void *)Surface_ReleaseStageSounds, 0);
 }
 
@@ -740,7 +743,7 @@ void Surface_LoadCarEngineSounds(void)
             Surface_LoadArchiveSample(name, (GenericFile *)StageTiming_GetStageFile0());
         }
     }
-    for (pFile = g_unk0x0058df48[0]; (int)pFile < (int)g_unk0x0058df48[2]; pFile += 12) {
+    for (pFile = g_unk0x0058df48[0]; (INT_PTR)pFile < (INT_PTR)g_unk0x0058df48[2]; pFile += 12) {
         if (*(void **)pFile != NULL) {
             CFileBuffer::FreeGenericFileBuffer(*(void **)pFile);
             *(void **)pFile = NULL;
@@ -806,9 +809,9 @@ extern int g_unk0x0058df3c;
 extern int g_unk0x0058df40;
 extern int g_unk0x0051f2d8[13];
 BYTE NetRace_GetRaceSoundMode(void);
-bool NetRace_IsValueWithinCurveRange(int value, int *pRange);
-unsigned int NetRace_InterpolateByteCurve(int value, int *pCurve);
-unsigned int NetRace_InterpolateWordCurve(int value, int *pCurve);
+bool NetRace_IsValueWithinCurveRange(int value, SoundCurve *pRange);
+unsigned int NetRace_InterpolateByteCurve(int value, SoundCurve *pCurve);
+unsigned int NetRace_InterpolateWordCurve(int value, SoundCurve *pCurve);
 int NetRace_GetListenerDistanceAttenuation(unsigned int view, int listener);
 unsigned short NetRace_ScaleViewAngleByDistance(int param_1, int param_2, unsigned short param_3);
 int Race_GetPlayerRecordField4(BYTE index);
@@ -849,9 +852,9 @@ void Surface_UpdatePlayerEngineSounds(int *pState, int player, int listener)
         g_unk0x0058df68[player] = 1;
     if (pitch > 5000)
         g_unk0x0058df70[player] = 1;
-    inEngine = NetRace_IsValueWithinCurveRange(pitch, g_unk0x0051ea60);
-    inLoad = NetRace_IsValueWithinCurveRange(pitch, (int *)&g_curve0x0051eab8);
-    inWhine = NetRace_IsValueWithinCurveRange(pitch, (int *)&g_curve0x0051ec50);
+    inEngine = NetRace_IsValueWithinCurveRange(pitch, &g_engineSoundCurve);
+    inLoad = NetRace_IsValueWithinCurveRange(pitch, &g_engineLoadSoundCurve);
+    inWhine = NetRace_IsValueWithinCurveRange(pitch, &g_engineWhineSoundCurve);
     if (!inEngine) {
         if (Sound_IsPlaying(g_unk0x0058dde8[player])) {
             Sound_SetPan(g_unk0x0058dde8[player], 0x2b11);
@@ -875,14 +878,14 @@ void Surface_UpdatePlayerEngineSounds(int *pState, int player, int listener)
         if (Sound_IsPlaying(g_unk0x0058ddac[player]) == 0)
             g_unk0x0058ddac[player] = Sound_PlaySampleWithParameters((unsigned short)(g_unk0x0058ddb4[player] + 1), 0, 0x5622, 0, 1, 0);
         if (Sound_IsPlaying(g_unk0x0058dde8[player])) {
-            Sound_SetPan(g_unk0x0058dde8[player], NetRace_InterpolateWordCurve(pitch, g_unk0x0051ea60));
+            Sound_SetPan(g_unk0x0058dde8[player], NetRace_InterpolateWordCurve(pitch, &g_engineSoundCurve));
             Sound_SetPlayingSlotVolume(g_unk0x0058dde8[player],
-                         CAR_VOLUME((int)(NetRace_InterpolateByteCurve(pitch, g_unk0x0051ea60) << 16) / 100, g_unk0x0058df38));
+                         CAR_VOLUME((int)(NetRace_InterpolateByteCurve(pitch, &g_engineSoundCurve) << 16) / 100, g_unk0x0058df38));
         }
         if (Sound_IsPlaying(g_unk0x0058ddac[player])) {
-            Sound_SetPan(g_unk0x0058ddac[player], NetRace_InterpolateWordCurve(pitch, g_unk0x0051ea60));
+            Sound_SetPan(g_unk0x0058ddac[player], NetRace_InterpolateWordCurve(pitch, &g_engineSoundCurve));
             Sound_SetPlayingSlotVolume(g_unk0x0058ddac[player],
-                         CAR_VOLUME((int)(NetRace_InterpolateByteCurve(pitch, g_unk0x0051ea60) << 16) / 100, g_unk0x0051f274));
+                         CAR_VOLUME((int)(NetRace_InterpolateByteCurve(pitch, &g_engineSoundCurve) << 16) / 100, g_unk0x0051f274));
         }
     }
     if (!inLoad) {
@@ -897,28 +900,28 @@ void Surface_UpdatePlayerEngineSounds(int *pState, int player, int listener)
     } else {
         if (Sound_IsPlaying(g_unk0x0058ddf0[player])) {
             volume = FixMul(0x10000 - FixDiv(pCar->throttleTorque, pCar->maxThrottleTorque),
-                            CAR_VOLUME((int)(NetRace_InterpolateByteCurve(pitch, (int *)&g_curve0x0051eab8) << 16) / 100,
+                            CAR_VOLUME((int)(NetRace_InterpolateByteCurve(pitch, &g_engineLoadSoundCurve) << 16) / 100,
                                        g_unk0x0058df3c));
             if (Race_GetPlayerRecordField4((BYTE)player))
                 Sound_SetPan(g_unk0x0058ddf0[player],
                              NetRace_ScaleViewAngleByDistance(player, player,
-                                          NetRace_InterpolateWordCurve(pitch, (int *)&g_curve0x0051eab8)));
+                                          NetRace_InterpolateWordCurve(pitch, &g_engineLoadSoundCurve)));
             else
                 Sound_SetPan(g_unk0x0058ddf0[player],
-                             NetRace_InterpolateWordCurve(pitch, (int *)&g_curve0x0051eab8));
+                             NetRace_InterpolateWordCurve(pitch, &g_engineLoadSoundCurve));
             Sound_SetPlayingSlotVolume(g_unk0x0058ddf0[player], volume);
         }
         if (Sound_IsPlaying(g_unk0x0058dde0[player])) {
             volume = FixMul(0x10000 - FixDiv(pCar->throttleTorque, pCar->maxThrottleTorque),
-                            CAR_VOLUME((int)(NetRace_InterpolateByteCurve(pitch, (int *)&g_curve0x0051eab8) << 16) / 100,
+                            CAR_VOLUME((int)(NetRace_InterpolateByteCurve(pitch, &g_engineLoadSoundCurve) << 16) / 100,
                                        g_unk0x0051f278));
             if (Race_GetPlayerRecordField4((BYTE)player))
                 Sound_SetPan(g_unk0x0058dde0[player],
                              NetRace_ScaleViewAngleByDistance(player, player,
-                                          NetRace_InterpolateWordCurve(pitch, (int *)&g_curve0x0051eab8)));
+                                          NetRace_InterpolateWordCurve(pitch, &g_engineLoadSoundCurve)));
             else
                 Sound_SetPan(g_unk0x0058dde0[player],
-                             NetRace_InterpolateWordCurve(pitch, (int *)&g_curve0x0051eab8));
+                             NetRace_InterpolateWordCurve(pitch, &g_engineLoadSoundCurve));
             Sound_SetPlayingSlotVolume(g_unk0x0058dde0[player], volume);
         }
     }
@@ -1069,7 +1072,7 @@ void Surface_UpdatePlayerEngineSounds(int *pState, int player, int listener)
             g_unk0x0058df70[player] = 0;
         }
     } else {
-        volume = (int)NetRace_InterpolateByteCurve(pitch, (int *)&g_curve0x0051ec50);
+        volume = (int)NetRace_InterpolateByteCurve(pitch, &g_engineWhineSoundCurve);
         volume = g_unk0x0058de08[player] * volume / 100;
         if (g_unk0x0058de10[player] != -1)
             StageObject_GetCarSoundElapsedTime(player);
@@ -1082,9 +1085,9 @@ void Surface_UpdatePlayerEngineSounds(int *pState, int player, int listener)
         if (Race_GetPlayerRecordField4((BYTE)player))
             Sound_SetPan(g_unk0x0058dd90[player],
                          NetRace_ScaleViewAngleByDistance(player, player,
-                                      NetRace_InterpolateWordCurve(pitch, (int *)&g_curve0x0051ec50)));
+                                      NetRace_InterpolateWordCurve(pitch, &g_engineWhineSoundCurve)));
         else
-            Sound_SetPan(g_unk0x0058dd90[player], NetRace_InterpolateWordCurve(pitch, (int *)&g_curve0x0051ec50));
+            Sound_SetPan(g_unk0x0058dd90[player], NetRace_InterpolateWordCurve(pitch, &g_engineWhineSoundCurve));
         Sound_SetPlayingSlotVolume(g_unk0x0058dd90[player], CAR_VOLUME((volume << 16) / 100, g_unk0x0058df40));
         if (Sound_IsPlaying(g_unk0x0058ddd0[player]) == 0)
             g_unk0x0058ddd0[player] = Sound_PlaySampleWithParameters(
@@ -1094,9 +1097,9 @@ void Surface_UpdatePlayerEngineSounds(int *pState, int player, int listener)
         if (Race_GetPlayerRecordField4((BYTE)player))
             Sound_SetPan(g_unk0x0058ddd0[player],
                          NetRace_ScaleViewAngleByDistance(player, player,
-                                      NetRace_InterpolateWordCurve(pitch, (int *)&g_curve0x0051ec50)));
+                                      NetRace_InterpolateWordCurve(pitch, &g_engineWhineSoundCurve)));
         else
-            Sound_SetPan(g_unk0x0058ddd0[player], NetRace_InterpolateWordCurve(pitch, (int *)&g_curve0x0051ec50));
+            Sound_SetPan(g_unk0x0058ddd0[player], NetRace_InterpolateWordCurve(pitch, &g_engineWhineSoundCurve));
         Sound_SetPlayingSlotVolume(g_unk0x0058ddd0[player], CAR_VOLUME((volume << 16) / 100, g_unk0x0051f27c));
     }
     Surface_UpdatePlayerSkidSound(player, pState, listener);
@@ -1126,9 +1129,9 @@ void Surface_StopSecondOneShotSound(int player)
 
 
 BYTE NetRace_GetRaceSoundMode(void);
-bool NetRace_IsValueWithinCurveRange(int value, int *pRange);
-unsigned int NetRace_InterpolateByteCurve(int value, int *pCurve);
-unsigned int NetRace_InterpolateWordCurve(int value, int *pCurve);
+bool NetRace_IsValueWithinCurveRange(int value, SoundCurve *pRange);
+unsigned int NetRace_InterpolateByteCurve(int value, SoundCurve *pCurve);
+unsigned int NetRace_InterpolateWordCurve(int value, SoundCurve *pCurve);
 int NetRace_GetListenerDistanceAttenuation(unsigned int view, int listener);
 unsigned short NetRace_ScaleViewAngleByDistance(int param_1, int param_2, unsigned short param_3);
 int Race_GetPlayerRecordField4(BYTE index);
@@ -1291,7 +1294,7 @@ void Surface_UpdatePlayerSkidSound(int player, int *pState, int listener)
         else
             dip = 0;
     }
-    if (speed < g_curve0x0051ede8.max && level != 0) {
+    if (speed < g_speedSoundCurve.max && level != 0) {
         if (pState[4] == 100) {
             g_unk0x0058dd78[player] += 10;
             if (g_unk0x0058dd78[player] > 100)
@@ -1300,17 +1303,17 @@ void Surface_UpdatePlayerSkidSound(int player, int *pState, int listener)
             g_unk0x0058dd78[player] = 0;
         }
         if (!NetRace_GetRaceSoundMode()) {
-            inRange = NetRace_IsValueWithinCurveRange(speed, (int *)&g_curve0x0051ede8);
+            inRange = NetRace_IsValueWithinCurveRange(speed, &g_speedSoundCurve);
             if (inRange != 0) {
                 pHandle = &g_unk0x0058dd80[player];
                 if (Sound_IsPlaying(g_unk0x0058dd80[player]) == 0)
                     return;
                 if (Race_GetPlayerRecordField4((BYTE)player))
                     Sound_SetPan(*pHandle, NetRace_ScaleViewAngleByDistance(player, player,
-                                 NetRace_InterpolateWordCurve(speed, (int *)&g_curve0x0051ede8)));
+                                 NetRace_InterpolateWordCurve(speed, &g_speedSoundCurve)));
                 else
-                    Sound_SetPan(*pHandle, NetRace_InterpolateWordCurve(speed, (int *)&g_curve0x0051ede8));
-                volume = NetRace_InterpolateByteCurve(speed, (int *)&g_curve0x0051ede8);
+                    Sound_SetPan(*pHandle, NetRace_InterpolateWordCurve(speed, &g_speedSoundCurve));
+                volume = NetRace_InterpolateByteCurve(speed, &g_speedSoundCurve);
                 if (locked)
                     return;
                 if (level >= 1 && level <= 3)
@@ -1400,6 +1403,7 @@ char g_strLangEnglish[] = "genglish";
 #include "GenericFileLoader.h"
 #include "Game.h"
 #include <stdio.h>
+#include <stddef.h>
 
 BYTE Surface_FreeTextureData(void);
 
@@ -1456,7 +1460,7 @@ BYTE SurfaceText_LoadRegionalStringTable(void)
 // the per-wheel block (grip, noise, effect bytes and the drag-derived value).
 // match 63%: implemented; the two pointer walks use different index registers here
 // FUNCTION: CMR2 0x004786b0
-void Surface_BlendWheelContactParameters(BYTE *pWheel, int unused)
+void Surface_BlendWheelContactParameters(Car *pWheel, int unused)
 {
     int v;
     int total;
@@ -1464,13 +1468,13 @@ void Surface_BlendWheelContactParameters(BYTE *pWheel, int unused)
     int *pMix;
     short *pId;
     int *pOut;
-    int *pOut2;
+    BYTE *pOut2;
     int id;
     int blend;
 
-    pMix = (int *)(pWheel + 0x8ac);
-    pId = (short *)(pWheel + 0xab4);
-    pOut = (int *)(pWheel + 0xf8);
+    pMix = &pWheel->surfaceCompressionWords[(offsetof(Car, wheelSpinForBodyLean) + 3 * sizeof(int) - offsetof(Car, surfaceCompressionWords)) / sizeof(int)];
+    pId = &pWheel->wheelSurface[3];
+    pOut = &pWheel->surfaceOutputWords[(offsetof(Car, cornerGrip) + 3 * sizeof(CarCornerGrip) + offsetof(CarCornerGrip, grip2B)) / sizeof(int)];
     total = 0;
     i = 2;
     do {
@@ -1480,79 +1484,79 @@ void Surface_BlendWheelContactParameters(BYTE *pWheel, int unused)
             if (blend > 0x10000)
                 blend = 0x10000;
             v = FixMul(blend, g_surfaceSoftness[id][0]);
-            pOut[-3] = g_surfaceGrip[id][0] + v;
-            pOut[-1] = g_surfaceGrip2[id][0] + v;
-            pOut[-2] = FixDiv(FixMul(g_surfaceGrip[id][0], g_surfaceGrip[id][1]), pOut[-3]);
-            pOut[0] = FixDiv(FixMul(g_surfaceGrip2[id][0], g_surfaceGrip2[id][1]), pOut[-1]);
+            CarSurfacePairedGripOutput(pOut)->gripA = g_surfaceGrip[id][0] + v;
+            CarSurfacePairedGripOutput(pOut)->grip2A = g_surfaceGrip2[id][0] + v;
+            CarSurfacePairedGripOutput(pOut)->gripB = FixDiv(FixMul(g_surfaceGrip[id][0], g_surfaceGrip[id][1]), CarSurfacePairedGripOutput(pOut)->gripA);
+            CarSurfacePairedGripOutput(pOut)->grip2B = FixDiv(FixMul(g_surfaceGrip2[id][0], g_surfaceGrip2[id][1]), CarSurfacePairedGripOutput(pOut)->grip2A);
         } else {
-            pOut[-3] = g_surfaceGrip[id][0];
-            pOut[-1] = g_surfaceGrip2[id][0];
-            pOut[-2] = g_surfaceGrip[id][1];
-            pOut[0] = g_surfaceGrip2[id][1];
+            CarSurfacePairedGripOutput(pOut)->gripA = g_surfaceGrip[id][0];
+            CarSurfacePairedGripOutput(pOut)->grip2A = g_surfaceGrip2[id][0];
+            CarSurfacePairedGripOutput(pOut)->gripB = g_surfaceGrip[id][1];
+            CarSurfacePairedGripOutput(pOut)->grip2B = g_surfaceGrip2[id][1];
         }
         if (*pMix != 0) {
             blend = *pMix;
             if (blend > 0x10000)
                 blend = 0x10000;
             v = FixMul(blend, g_surfaceSoftness[id][1]);
-            pOut[-2] += v;
-            pOut[0] += v;
+            CarSurfacePairedGripOutput(pOut)->gripB += v;
+            CarSurfacePairedGripOutput(pOut)->grip2B += v;
         }
         pMix -= 2;
-        pOut[1] = g_surface0x51e678[id];
-        pOut[2] = g_surface0x51e738[id];
-        pOut[3] = g_surface0x51e2b8[id];
-        pOut[4] = g_surface0x51e4f8[id];
-        pOut[5] = g_surface0x51e5b8[id];
-        pOut[-10] = pOut[-1];
-        pOut[-9] = pOut[0];
-        pOut[-12] = pOut[-3];
-        pOut[-11] = pOut[-2];
-        pOut[-8] = pOut[1];
-        pOut[-7] = pOut[2];
-        pOut[-6] = pOut[3];
-        pOut[-5] = pOut[4];
-        pOut[-4] = pOut[5];
-        pOut -= 0x12;
+        CarSurfacePairedGripOutput(pOut)->drag = g_surface0x51e678[id];
+        CarSurfacePairedGripOutput(pOut)->field_0x14 = g_surface0x51e738[id];
+        CarSurfacePairedGripOutput(pOut)->field_0x18 = g_surface0x51e2b8[id];
+        CarSurfacePairedGripOutput(pOut)->field_0x1c = g_surface0x51e4f8[id];
+        CarSurfacePairedGripOutput(pOut)->field_0x20 = g_surface0x51e5b8[id];
+        CarSurfacePairedGripOutput(pOut)[-1].grip2A = CarSurfacePairedGripOutput(pOut)->grip2A;
+        CarSurfacePairedGripOutput(pOut)[-1].grip2B = CarSurfacePairedGripOutput(pOut)->grip2B;
+        CarSurfacePairedGripOutput(pOut)[-1].gripA = CarSurfacePairedGripOutput(pOut)->gripA;
+        CarSurfacePairedGripOutput(pOut)[-1].gripB = CarSurfacePairedGripOutput(pOut)->gripB;
+        CarSurfacePairedGripOutput(pOut)[-1].drag = CarSurfacePairedGripOutput(pOut)->drag;
+        CarSurfacePairedGripOutput(pOut)[-1].field_0x14 = CarSurfacePairedGripOutput(pOut)->field_0x14;
+        CarSurfacePairedGripOutput(pOut)[-1].field_0x18 = CarSurfacePairedGripOutput(pOut)->field_0x18;
+        CarSurfacePairedGripOutput(pOut)[-1].field_0x1c = CarSurfacePairedGripOutput(pOut)->field_0x1c;
+        CarSurfacePairedGripOutput(pOut)[-1].field_0x20 = CarSurfacePairedGripOutput(pOut)->field_0x20;
+        pOut -= 2 * sizeof(CarCornerGrip) / sizeof(*pOut);
         pId -= 2;
     } while (--i);
 
-    pId = (short *)(pWheel + 0xab4);
-    pOut2 = (int *)(pWheel + 0x1c5);
+    pId = &pWheel->wheelSurface[3];
+    pOut2 = &pWheel->surfaceOutputBytes[offsetof(Car, wheelSurfaceFx) + 3 * sizeof(CarWheelSurface) + offsetof(CarWheelSurface, effect) + 1];
     i = 2;
     do {
         id = *pId;
-        ((BYTE *)pOut2)[-1] = g_surfaceEffect[id][0];
-        ((BYTE *)pOut2)[0] = g_surfaceEffect[id][1];
-        *(int *)((BYTE *)pOut2 + 3) =
-            FixMul(0x51e, g_surfaceDrag[g_surfaceDragIndex[id] + *(BYTE *)(pWheel + 0xb29) * 9]);
-        *(int *)((BYTE *)pOut2 + 7) = 0;
+        CarSurfacePairedWheelOutput(pOut2)->effect[0] = g_surfaceEffect[id][0];
+        CarSurfacePairedWheelOutput(pOut2)->effect[1] = g_surfaceEffect[id][1];
+        CarSurfacePairedWheelOutput(pOut2)->drag =
+            FixMul(0x51e, g_surfaceDrag[g_surfaceDragIndex[id] + pWheel->surfaceDragLevel * 9]);
+        CarSurfacePairedWheelOutput(pOut2)->extraGrip = 0;
         total += g_surfaceNoise[id] * 2;
-        ((BYTE *)pOut2)[-0xd] = ((BYTE *)pOut2)[-1];
-        ((BYTE *)pOut2)[-0xc] = ((BYTE *)pOut2)[0];
-        *(int *)((BYTE *)pOut2 - 9) = *(int *)((BYTE *)pOut2 + 3);
-        *(int *)((BYTE *)pOut2 - 5) = *(int *)((BYTE *)pOut2 + 7);
+        CarSurfacePairedWheelOutput(pOut2)[-1].effect[0] = CarSurfacePairedWheelOutput(pOut2)->effect[0];
+        CarSurfacePairedWheelOutput(pOut2)[-1].effect[1] = CarSurfacePairedWheelOutput(pOut2)->effect[1];
+        CarSurfacePairedWheelOutput(pOut2)[-1].drag = CarSurfacePairedWheelOutput(pOut2)->drag;
+        CarSurfacePairedWheelOutput(pOut2)[-1].extraGrip = CarSurfacePairedWheelOutput(pOut2)->extraGrip;
         pId -= 2;
-        pOut2 = (int *)((BYTE *)pOut2 - 0x18);
+        pOut2 -= 2 * sizeof(CarWheelSurface);
     } while (--i);
 
     total = (total & 0xfffffffc) << 14;
-    *(int *)(pWheel + 0xa78) = total;
+    pWheel->surfaceNoiseTarget = total;
     v = FixMul(total, 0x28f);
-    blend = *(int *)(pWheel + 0xa74);
-    *(int *)(pWheel + 0xa78) = v;
+    blend = pWheel->surfaceNoise;
+    pWheel->surfaceNoiseTarget = v;
     i = v - blend;
     if (i < 0)
         i = -i;
     if (i <= 0x3333) {
-        *(int *)(pWheel + 0xa74) = v;
+        pWheel->surfaceNoise = v;
         return;
     }
     if (v - blend > 0) {
-        *(int *)(pWheel + 0xa74) = blend + 0x3333;
+        pWheel->surfaceNoise = blend + 0x3333;
         return;
     }
-    *(int *)(pWheel + 0xa74) = blend - 0x3333;
+    pWheel->surfaceNoise = blend - 0x3333;
 }
 
 // Stops the surface sounds of every active player (the per-player handles set
@@ -1588,7 +1592,7 @@ void Surface_StopAndFreeSounds(void)
             Sound_SetPlayingSlotVolume((unsigned int)g_unk0x0058ddd0[i], 0);
     }
     pHandle = &g_unk0x0058ddc8;
-    while ((int)pHandle < (int)(g_unk0x0058ddc8Pair + 2)) { // 0x58ddd0 in the original
+    while ((INT_PTR)pHandle < (INT_PTR)(g_unk0x0058ddc8Pair + 2)) { // 0x58ddd0 in the original
         if (*pHandle != -1)
             Sound_Free((unsigned int)*pHandle);
         pHandle++;
