@@ -1,5 +1,6 @@
 #include <stdlib.h>
 #include "FloatToInt.h"
+#include <stddef.h>
 #include "Sector.h"
 #include "FinRecord.h"
 #include "SceneNode.h"
