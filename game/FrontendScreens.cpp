@@ -1770,26 +1770,30 @@ void FrontendNetwork_SendSetupPacket(void)
     Network_SendPlayerMessage(0, 1, &packet, 0x1c4);
 }
 
-// Message handler of the joining side: session data, player info and the
-// setup packet of the host.
+// System notifications for both host and guests. The provider builds native
+// records containing pointers into the receive buffer, not 32-bit wire words.
 // FUNCTION: CMR2 0x004ec560
 void FrontendNetwork_HandleJoinerMessage(NetPlayerID *pFrom, unsigned int *pData)
 {
-    char *pText;
     unsigned int type;
 
     type = pData[0];
     switch (type) {
-    case 5:
-        Network_RemoveSessionPlayerByID((NetPlayerID *)(pData + 2));
-        NetPlayers_RemovePlayerByID((int *)(pData + 2));
+    case NET_SYS_DESTROYPLAYER: {
+        NetMsgDestroyPlayer *message = (NetMsgDestroyPlayer *)pData;
+        Network_RemoveSessionPlayerByID(&message->dpId);
+        NetPlayers_RemovePlayerByID((int *)&message->dpId);
         return;
-    case 3:
-        NetPlayers_AddOrUpdatePlayerInfo((NetPlayerID *)(pData + 2), (NetPlayerInfo *)pData[4], 1);
+    }
+    case NET_SYS_CREATEPLAYER: {
+        NetMsgCreatePlayer *message = (NetMsgCreatePlayer *)pData;
+        if (message->lpData && message->dwDataSize >= sizeof(NetPlayerInfo))
+            NetPlayers_AddOrUpdatePlayerInfo(&message->dpId, (NetPlayerInfo *)message->lpData, 1);
         FrontendNetwork_SendPlayerDescription();
         FrontendNetwork_SendSetupPacket();
         return;
-    case 0x101:
+    }
+    case NET_SYS_HOST:
         Network_SetSessionStateFlag(1);
         if (Network_GetSessionNamePointer() != NULL)
             strcpy(g_unk0x00818ebc, (char *)Network_GetSessionNamePointer());
@@ -1820,14 +1824,19 @@ void FrontendNetwork_HandleJoinerMessage(NetPlayerID *pFrom, unsigned int *pData
         }
         Session_SetOpen(0);
         return;
-    case 0x104:
-        Network_SetSessionDescription((NetSessionDesc *)(pData + 1));
+    case NET_SYS_SETSESSIONDESC: {
+        NetMsgSetSessionDesc *message = (NetMsgSetSessionDesc *)pData;
+        Network_SetSessionDescription(&message->dpDesc);
         GameInfo_SetConfiguredGameMode((BYTE)Session_GetUserValue(0));
         GameInfo_SetSessionField398C(Session_GetUserValue(2));
         return;
-    case 0x102:
-        NetPlayers_AddOrUpdatePlayerInfo((NetPlayerID *)(pData + 2), (NetPlayerInfo *)pData[3], 1);
+    }
+    case NET_SYS_SETPLAYERDATA: {
+        NetMsgSetPlayerData *message = (NetMsgSetPlayerData *)pData;
+        if (message->lpData && message->dwDataSize >= sizeof(NetPlayerInfo))
+            NetPlayers_AddOrUpdatePlayerInfo(&message->dpId, (NetPlayerInfo *)message->lpData, 1);
         return;
+    }
     }
 }
 

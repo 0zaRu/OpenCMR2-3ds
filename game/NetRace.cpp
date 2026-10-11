@@ -1013,16 +1013,17 @@ void NetPlayers_RemovePlayerByID(int *pId);
 // FUNCTION: CMR2 0x00427680
 void NetRace_HandleDeviceNotification(int param_1, int *param_2)
 {
-    if (*param_2 != 5) {
-        if (*param_2 == 0x101) {
+    if (*param_2 != NET_SYS_DESTROYPLAYER) {
+        if (*param_2 == NET_SYS_HOST) {
             Network_SetSessionStateFlag(1);
             InRaceMenu_RebuildMainPage(1);
             GameMenu_SetupStageResults(1);
         }
         return;
     }
-    Network_RemoveSessionPlayerByID((DWORD *)(param_2 + 2));
-    NetPlayers_RemovePlayerByID(param_2 + 2);
+    NetMsgDestroyPlayer *message = (NetMsgDestroyPlayer *)param_2;
+    Network_RemoveSessionPlayerByID(&message->dpId);
+    NetPlayers_RemovePlayerByID((int *)&message->dpId);
 }
 
 void Car_GetViewPositionDelta(FixVector *pOut, unsigned int view);

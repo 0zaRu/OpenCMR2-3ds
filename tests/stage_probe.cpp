@@ -19,6 +19,7 @@
 #include "CarParts.h"
 #include "ReplayStream.h"
 #include "CarPhysics.h"
+#include "NetPlayers.h"
 #include "RallyData.h"
 #include "Sector.h"
 #include "Mesh.h"
@@ -333,6 +334,9 @@ static void ConfigureMenu(Menu *menu) {
     if (menu == FrontendMenu_GetNetworkSessionDetails())
         if (const char *name = getenv("OPENCMR2_PROBE_SESSION_NAME"))
             snprintf(g_unk0x00818ebc, sizeof(g_unk0x00818ebc), "%s", name);
+    if (menu == FrontendMenu_GetNetworkSessionSetup())
+        if (const char *role = getenv("OPENCMR2_PROBE_LAN_ROLE"))
+            if (strcmp(role, "guest") == 0) menu->items[3].max = 0; // Ready menu option.
     int forced = ForcedCursor(menu->field_0x4);
     if (forced >= 0) { menu->cursor = (char)forced; return; }
     if (menu == FrontendMenu_GetMain()) menu->cursor = 1;
@@ -436,7 +440,17 @@ int main(int argc, char **argv) {
     int lastMode = -1;
     DWORD serviceOrigin = 0;
     bool mapOpening = false, mapExpanded = false;
+    const char *lanRole = getenv("OPENCMR2_PROBE_LAN_ROLE");
+    const Uint64 lanOrigin = SDL_GetTicks();
+    bool lanReady = false;
     for (unsigned frame = 0; frame < 200000 && probe.tick < ticks && !CGame::m_shouldExit; ++frame) {
+        // Socket threads use wall time, even when the simulation clock is
+        // controlled. Give both independent game processes time to exchange
+        // discovery, lobby and race-start packets.
+        if (lanRole) {
+            SDL_Delay(10);
+            if (SDL_GetTicks() - lanOrigin > 40000) break;
+        }
         SDL_PumpEvents();
         // The dummy driver does not focus windows. This test dispatches frames
         // explicitly, so SDL focus and wall time cannot influence its clock.
@@ -495,7 +509,18 @@ int main(int argc, char **argv) {
                 menu->cursor = holdMap ? 0 : forced >= 0 ? forced : 3;
             }
             else ConfigureMenu(menu);
-            if ((frame % 12 == 6 || !menu) && !(holdMap && mapOpening)) {
+            bool holdLobby = false;
+            if (lanRole && menu == FrontendMenu_GetNetworkSessionSetup()) {
+                holdLobby = true;
+                if (strcmp(lanRole, "host") == 0)
+                    for (const NetPlayer &player : g_netPlayers)
+                        if ((player.flags & 0xc0) == 0xc0) {
+                            holdLobby = false;
+                            if (!lanReady) fprintf(stderr, "probe: LAN guest ready id=%d\n", player.id);
+                            lanReady = true;
+                        }
+            }
+            if ((frame % 12 == 6 || !menu) && !(holdMap && mapOpening) && !holdLobby) {
                 keys[INPUT_KEY_RETURN] = 0x80;
                 // Blocking movie playback consumes SDL events itself.
                 SDL_Event event{};

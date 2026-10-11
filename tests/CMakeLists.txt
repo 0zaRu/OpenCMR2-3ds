@@ -72,6 +72,12 @@ if(OPENCMR2_BINK_TEST_DATA_DIR)
             ${CMAKE_CURRENT_SOURCE_DIR}/runtime_scenarios.py --probe $<TARGET_FILE:stage_probe>
             --data ${OPENCMR2_BINK_TEST_DATA_DIR})
         set_tests_properties(runtime_scenarios PROPERTIES TIMEOUT 180)
+        if(NOT CMAKE_CROSSCOMPILING)
+            add_test(NAME lan_game COMMAND ${Python3_EXECUTABLE}
+                ${CMAKE_CURRENT_SOURCE_DIR}/lan_game.py --host-probe $<TARGET_FILE:stage_probe>
+                --data ${OPENCMR2_BINK_TEST_DATA_DIR})
+            set_tests_properties(lan_game PROPERTIES TIMEOUT 120)
+        endif()
         add_test(NAME stage_lighting COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/stage_lighting.py --probe $<TARGET_FILE:stage_probe>
             --data ${OPENCMR2_BINK_TEST_DATA_DIR})
@@ -105,6 +111,10 @@ target_link_libraries(headlight_collision_test PRIVATE opencmr2_platform)
 add_test(NAME headlight_collision COMMAND headlight_collision_test)
 
 add_library(high_address_fixture STATIC high_address.c)
+add_executable(net_frontend_test net_frontend.cpp)
+target_link_libraries(net_frontend_test PRIVATE opencmr2_platform high_address_fixture)
+add_test(NAME net_frontend COMMAND net_frontend_test)
+set_tests_properties(net_frontend PROPERTIES TIMEOUT 30)
 target_link_libraries(headlight_collision_test PRIVATE high_address_fixture)
 target_link_libraries(sector_culling_test PRIVATE high_address_fixture)
 

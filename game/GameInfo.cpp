@@ -1523,13 +1523,14 @@ void OptionMenu_SetTargetLayoutPairs(int param1, int *param2, int param3)
 // FUNCTION: CMR2 0x00500a70
 void OptionMenu_HandleItemNotification(int unused, int *param2)
 {
-    if (*param2 != 5) {
-        if (*param2 == 0x101)
+    if (*param2 != NET_SYS_DESTROYPLAYER) {
+        if (*param2 == NET_SYS_HOST)
             Network_SetSessionStateFlag(1);
         return;
     }
-    Network_RemoveSessionPlayerByID((DWORD *)(param2 + 2));
-    NetPlayers_RemovePlayerByID(param2 + 2);
+    NetMsgDestroyPlayer *message = (NetMsgDestroyPlayer *)param2;
+    Network_RemoveSessionPlayerByID(&message->dpId);
+    NetPlayers_RemovePlayerByID((int *)&message->dpId);
 }
 
 void NetPlayers_ReceiveStatistics(NetPlayerID *pId, NetStats *pStats);
