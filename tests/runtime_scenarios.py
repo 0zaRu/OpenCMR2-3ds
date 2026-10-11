@@ -16,6 +16,12 @@ SCENARIOS = {
     'multiplayer-host': (500, {'OPENCMR2_PROBE_CURSORS': '0:3,33:2,60:0,53:1,61:6,19:2,62:3',
                              'OPENCMR2_PROBE_EXPECT_MODE': '8',
                              'OPENCMR2_PROBE_SESSION_NAME': 'TEST'}),
+    'finland-championship-results': (1500, {'OPENCMR2_PROBE_CURSORS': '88:0',
+                                           'OPENCMR2_PROBE_EXPECT_MODE': '0',
+                                           'OPENCMR2_PROBE_FINISH_AT_TICK': '500'}),
+    'finland-results': (1500, {'OPENCMR2_PROBE_CURSORS': '88:1',
+                              'OPENCMR2_PROBE_EXPECT_MODE': '1',
+                              'OPENCMR2_PROBE_FINISH_AT_TICK': '500'}),
     'recorded-replay': (1000, {'OPENCMR2_PROBE_REPLAY_AT_TICK': '500'}),
 }
 REPLAY = re.compile(r'probe: replay tick=(\d+) playing=(-?\d+) lane=(-?\d+) frame=(-?\d+) length=(-?\d+)')
@@ -57,6 +63,11 @@ def verify(probe, data, output):
         report[name] = {'ticks': count, 'driving_ticks': records[-1]['driving_tick']}
         if name == 'preliminary-map' and 'probe: preliminary map fully expanded' not in log:
             raise ValueError('preliminary map never fully expanded')
+        if name in ('finland-results', 'finland-championship-results'):
+            match = re.search(r'probe: Finland stage 2 driving ticks=(\d+)', log)
+            if not match or int(match[1]) < 100:
+                raise ValueError('Finland results did not continue to stage 2')
+            report[name]['next_stage_driving_ticks'] = int(match[1])
         if name == 'recorded-replay':
             report[name]['replay'] = verify_replay(log)
         print(f'{name}: PASS ({count} ticks)', flush=True)

@@ -51,6 +51,9 @@ extern char g_unk0x00818ebc[20];
 extern BYTE *Race_GetPlayerRecordPointer(int);
 extern int Replay_StopRecording(BYTE *);
 extern void Race_StartPlayerAndOpponentReplays(int);
+extern void StageTiming_RecordDriverTimeoutFinish(int);
+extern BYTE *StageUI_GetRaceResultTable();
+extern Menu *g_pHeaderMenu;
 
 static DWORD virtualTime = 1000;
 static DWORD Ticks() { return virtualTime; }
@@ -68,6 +71,8 @@ struct Probe : Diagnostics::TimingObserver {
     unsigned frameTickStart = 0, frameRng = 0, renderOnlyRngChanges = 0;
     bool scenarioCorrect = true;
     bool playbackCorrect = true;
+    bool finishInjected = false;
+    unsigned nextStageDrivingTicks = 0;
     BYTE state = 0;
     explicit Probe(FILE *file, unsigned count) : trace(file), target(count) {
         if (const char *path = getenv("OPENCMR2_STATE_CAPTURE")) {
@@ -110,6 +115,10 @@ struct Probe : Diagnostics::TimingObserver {
     void BeginTick(unsigned char value) override {
         TimingObserver::BeginTick(value);
         state = value;
+        if (finishInjected && value == 8 && RallyDataCountryIndex() == 0 && RallyDataStageIndex() == 1) {
+            if (!nextStageDrivingTicks) fprintf(stderr, "probe: Finland stage 2 driving at tick %u\n", tick);
+            ++nextStageDrivingTicks;
+        }
         if (tick == 0) {
             fprintf(stderr, "probe: country=%u stage=%u mode=%u cars=%d model=%d\n", RallyDataCountryIndex(), RallyDataStageIndex(), CGameInfo::GetConfiguredGameMode(), g_carOrderCount, Car_Get(0)->type);
             const char *expectedCars = getenv("OPENCMR2_PROBE_EXPECT_CARS");
@@ -211,6 +220,14 @@ struct Probe : Diagnostics::TimingObserver {
                 fprintf(stderr, "probe: replay tick=%u playing=%d lane=%d frame=%d length=%d\n",
                     tick, stream->playing, stream->lane, stream->frame,
                     stream->lane < stream->laneCount ? stream->pLaneSamples[stream->lane] : 0);
+        }
+        if (const char *finishAt = getenv("OPENCMR2_PROBE_FINISH_AT_TICK")) {
+            if (!finishInjected && tick + 1 == unsigned(atoi(finishAt)) && state == 8) {
+                StageTiming_RecordDriverTimeoutFinish(0);
+                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)StageUI_GetRaceResultTable(), 0, 0, 2);
+                finishInjected = true;
+                fprintf(stderr, "probe: finish transition requested at tick %u\n", tick + 1);
+            }
         }
         CaptureMemory();
         fprintf(trace, "{\"tick\":%u,\"state\":%u,\"driving_tick\":%u,\"rng\":%u,\"input\":{\"digital\":[%d,%d,%d,%d],\"handbrake\":%d,\"steering\":%d,\"pedal\":%d,\"shift\":[%d,%d,%d,%d]},\"cars\":[",
@@ -340,8 +357,8 @@ int main(int argc, char **argv) {
         if (mode != lastMode) { fprintf(stderr, "probe: resource mode %d at %u ms\n", mode, virtualTime); lastMode = mode; }
         memset(keys, 0, sizeof(keys));
         bool holdMap = false;
-        if (mode != 3) {
-            Menu *menu = mode == 2 ? g_pMenu0x00831778 : FrontendMenu_GetActiveMenu();
+        if (mode != 3 || probe.finishInjected) {
+            Menu *menu = mode == 3 ? g_pHeaderMenu : mode == 2 ? g_pMenu0x00831778 : FrontendMenu_GetActiveMenu();
             if (menu && menu != lastMenu) {
                 fprintf(stderr, "probe: menu %d (%d entries)\n", menu->field_0x4, menu->itemCount);
                 if (getenv("OPENCMR2_PROBE_MENU_TEXT"))
@@ -392,7 +409,9 @@ int main(int argc, char **argv) {
     Diagnostics::observer = nullptr;
     if (!probe.Write((std::string(argv[2]) + ".frames.csv").c_str())) return 1;
     const bool ok = probe.tick == ticks && probe.drivingTick > 0 && probe.scenarioCorrect && probe.playbackCorrect && !ferror(file) &&
-        (!getenv("OPENCMR2_PROBE_EXPAND_MAP") || mapExpanded);
+        (!getenv("OPENCMR2_PROBE_EXPAND_MAP") || mapExpanded) &&
+        (!getenv("OPENCMR2_PROBE_FINISH_AT_TICK") || (probe.finishInjected && probe.nextStageDrivingTicks >= 100));
+    if (probe.finishInjected) fprintf(stderr, "probe: Finland stage 2 driving ticks=%u\n", probe.nextStageDrivingTicks);
     fprintf(stderr, "probe: RNG changed in %u race frames without a simulation step\n", probe.renderOnlyRngChanges);
     fprintf(stderr, "probe: %u ticks, %u driving ticks, %u ms; %s\n", probe.tick, probe.drivingTick, virtualTime, ok ? "complete" : "FAILED");
     CMain::UnwindGameCallbacks();
