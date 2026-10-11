@@ -4138,8 +4138,8 @@ int Graphics_CopyIntoFreeTextureSlot(void *pSource, int param2)
     for (i = 0; i < 0x800; i++) {
         if (CGraphics::m_pTextureManager->textureBuffer[i] == NULL) {
             CGraphics::m_pTextureManager->textureBuffer[i] =
-                (Texture *)CFileBuffer::AllocateLockedBuffer(0x130);
-            memcpy(CGraphics::m_pTextureManager->textureBuffer[i], pSource, 0x130);
+                (Texture *)CFileBuffer::AllocateLockedBuffer(sizeof(Texture));
+            memcpy(CGraphics::m_pTextureManager->textureBuffer[i], pSource, sizeof(Texture));
             CGraphics::m_textureCount++;
             return i;
         }
@@ -4697,16 +4697,14 @@ RenderTexture *Graphics_AllocateCubeMapTextureSlot(void)
     for (i = 0; i < 0x14; i++) {
         if (CGraphics::m_pTextureManager->textureBuffer2[i] == NULL) {
             CGraphics::m_pTextureManager->textureBuffer2[i] =
-                (Texture *)CFileBuffer::AllocateLockedBuffer(0x738);
+                (Texture *)CFileBuffer::AllocateLockedBuffer(sizeof(RenderTexture));
             p = CGraphics::m_pTextureManager->textureBuffer2[i];
             for (j = 0; j < 6; j++) {
-                BYTE *q = (BYTE *)p + j * 0x130;
-
-                *(unsigned short *)q = (unsigned short)i;
-                *(unsigned short *)(q + 0x11c) = 0;
-                *(unsigned short *)(q + 0x11e) = 0;
-                *(unsigned short *)(q + 0x120) = CGraphics::m_cubeMapSize;
-                *(unsigned short *)(q + 0x122) = CGraphics::m_cubeMapSize;
+                p[j].textureId = (unsigned short)i;
+                p[j].field_0x11c = 0;
+                p[j].field_0x11e = 0;
+                p[j].width = CGraphics::m_cubeMapSize;
+                p[j].height = CGraphics::m_cubeMapSize;
             }
             if (p == NULL)
                 return NULL;
@@ -5799,7 +5797,7 @@ Texture *CGraphics::CreateTextureFromImageData(char *name, void *pData, unsigned
         isDDS = TRUE;
     for (i = 0; i < 0x800; i++) {
         if (m_pTextureManager->textureBuffer[i] == NULL) {
-            m_pTextureManager->textureBuffer[i] = (Texture *)CFileBuffer::AllocateLockedBuffer(0x130);
+            m_pTextureManager->textureBuffer[i] = (Texture *)CFileBuffer::AllocateLockedBuffer(sizeof(Texture));
             pTexture = m_pTextureManager->textureBuffer[i];
             pTexture->textureId = i;
             Frontend_SetObjectField118(pTexture, 0);
@@ -5847,7 +5845,7 @@ Texture *CGraphics::LoadDDSThenTGATexture(char *name, unsigned int flags)
     }
     for (i = 0; i < 0x800; i++) {
         if (m_pTextureManager->textureBuffer[i] == NULL) {
-            m_pTextureManager->textureBuffer[i] = (Texture *)CFileBuffer::AllocateLockedBuffer(0x130);
+            m_pTextureManager->textureBuffer[i] = (Texture *)CFileBuffer::AllocateLockedBuffer(sizeof(Texture));
             pTexture = m_pTextureManager->textureBuffer[i];
             pTexture->textureId = i;
             pTexture->pArchive = NULL;
