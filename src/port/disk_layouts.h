@@ -5,6 +5,12 @@
 #define OPENCMR2_PORT_DISK_LAYOUTS_H
 
 #include "port/disk.h"
+#include "SceneNode.h"
+#include "Mesh.h"
+#include "Sector.h"
+#include "MeshCollisionRecord.h"
+#include "Car.h"
+#include "CarParts.h"
 
 // SceneNode: 0x18c bytes in files, 0x1a0 on 64-bit targets.
 #if UINTPTR_MAX > 0xffffffffu
@@ -246,5 +252,165 @@ static_assert(sizeof(MeshCollisionRecord) == 0x5c, "run tools/gen_disk_layouts.p
 #endif
 static const DiskLayout g_diskLayout_MeshCollisionRecord = {0x5c, sizeof(MeshCollisionRecord), g_diskRuns_MeshCollisionRecord, sizeof(g_diskRuns_MeshCollisionRecord) / sizeof(DiskRun), g_diskPointers_MeshCollisionRecord, sizeof(g_diskPointers_MeshCollisionRecord) / sizeof(DiskPointer)};
 #define DISK_MeshCollisionRecord_pNext 0x58
+
+// Car: 0xc24 bytes in files, 0xc68 on 64-bit targets.
+#if UINTPTR_MAX > 0xffffffffu
+static const DiskRun g_diskRuns_Car[] = {
+    {0x0, 0x0, 0x71c},
+    {0x758, 0x798, 0x4cc},
+};
+static const DiskPointer g_diskPointers_Car[] = {
+    {0x71c, 0x720}, // pSceneRoot
+    {0x720, 0x728}, // pBodyNode
+    {0x724, 0x730}, // pAlternateBodyNode
+    {0x728, 0x738}, // pExtraNodes[0]
+    {0x72c, 0x740}, // pExtraNodes[1]
+    {0x730, 0x748}, // pExtraNodes[2]
+    {0x734, 0x750}, // pExtraNodes[3]
+    {0x738, 0x758}, // pWheelNodes[0]
+    {0x73c, 0x760}, // pWheelNodes[1]
+    {0x740, 0x768}, // pWheelNodes[2]
+    {0x744, 0x770}, // pWheelNodes[3]
+    {0x748, 0x778}, // pViewNodeNear
+    {0x74c, 0x780}, // pViewNodeFar
+    {0x750, 0x788}, // pWorld
+    {0x754, 0x790}, // pBodyMatrix
+};
+static_assert(sizeof(Car) == 0xc68, "run tools/gen_disk_layouts.py");
+#else
+static const DiskRun g_diskRuns_Car[] = {{0, 0, 0xc24}};
+static const DiskPointer g_diskPointers_Car[] = {
+    {0x71c, 0x71c}, // pSceneRoot
+    {0x720, 0x720}, // pBodyNode
+    {0x724, 0x724}, // pAlternateBodyNode
+    {0x728, 0x728}, // pExtraNodes[0]
+    {0x72c, 0x72c}, // pExtraNodes[1]
+    {0x730, 0x730}, // pExtraNodes[2]
+    {0x734, 0x734}, // pExtraNodes[3]
+    {0x738, 0x738}, // pWheelNodes[0]
+    {0x73c, 0x73c}, // pWheelNodes[1]
+    {0x740, 0x740}, // pWheelNodes[2]
+    {0x744, 0x744}, // pWheelNodes[3]
+    {0x748, 0x748}, // pViewNodeNear
+    {0x74c, 0x74c}, // pViewNodeFar
+    {0x750, 0x750}, // pWorld
+    {0x754, 0x754}, // pBodyMatrix
+};
+static_assert(sizeof(Car) == 0xc24, "run tools/gen_disk_layouts.py");
+#endif
+static const DiskLayout g_diskLayout_Car = {0xc24, sizeof(Car), g_diskRuns_Car, sizeof(g_diskRuns_Car) / sizeof(DiskRun), g_diskPointers_Car, sizeof(g_diskPointers_Car) / sizeof(DiskPointer)};
+#define DISK_Car_pSceneRoot 0x71c
+#define DISK_Car_pBodyNode 0x720
+#define DISK_Car_pAlternateBodyNode 0x724
+#define DISK_Car_pViewNodeNear 0x748
+#define DISK_Car_pViewNodeFar 0x74c
+#define DISK_Car_pWorld 0x750
+#define DISK_Car_pBodyMatrix 0x754
+
+// CarPartSet: 0x4d0 bytes in files, 0x588 on 64-bit targets.
+#if UINTPTR_MAX > 0xffffffffu
+static const DiskRun g_diskRuns_CarPartSet[] = {
+    {0xb4, 0x168, 0x41c},
+};
+static const DiskPointer g_diskPointers_CarPartSet[] = {
+    {0x0, 0x0}, // geometry.meshes[0]
+    {0x4, 0x8}, // geometry.meshes[1]
+    {0x8, 0x10}, // geometry.meshes[2]
+    {0xc, 0x18}, // geometry.meshes[3]
+    {0x10, 0x20}, // geometry.meshes[4]
+    {0x14, 0x28}, // geometry.meshes[5]
+    {0x18, 0x30}, // geometry.meshes[6]
+    {0x1c, 0x38}, // geometry.meshes[7]
+    {0x20, 0x40}, // geometry.meshes[8]
+    {0x24, 0x48}, // geometry.meshes[9]
+    {0x28, 0x50}, // geometry.meshes[10]
+    {0x2c, 0x58}, // geometry.meshes[11]
+    {0x30, 0x60}, // geometry.meshes[12]
+    {0x34, 0x68}, // geometry.meshes[13]
+    {0x38, 0x70}, // geometry.meshes[14]
+    {0x3c, 0x78}, // geometry.nodes[0]
+    {0x40, 0x80}, // geometry.nodes[1]
+    {0x44, 0x88}, // geometry.nodes[2]
+    {0x48, 0x90}, // geometry.nodes[3]
+    {0x4c, 0x98}, // geometry.nodes[4]
+    {0x50, 0xa0}, // geometry.nodes[5]
+    {0x54, 0xa8}, // geometry.nodes[6]
+    {0x58, 0xb0}, // geometry.nodes[7]
+    {0x5c, 0xb8}, // geometry.nodes[8]
+    {0x60, 0xc0}, // geometry.nodes[9]
+    {0x64, 0xc8}, // geometry.nodes[10]
+    {0x68, 0xd0}, // geometry.nodes[11]
+    {0x6c, 0xd8}, // geometry.nodes[12]
+    {0x70, 0xe0}, // geometry.nodes[13]
+    {0x74, 0xe8}, // geometry.nodes[14]
+    {0x78, 0xf0}, // geometry.vertices[0]
+    {0x7c, 0xf8}, // geometry.vertices[1]
+    {0x80, 0x100}, // geometry.vertices[2]
+    {0x84, 0x108}, // geometry.vertices[3]
+    {0x88, 0x110}, // geometry.vertices[4]
+    {0x8c, 0x118}, // geometry.vertices[5]
+    {0x90, 0x120}, // geometry.vertices[6]
+    {0x94, 0x128}, // geometry.vertices[7]
+    {0x98, 0x130}, // geometry.vertices[8]
+    {0x9c, 0x138}, // geometry.vertices[9]
+    {0xa0, 0x140}, // geometry.vertices[10]
+    {0xa4, 0x148}, // geometry.vertices[11]
+    {0xa8, 0x150}, // geometry.vertices[12]
+    {0xac, 0x158}, // geometry.vertices[13]
+    {0xb0, 0x160}, // geometry.vertices[14]
+};
+static_assert(sizeof(CarPartSet) == 0x588, "run tools/gen_disk_layouts.py");
+#else
+static const DiskRun g_diskRuns_CarPartSet[] = {{0, 0, 0x4d0}};
+static const DiskPointer g_diskPointers_CarPartSet[] = {
+    {0x0, 0x0}, // geometry.meshes[0]
+    {0x4, 0x4}, // geometry.meshes[1]
+    {0x8, 0x8}, // geometry.meshes[2]
+    {0xc, 0xc}, // geometry.meshes[3]
+    {0x10, 0x10}, // geometry.meshes[4]
+    {0x14, 0x14}, // geometry.meshes[5]
+    {0x18, 0x18}, // geometry.meshes[6]
+    {0x1c, 0x1c}, // geometry.meshes[7]
+    {0x20, 0x20}, // geometry.meshes[8]
+    {0x24, 0x24}, // geometry.meshes[9]
+    {0x28, 0x28}, // geometry.meshes[10]
+    {0x2c, 0x2c}, // geometry.meshes[11]
+    {0x30, 0x30}, // geometry.meshes[12]
+    {0x34, 0x34}, // geometry.meshes[13]
+    {0x38, 0x38}, // geometry.meshes[14]
+    {0x3c, 0x3c}, // geometry.nodes[0]
+    {0x40, 0x40}, // geometry.nodes[1]
+    {0x44, 0x44}, // geometry.nodes[2]
+    {0x48, 0x48}, // geometry.nodes[3]
+    {0x4c, 0x4c}, // geometry.nodes[4]
+    {0x50, 0x50}, // geometry.nodes[5]
+    {0x54, 0x54}, // geometry.nodes[6]
+    {0x58, 0x58}, // geometry.nodes[7]
+    {0x5c, 0x5c}, // geometry.nodes[8]
+    {0x60, 0x60}, // geometry.nodes[9]
+    {0x64, 0x64}, // geometry.nodes[10]
+    {0x68, 0x68}, // geometry.nodes[11]
+    {0x6c, 0x6c}, // geometry.nodes[12]
+    {0x70, 0x70}, // geometry.nodes[13]
+    {0x74, 0x74}, // geometry.nodes[14]
+    {0x78, 0x78}, // geometry.vertices[0]
+    {0x7c, 0x7c}, // geometry.vertices[1]
+    {0x80, 0x80}, // geometry.vertices[2]
+    {0x84, 0x84}, // geometry.vertices[3]
+    {0x88, 0x88}, // geometry.vertices[4]
+    {0x8c, 0x8c}, // geometry.vertices[5]
+    {0x90, 0x90}, // geometry.vertices[6]
+    {0x94, 0x94}, // geometry.vertices[7]
+    {0x98, 0x98}, // geometry.vertices[8]
+    {0x9c, 0x9c}, // geometry.vertices[9]
+    {0xa0, 0xa0}, // geometry.vertices[10]
+    {0xa4, 0xa4}, // geometry.vertices[11]
+    {0xa8, 0xa8}, // geometry.vertices[12]
+    {0xac, 0xac}, // geometry.vertices[13]
+    {0xb0, 0xb0}, // geometry.vertices[14]
+};
+static_assert(sizeof(CarPartSet) == 0x4d0, "run tools/gen_disk_layouts.py");
+#endif
+static const DiskLayout g_diskLayout_CarPartSet = {0x4d0, sizeof(CarPartSet), g_diskRuns_CarPartSet, sizeof(g_diskRuns_CarPartSet) / sizeof(DiskRun), g_diskPointers_CarPartSet, sizeof(g_diskPointers_CarPartSet) / sizeof(DiskPointer)};
 
 #endif

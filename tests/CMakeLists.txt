@@ -28,8 +28,7 @@ add_executable(movie_render_state_test movie_render_state.cpp
 target_link_libraries(movie_render_state_test PRIVATE opencmr2_bink SDL3::SDL3)
 add_test(NAME movie_render_state COMMAND movie_render_state_test)
 
-# Tests that run game code. They pass on 64-bit too; stage_probe still
-# crashes there when it loads a stage (see physics_original_parity below).
+# Tests that run game code, on every target.
 add_executable(math_tables_test math_tables.cpp)
 target_link_libraries(math_tables_test PRIVATE opencmr2_platform)
 add_test(NAME math_tables COMMAND math_tables_test
@@ -55,8 +54,7 @@ endif()
 
 set(OPENCMR2_BINK_TEST_DATA_DIR "" CACHE PATH "Optional original game data for movie and physics regression tests")
 if(OPENCMR2_BINK_TEST_DATA_DIR)
-    # 32-bit only until the game code loads a stage on 64-bit (docs/PLAN.md, F4).
-    if(Python3_Interpreter_FOUND AND TARGET stage_probe AND CMAKE_SIZEOF_VOID_P EQUAL 4)
+    if(Python3_Interpreter_FOUND AND TARGET stage_probe)
         add_test(NAME physics_original_parity COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/physics_parity.py --probe $<TARGET_FILE:stage_probe>
             --data ${OPENCMR2_BINK_TEST_DATA_DIR})

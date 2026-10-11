@@ -6,6 +6,7 @@
 #include "port/diagnostics.h"
 #include "diagnostics/timing.h"
 #include "diagnostics/state_capture.h"
+#include "port/disk_layouts.h"
 #include "port/sys.h"
 #include "port/input.h"
 #include "main.h"
@@ -112,8 +113,23 @@ struct Probe : Diagnostics::TimingObserver {
         if (tick >= target) return;
         if (memory) {
             StateCaptureView view{};
-            view.cars = reinterpret_cast<const unsigned char *>(g_carBuffer);
-            view.parts = reinterpret_cast<const unsigned char *>(g_carPartSets); view.damage = reinterpret_cast<const unsigned char *>(g_carDamageRecords);
+            // The capture holds the original (Win32) layout: where Car and
+            // CarPartSet hold wider pointers, pack the captured ones first.
+            static unsigned char cars[8][0xc24], parts[8][0x4d0];
+            const unsigned char *pCars = reinterpret_cast<const unsigned char *>(g_carBuffer);
+            const unsigned char *pParts = reinterpret_cast<const unsigned char *>(g_carPartSets);
+            if (sizeof(Car) != sizeof(cars[0]) || sizeof(CarPartSet) != sizeof(parts[0])) {
+                for (int i = 0; i < g_carOrderCount; i++) {
+                    int id = g_carOrder[i];
+                    if (id < 0 || id >= 8) continue;
+                    Disk_Pack(cars[id], &g_carBuffer[id], &g_diskLayout_Car);
+                    if (g_carPartSets) Disk_Pack(parts[id], &g_carPartSets[id], &g_diskLayout_CarPartSet);
+                }
+                pCars = cars[0];
+                pParts = g_carPartSets ? parts[0] : NULL;
+            }
+            view.cars = pCars;
+            view.parts = pParts; view.damage = reinterpret_cast<const unsigned char *>(g_carDamageRecords);
             view.contacts = reinterpret_cast<const unsigned char *>(g_carContacts);
             view.timing = g_carStageTiming; view.checkpoints = g_unk0x00542e78;
             view.transforms = reinterpret_cast<const unsigned char *>(g_carTransforms);

@@ -72,6 +72,10 @@ static inline void *Disk_Data(const void *record, unsigned off, void *base)
 /* Copies a file record to native storage; pointer fields become NULL. */
 void Disk_Unpack(void *native, const void *record, const DiskLayout *layout);
 
+/* The reverse: writes a native record in the file layout; pointer fields
+ * keep the low 32 bits of the pointer (addresses are not comparable anyway). */
+void Disk_Pack(void *record, const void *native, const DiskLayout *layout);
+
 /* Frees native storage together with the game buffer that holds fileData:
  * CFileBuffer::FreeGenericFileBuffer of that buffer frees it. */
 void Disk_AttachToBuffer(const void *fileData, void *native);

@@ -27,8 +27,10 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 OUTPUT = ROOT / "src/port/disk_layouts.h"
-HEADERS = ["SceneNode.h", "Mesh.h", "Sector.h", "MeshCollisionRecord.h"]
-RECORDS = ["SceneNode", "Mesh", "StageObject", "Sector", "MeshCollisionRecord"]
+HEADERS = ["SceneNode.h", "Mesh.h", "Sector.h", "MeshCollisionRecord.h", "Car.h", "CarParts.h"]
+# Stage mesh file records, then the per-car records the state capture writes
+# in the original layout (tests/stage_probe.cpp).
+RECORDS = ["SceneNode", "Mesh", "StageObject", "Sector", "MeshCollisionRecord", "Car", "CarPartSet"]
 TARGETS = {"disk": "i386-pc-linux-gnu", "native": "x86_64-pc-linux-gnu",
            "windows": "x86_64-pc-windows-msvc"}
 LINE = re.compile(r"^\s*(\d+)(?::\d+-\d+)? \|( *)(\S.*)$")
@@ -124,7 +126,7 @@ def generate():
            "// File records of the stage mesh loader (see that script): byte runs copied",
            "// as they are and pointer fields stored as 32-bit file offsets.",
            "#ifndef OPENCMR2_PORT_DISK_LAYOUTS_H", "#define OPENCMR2_PORT_DISK_LAYOUTS_H", "",
-           '#include "port/disk.h"', ""]
+           '#include "port/disk.h"'] + [f'#include "{h}"' for h in HEADERS] + [""]
     for record in RECORDS:
         dsize, nsize, runs, pointers = layout(disk, native, record)
         if windows is not None and layout(disk, windows, record) != (dsize, nsize, runs, pointers):

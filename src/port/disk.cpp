@@ -42,6 +42,21 @@ void Disk_Unpack(void *native, const void *record, const DiskLayout *layout)
         memset((char *)native + layout->pointers[i].native, 0, sizeof(void *));
 }
 
+void Disk_Pack(void *record, const void *native, const DiskLayout *layout)
+{
+    memset(record, 0, layout->diskSize);
+    for (int i = 0; i < layout->runCount; i++) {
+        const DiskRun &run = layout->runs[i];
+        memcpy((char *)record + run.disk, (const char *)native + run.native, run.size);
+    }
+    for (int i = 0; i < layout->pointerCount; i++) {
+        uintptr_t pointer;
+        memcpy(&pointer, (const char *)native + layout->pointers[i].native, sizeof(pointer));
+        uint32_t low = (uint32_t)pointer;
+        memcpy((char *)record + layout->pointers[i].disk, &low, sizeof(low));
+    }
+}
+
 void Disk_AttachToBuffer(const void *fileData, void *native)
 {
     s_attachments.push_back({(const char *)fileData, native});
