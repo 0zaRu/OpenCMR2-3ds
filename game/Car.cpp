@@ -1,4 +1,5 @@
 #include <math.h>
+#include "FloatToInt.h"
 #include "Graphics.h"
 #include "Car.h"
 #include "RallyRouteNode.h"
@@ -361,9 +362,9 @@ void View_SelectVisibleCars(unsigned int view, short *pRect)
                 distTable[g_carOrder[j]] = 0x7fbc0000;
             } else {
                 ftmp = (float)(proj1[0] - proj2[0]) / (float)(int)g_pGraphics->resX;
-                ix = (int)(ftmp * g_65536f);
+                ix = FTOI(int, ftmp * g_65536f);
                 ftmp = (float)(proj1[1] - proj2[1]) / (float)(int)g_pGraphics->resY;
-                iy = (int)(ftmp * g_65536f);
+                iy = FTOI(int, ftmp * g_65536f);
                 xx = FixMul(FixMul(ix, 0x2800000), 0x28f);
                 yy = FixMul(iy, 0x1e00000);
                 yy = FixMul(yy, 0x28f);

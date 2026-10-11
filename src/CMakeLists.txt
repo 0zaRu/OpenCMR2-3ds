@@ -23,6 +23,18 @@ target_compile_options(cmr2_game PRIVATE
     -ferror-limit=0)
 target_link_libraries(cmr2_game PUBLIC SDL3::SDL3)
 
+# The original builds these with /QIfist: their float-to-integer conversions
+# (FTOI, game/FloatToInt.h) round to nearest like x87 FISTP instead of
+# truncating. Same list as CMR2Decomp's scripts/build.py.
+set(GAME_QIFIST_UNITS
+    Race StageUI TimingUtils Frontend FrontendScreens Game GameInfo Graphics Sprite Car Sound
+    CarPhysics HudDash CarEffects TrackCollision RallyData Mesh Sector StageTiming StageObjects
+    SceneNode FixedPoint RallyTiming NetRace)
+list(TRANSFORM GAME_QIFIST_UNITS PREPEND ${GAME_DIR}/)
+list(TRANSFORM GAME_QIFIST_UNITS APPEND .cpp)
+set_source_files_properties(${GAME_QIFIST_UNITS} TARGET_DIRECTORY cmr2_game
+    PROPERTIES COMPILE_DEFINITIONS CMR2_QIFIST)
+
 # Platform layer plus the game objects; tests link this too.
 add_library(opencmr2_platform STATIC
     platform/sys.cpp

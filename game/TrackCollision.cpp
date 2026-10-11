@@ -1,5 +1,6 @@
 #include <math.h>
 #include "CallbackState.h"
+#include "FloatToInt.h"
 #include <windows.h>
 #include "FixedPoint.h"
 #include "Car.h"

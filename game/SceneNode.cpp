@@ -1,4 +1,5 @@
 #include <stdlib.h>
+#include "FloatToInt.h"
 #include <stdio.h>
 #include <stddef.h>
 #include <math.h>
@@ -2680,7 +2681,7 @@ void Scene_EmitProjectedShadowMesh(ShadowPart *pPart, int param_2)
         param_2 = 0x10000;
     param_2 = FixMul(g_shadowLevel, param_2);
     scale = (float)((double)param_2 * CGraphics::m_oneOver65536);
-    baseColour = (BYTE)(__int64)scale;
+    baseColour = (BYTE)FTOI(__int64, scale);
     pPart->faceCount = 0;
     pPart->vertexCount = 0;
     {
@@ -2746,7 +2747,7 @@ void Scene_EmitProjectedShadowMesh(ShadowPart *pPart, int param_2)
                             if (vy < g_netZero)
                                 colour[3] = 0;
                             else if (vy < g_unk0x00511ce8)
-                                colour[3] = (BYTE)(__int64)(vy * g_unk0x00511360 * scale);
+                                colour[3] = (BYTE)FTOI(__int64, vy * g_unk0x00511360 * scale);
                         }
                         *(DWORD *)(pVtx + 0x18) =
                             ((((DWORD)colour[3] << 8 | colour[0]) << 8 | colour[1]) << 8) | colour[2];
