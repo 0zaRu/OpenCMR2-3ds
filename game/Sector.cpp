@@ -3,6 +3,11 @@
 #include "SceneNode.h"
 #include "Graphics.h"
 #include "Game.h"
+#include "Mesh.h"
+#include "MeshCollisionRecord.h"
+#include "FileBuffer.h"
+#include "port/disk_layouts.h"
+#include "port/sys.h"
 
 int g_sectorsPerRow;
 Sector *g_sectors[14096];
@@ -77,140 +82,143 @@ SceneNode *Sector_BuildC3DModelScene(void *data, SceneNode *parent, GenericFile 
 // object and sector records into pointers, registers them in the scene node,
 // mesh, stage object and sector tables, loads the textures and re-uploads the
 // vertex buffers of every mesh.
+// PORT: the original relocates the records in place. Nodes, meshes, stage
+// objects, sectors and collision records hold pointers, which do not fit the
+// file's 32-bit offsets on 64-bit targets, so they are copied to native
+// storage (port/disk.h) that lives as long as the file buffer, on every
+// target; the pointer-free arrays (triangles, vertices, light levels, vertex
+// flags) stay in the file. Registration order and the -1 = none rule are the
+// original's.
 // FUNCTION: CMR2 0x004b93c0
 void *Sector_RelocateStageMeshFile(BYTE *pData, SceneNode *parent, GenericFile *archive)
 {
-    int count = 0;
-    BYTE *pNodes;
-    BYTE *pMeshArray;
-    BYTE *pStageObjects;
-    BYTE *pSectors;
-    BYTE *pTriangles;
-    BYTE *pVertexData;
-    BYTE *pLightLevels;
-    BYTE *pVertexFlags;
-    BYTE *pRecords;
-    char *textureRecords;
-    unsigned short recordSize;
+    MeshFileHeader *pHeader = (MeshFileHeader *)pData;
+    unsigned int nodeCount = pHeader->nodeCount;
+    unsigned int meshCount = pHeader->meshCount;
+    unsigned int objectCount = pHeader->objectCount;
+    unsigned int sectorCount = pHeader->sectorCount;
+    unsigned int recordCount = pHeader->recordCount;
+    unsigned int triangleCount = (unsigned int)pHeader->triangleCount;
+    BYTE *pNodeFile = pData + sizeof(MeshFileHeader);
+    BYTE *pMeshFile = pNodeFile + nodeCount * g_diskLayout_SceneNode.diskSize;
+    BYTE *pObjectFile = pMeshFile + (meshCount + objectCount) * g_diskLayout_Mesh.diskSize;
+    BYTE *pSectorFile = pObjectFile + objectCount * g_diskLayout_StageObject.diskSize;
+    BYTE *pTriangles = pSectorFile + sectorCount * g_diskLayout_Sector.diskSize + pHeader->partCount * 0x1c;
+    BYTE *pVertexData = pTriangles + triangleCount * sizeof(MeshTriangle);
+    BYTE *pLightLevels = pVertexData + pHeader->field_0x14 * 0x30;
+    BYTE *pVertexFlags = pLightLevels + pHeader->field_0x14 * 4;
+    BYTE *pRecordFile = pVertexFlags + pHeader->field_0x10 * 0x14;
+    BYTE *pEnd = pRecordFile + recordCount * g_diskLayout_MeshCollisionRecord.diskSize;
+    char *textureRecords = (char *)pData + pHeader->field_0xc;
+    size_t nodeBytes = (nodeCount * sizeof(SceneNode) + 7) & ~(size_t)7;
+    size_t meshBytes = ((meshCount + objectCount) * sizeof(Mesh) + 7) & ~(size_t)7;
+    size_t objectBytes = (objectCount * sizeof(StageObject) + 7) & ~(size_t)7;
+    size_t sectorBytes = (sectorCount * sizeof(Sector) + 7) & ~(size_t)7;
+    BYTE *pNative;
+    SceneNode *pNodes;
+    Mesh *pMeshes;
+    StageObject *pObjects;
+    Sector *pSectors;
+    MeshCollisionRecord *pRecords;
     int savedNodeCount;
     unsigned int i;
-    unsigned int j;
-    int k;
-    int *pField;
-    int *pRow;
-    BYTE *p;
-    BYTE *pEnd;
+    unsigned int k;
 
-    pNodes = pData + 0x30;
-    pMeshArray = pNodes + *(unsigned short *)(pData + 0x18) * 0x18c;
-    pStageObjects = pMeshArray + (*(unsigned short *)(pData + 0x1a) + *(unsigned short *)(pData + 0x1c)) * 0x120;
-    pSectors = pStageObjects + *(unsigned short *)(pData + 0x1c) * 0xa0;
-    pTriangles = pSectors + *(unsigned short *)(pData + 0x1e) * 0x88 + *(unsigned short *)(pData + 0x28) * 0x1c;
-    pVertexData = pTriangles + *(int *)(pData + 0x20) * 0x4c;
-    pLightLevels = pVertexData + *(int *)(pData + 0x14) * 0x30;
-    pVertexFlags = pLightLevels + *(int *)(pData + 0x14) * 4;
-    pRecords = pVertexFlags + *(int *)(pData + 0x10) * 0x14;
-    recordSize = *(unsigned short *)(pData + 0x26);
-    pEnd = pRecords + recordSize * 0x5c;
-    textureRecords = (char *)pData + *(int *)(pData + 0xc);
-    if (*(unsigned int *)(pData + 0x20) > 0) {
-        // Ten texture indices per triangle (0x4c bytes) are moved past the
-        // textures already loaded.
-        pRow = (int *)(pTriangles + 4);
-        do {
-            k = 10;
-            pField = pRow;
-            do {
-                if (*pField != -1)
-                    *pField += (int)CGraphics::m_textureCount;
-                pField++;
-                k--;
-            } while (k != 0);
-            count++;
-            pRow += 0x13;
-        } while (count < *(unsigned int *)(pData + 0x20));
+    pNative = (BYTE *)CFileBuffer::AllocateLockedBuffer(
+        nodeBytes + meshBytes + objectBytes + sectorBytes + recordCount * sizeof(MeshCollisionRecord) + 8);
+    Disk_AttachToBuffer(pData, pNative);
+    pNodes = (SceneNode *)pNative;
+    pMeshes = (Mesh *)(pNative + nodeBytes);
+    pObjects = (StageObject *)(pNative + nodeBytes + meshBytes);
+    pSectors = (Sector *)(pNative + nodeBytes + meshBytes + objectBytes);
+    pRecords = (MeshCollisionRecord *)(pNative + nodeBytes + meshBytes + objectBytes + sectorBytes);
+
+    // Ten texture indices per triangle are moved past the textures already loaded.
+    for (i = 0; i < triangleCount; i++) {
+        int *pField = (int *)(pTriangles + i * sizeof(MeshTriangle) + 4);
+        for (k = 0; k < 10; k++) {
+            if (pField[k] != -1)
+                pField[k] += (int)CGraphics::m_textureCount;
+        }
     }
-    Graphics_LoadTextureRecordList(pEnd, textureRecords,
-                 *(unsigned short *)(pData + 0x24), *(int *)(pData + 4), archive);
+    Graphics_LoadTextureRecordList(pEnd, textureRecords, pHeader->field_0x24, pHeader->textureFile, archive);
+
     savedNodeCount = g_sceneNodeCount;
-    if (*(unsigned short *)(pData + 0x18) > 0) {
-        for (i = 0, p = pNodes; i < *(unsigned short *)(pData + 0x18); i++, p += 0x18c) {
-            Graphics_AccumulateCounterOrInitialize((int *)p, (int)pNodes);
-            Graphics_AccumulateCounterOrInitialize((int *)(p + 4), (int)pNodes);
-            if (parent != NULL && *(short *)(p + 0x24) == -1) {
-                SceneNode_Attach((SceneNode *)p, parent);
-            } else {
-                Graphics_AccumulateCounterOrInitialize((int *)(p + 8), (int)pNodes);
-                *(short *)(p + 0x24) = -1;
-            }
-            Graphics_AccumulateCounterOrInitialize((int *)(p + 0x170), (int)pNodes);
-            Graphics_AccumulateCounterOrInitialize((int *)(p + 0xc), (int)pMeshArray);
-            g_sceneNodes[g_sceneNodeCount + i] = (SceneNode *)p;
-            *(short *)(p + 0x26) = (short)(g_sceneNodeCount + i);
+    for (i = 0; i < nodeCount; i++) {
+        BYTE *pFile = pNodeFile + i * g_diskLayout_SceneNode.diskSize;
+        SceneNode *pNode = &pNodes[i];
+
+        Disk_Unpack(pNode, pFile, &g_diskLayout_SceneNode);
+        pNode->pNext = DISK_RECORD(pFile, DISK_SceneNode_pNext, pNodes, SceneNode, nodeCount);
+        pNode->pFirstChild = DISK_RECORD(pFile, DISK_SceneNode_pFirstChild, pNodes, SceneNode, nodeCount);
+        if (parent != NULL && pNode->sector == -1) {
+            SceneNode_Attach(pNode, parent);
+        } else {
+            pNode->pParent = DISK_RECORD(pFile, DISK_SceneNode_pParent, pNodes, SceneNode, nodeCount);
+            pNode->sector = -1;
         }
-        g_sceneNodeCount += *(unsigned short *)(pData + 0x18);
+        pNode->pNextInSector = DISK_RECORD(pFile, DISK_SceneNode_pNextInSector, pNodes, SceneNode, nodeCount);
+        pNode->pObject = DISK_RECORD(pFile, DISK_SceneNode_pObject, pMeshes, Mesh, meshCount + objectCount);
+        g_sceneNodes[g_sceneNodeCount + i] = pNode;
+        pNode->slot = (short)(g_sceneNodeCount + i);
     }
-    if (*(unsigned short *)(pData + 0x26) > 0) {
-        for (j = 0, p = pRecords; j < *(unsigned short *)(pData + 0x26); j++, p += 0x5c) {
-            Graphics_AccumulateCounterOrInitialize((int *)(p + 0x58), (int)pRecords);
-            g_unk0x0066f124[g_meshTotalSize + j] = p;
-        }
-        g_meshTotalSize += *(unsigned short *)(pData + 0x26);
+    g_sceneNodeCount += nodeCount;
+
+    for (i = 0; i < recordCount; i++) {
+        BYTE *pFile = pRecordFile + i * g_diskLayout_MeshCollisionRecord.diskSize;
+
+        Disk_Unpack(&pRecords[i], pFile, &g_diskLayout_MeshCollisionRecord);
+        pRecords[i].pNext = DISK_RECORD(pFile, DISK_MeshCollisionRecord_pNext, pRecords, MeshCollisionRecord, recordCount);
+        g_unk0x0066f124[g_meshTotalSize + i] = &pRecords[i];
     }
-    if (*(unsigned short *)(pData + 0x1a) > 0) {
-        for (i = 0, p = pMeshArray + 0x113; i < *(unsigned short *)(pData + 0x1a); i++, p += 0x120) {
-            pField = (int *)(p - 0x107);
-            for (j = 0; j < *p; j++) {
-                Graphics_AccumulateCounterOrInitialize(pField + 6, (int)pTriangles);
-                Graphics_AccumulateCounterOrInitialize(pField, (int)pVertexData);
-                Graphics_AccumulateCounterOrInitialize(pField + 10, (int)pLightLevels);
-                Graphics_AccumulateCounterOrInitialize(pField + 5, (int)pVertexFlags);
-                Mesh_UploadVertices((Mesh *)((BYTE *)pField - 0xc));
-                Mesh_BuildParts((Mesh *)((BYTE *)pField - 0xc));
-                *(unsigned int *)((BYTE *)pField + 0x24) &= 0xfffbffff;
-                pField += 0x42;
-            }
-            Graphics_AccumulateCounterOrInitialize((int *)(p - 7), (int)pRecords);
-            if (*(short *)(pData + 0x1e) == 0)
-                g_meshes[g_meshCount + i] = (Mesh *)(p - 0x113);
+    g_meshTotalSize += recordCount;
+
+    // Meshes, then the meshes of the stage objects. Every stage mesh file has
+    // one LOD per mesh record.
+    for (i = 0; i < meshCount + objectCount; i++) {
+        BYTE *pFile = pMeshFile + i * g_diskLayout_Mesh.diskSize;
+        Mesh *pMesh = &pMeshes[i];
+
+        Disk_Unpack(pMesh, pFile, &g_diskLayout_Mesh);
+        if (pMesh->lodCount > 1)
+            Sys_Log("stage mesh %u has %u LODs; only the first is loaded", i, pMesh->lodCount);
+        if (pMesh->lodCount != 0) {
+            pMesh->pTriangles = (MeshTriangle *)DISK_DATA(pFile, DISK_Mesh_pTriangles, pTriangles);
+            pMesh->pVertexData = (DWORD *)DISK_DATA(pFile, DISK_Mesh_pVertexData, pVertexData);
+            pMesh->pLightLevels = (int *)DISK_DATA(pFile, DISK_Mesh_pLightLevels, pLightLevels);
+            pMesh->pField20 = DISK_DATA(pFile, DISK_Mesh_pField20, pVertexFlags);
+            Mesh_UploadVertices(pMesh);
+            Mesh_BuildParts(pMesh);
+            pMesh->flags &= 0xfffbffff;
         }
-        if (*(short *)(pData + 0x1e) == 0)
-            g_meshCount += *(unsigned short *)(pData + 0x1a);
+        pMesh->pCollisionRecords = DISK_RECORD(pFile, DISK_Mesh_pCollisionRecords, pRecords, MeshCollisionRecord, recordCount);
+        if (i < meshCount && sectorCount == 0)
+            g_meshes[g_meshCount + i] = pMesh;
     }
-    if (*(unsigned short *)(pData + 0x1c) > 0) {
-        for (j = *(unsigned short *)(pData + 0x1a), p = pMeshArray + j * 0x120 + 0x113;
-             j < *(unsigned short *)(pData + 0x1c) + *(unsigned short *)(pData + 0x1a);
-             j++, p += 0x120) {
-            pField = (int *)(p - 0x107);
-            for (i = 0; i < *p; i++) {
-                Graphics_AccumulateCounterOrInitialize(pField + 6, (int)pTriangles);
-                Graphics_AccumulateCounterOrInitialize(pField, (int)pVertexData);
-                Graphics_AccumulateCounterOrInitialize(pField + 10, (int)pLightLevels);
-                Graphics_AccumulateCounterOrInitialize(pField + 5, (int)pVertexFlags);
-                Mesh_UploadVertices((Mesh *)((BYTE *)pField - 0xc));
-                Mesh_BuildParts((Mesh *)((BYTE *)pField - 0xc));
-                *(unsigned int *)((BYTE *)pField + 0x24) &= 0xfffbffff;
-                pField += 0x42;
-            }
-            Graphics_AccumulateCounterOrInitialize((int *)(p - 7), (int)pRecords);
+    if (meshCount > 0 && sectorCount == 0)
+        g_meshCount += meshCount;
+
+    if (objectCount > 0) {
+        for (i = 0; i < objectCount; i++) {
+            BYTE *pFile = pObjectFile + i * g_diskLayout_StageObject.diskSize;
+
+            Disk_Unpack(&pObjects[i], pFile, &g_diskLayout_StageObject);
+            pObjects[i].pMesh = DISK_RECORD(pFile, DISK_StageObject_pMesh, pMeshes + meshCount, Mesh, objectCount);
+            pObjects[i].pNext = DISK_RECORD(pFile, DISK_StageObject_pNext, pObjects, StageObject, objectCount);
+            g_stageObjects[g_unk0x0067f228 + i] = &pObjects[i];
         }
-        i = 0;
-        if (*(unsigned short *)(pData + 0x1c) > 0) {
-            for (p = pStageObjects + 0x98; i < *(unsigned short *)(pData + 0x1c); i++, p += 0xa0) {
-                Graphics_AccumulateCounterOrInitialize((int *)(p - 0x8c),
-                             (int)(pMeshArray + *(unsigned short *)(pData + 0x1a) * 0x120));
-                Graphics_AccumulateCounterOrInitialize((int *)p, (int)pStageObjects);
-                g_stageObjects[g_unk0x0067f228 + i] = (StageObject *)(p - 0x98);
-            }
-        }
-        g_unk0x0067f228 += *(unsigned short *)(pData + 0x1c);
+        g_unk0x0067f228 += objectCount;
     }
-    if (*(unsigned short *)(pData + 0x1e) > 0) {
-        for (i = 0, p = pSectors; i < *(unsigned short *)(pData + 0x1e); i++, p += 0x88) {
-            Graphics_AccumulateCounterOrInitialize((int *)(p + 0x10), (int)pMeshArray);
-            g_sectors[i] = (Sector *)p;
+
+    if (sectorCount > 0) {
+        for (i = 0; i < sectorCount; i++) {
+            BYTE *pFile = pSectorFile + i * g_diskLayout_Sector.diskSize;
+
+            Disk_Unpack(&pSectors[i], pFile, &g_diskLayout_Sector);
+            pSectors[i].pMesh = DISK_RECORD(pFile, DISK_Sector_pMesh, pMeshes, Mesh, meshCount + objectCount);
+            g_sectors[i] = &pSectors[i];
         }
-        g_sectorCount = *(unsigned short *)(pData + 0x1e);
+        g_sectorCount = sectorCount;
     }
     return g_sceneNodes[savedNodeCount];
 }

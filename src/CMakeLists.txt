@@ -28,6 +28,7 @@ add_library(opencmr2_platform STATIC
     platform/sys.cpp
     platform/keys.cpp
     platform/msvcrt.cpp
+    port/disk.cpp
     $<TARGET_OBJECTS:cmr2_game>)
 target_sources(opencmr2_platform PRIVATE diagnostics/observer.cpp diagnostics/timing.cpp)
 target_include_directories(opencmr2_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${GAME_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/port/compat)

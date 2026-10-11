@@ -1,4 +1,5 @@
 #include "port/sys.h"
+#include "port/disk.h"
 #include "FileBuffer.h"
 #include "GenericFileLoader.h"
 #include "Game.h"
@@ -107,9 +108,11 @@ void *CFileBuffer::GetGenericFileBuffer(char *fileName, BOOL isLocalFile)
 }
 
 // FUNCTION: CMR2 0x004aade0
-// PORT: GlobalUnlock + GlobalFree.
+// PORT: GlobalUnlock + GlobalFree. Native copies of the file records in the
+// buffer (port/disk.h) go with it.
 void CFileBuffer::FreeGenericFileBuffer(void *param1)
 {
+    Disk_ReleaseBuffer(param1);
     free(param1);
 }
 
