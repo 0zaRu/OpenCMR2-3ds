@@ -14,6 +14,10 @@ struct FontKernPair {
     short offset;           // 0x2
 };
 
+// ON-DISK: the .pcf glyph record, 0x10 bytes. pKern holds a 32-bit offset
+// from the start of the file until Font_Setup relocates it in place, so the
+// record holds a pointer only on Win32; a 64-bit build must build native
+// glyphs from the file records instead.
 struct FontGlyph {
     BYTE field_0x0[4];
     short width;            // 0x4
@@ -23,6 +27,16 @@ struct FontGlyph {
     BYTE field_0xa[2];
     FontKernPair *pKern;    // 0xc  file offset until Font_Setup relocates it
 };
+
+// PORT: a glyph as the .pcf file stores it, 0x10 bytes on every target: the
+// kerning pointer is a 32-bit offset from the start of the file. Font_Setup
+// builds a native FontGlyph table from these instead of relocating in place.
+struct FontGlyphFile {
+    BYTE header[0xc];       // 0x0  the FontGlyph fields before pKern
+    DWORD kernOffset;       // 0xc
+};
+static_assert(sizeof(FontGlyphFile) == 0x10, "FontGlyphFile is the .pcf record");
+static_assert(offsetof(FontGlyph, pKern) >= sizeof(((FontGlyphFile *)0)->header), "FontGlyph prefix");
 
 struct FontHeader {
     int field_0x0;

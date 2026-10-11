@@ -55,6 +55,9 @@ BYTE Font_ReleaseAll(void)
 // FUNCTION: CMR2 0x0040b2f0
 void Font_Release(BYTE index)
 {
+    // PORT: the glyph table is native storage, see Font_Setup.
+    if (g_fonts[index & 0xff].pGlyphs != NULL)
+        CFileBuffer::FreeGenericFileBuffer(g_fonts[index & 0xff].pGlyphs);
     if (g_fonts[index & 0xff].ownsData != 0) {
         CFileBuffer::FreeGenericFileBuffer(g_fonts[index & 0xff].pData);
         g_fonts[index & 0xff].pData = NULL;
@@ -81,13 +84,22 @@ void Font_Setup(void *pData, Texture *pTexture, unsigned int index, char bInArch
             p = (char *)g_fonts[index].pData + sizeof(FontHeader);
             g_fonts[index].pCharMap = (short *)p;
             p += 256 * sizeof(short);
-            g_fonts[index].pGlyphs = (FontGlyph *)p;
-            i = 0;
-            if (g_fonts[index].pHeader->glyphCount > 0) {
-                do {
-                    g_fonts[index].pGlyphs[(unsigned short)i].pKern = (FontKernPair *)((char *)g_fonts[index].pGlyphs[(unsigned short)i].pKern + (int)g_fonts[index].pData);
-                    i++;
-                } while ((i & 0xffff) < (unsigned int)g_fonts[index].pHeader->glyphCount);
+            // PORT: the original relocates the file's glyph table in place
+            // (pKern += pData). FontGlyph holds a pointer, so its table is
+            // built in native storage from the file's records instead, on
+            // every target; the file buffer stays as loaded.
+            {
+                FontGlyphFile *pFile = (FontGlyphFile *)p;
+                unsigned int count = g_fonts[index].pHeader->glyphCount;
+                FontGlyph *pGlyphs = (FontGlyph *)CFileBuffer::AllocateLockedBuffer(count * sizeof(FontGlyph));
+                if (pGlyphs == NULL)
+                    return;
+                for (i = 0; i < count; i++) {
+                    memset(&pGlyphs[i], 0, sizeof(FontGlyph));
+                    memcpy(&pGlyphs[i], pFile[i].header, sizeof(pFile[i].header));
+                    pGlyphs[i].pKern = (FontKernPair *)((char *)g_fonts[index].pData + pFile[i].kernOffset);
+                }
+                g_fonts[index].pGlyphs = pGlyphs;
             }
             g_fonts[index].loaded = 1;
         }
