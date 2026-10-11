@@ -10557,8 +10557,8 @@ void FrontendMenu_DrawCarSetup(Menu *pMenu)
         height = 0xe8;
     pTexture = CFrontend::m_unk0x0081884c[g_unk0x008196e8[pMenu->cursor]];
     if (pTexture != NULL) {
-        src = *(SpriteRect *)((char *)pTexture + 0x11c);
-        dst = *(SpriteRect *)((char *)pTexture + 0x11c);
+        src = *(SpriteRect *)&pTexture->field_0x11c;
+        dst = *(SpriteRect *)&pTexture->field_0x11c;
         src.h = height;
         dst.h = height;
         dst.x = (int)(g_pGraphics->resX * 0x8e) / 0x280;
@@ -10569,8 +10569,8 @@ void FrontendMenu_DrawCarSetup(Menu *pMenu)
     }
     pTexture = CFrontend::m_unk0x008182cc[g_unk0x008196e8[pMenu->cursor]];
     if (pTexture != NULL) {
-        src = *(SpriteRect *)((char *)pTexture + 0x11c);
-        dst = *(SpriteRect *)((char *)pTexture + 0x11c);
+        src = *(SpriteRect *)&pTexture->field_0x11c;
+        dst = *(SpriteRect *)&pTexture->field_0x11c;
         src.h = height;
         dst.h = height;
         dst.x = (int)(g_pGraphics->resX * 0x165) / 0x280;
@@ -10636,8 +10636,8 @@ void FrontendMenu_DrawPaletteSelection(Menu *pMenu)
         height = 0xe8;
     pTexture = CFrontend::m_unk0x0081884c[g_unk0x008196e8[pMenu->cursor]];
     if (pTexture != NULL) {
-        src = *(SpriteRect *)((char *)pTexture + 0x11c);
-        dst = *(SpriteRect *)((char *)pTexture + 0x11c);
+        src = *(SpriteRect *)&pTexture->field_0x11c;
+        dst = *(SpriteRect *)&pTexture->field_0x11c;
         src.h = height;
         dst.h = height;
         dst.x = (int)(g_pGraphics->resX * 0x8e) / 0x280;
@@ -10648,8 +10648,8 @@ void FrontendMenu_DrawPaletteSelection(Menu *pMenu)
     }
     pTexture = CFrontend::m_unk0x008182cc[g_unk0x008196e8[pMenu->cursor]];
     if (pTexture != NULL) {
-        src = *(SpriteRect *)((char *)pTexture + 0x11c);
-        dst = *(SpriteRect *)((char *)pTexture + 0x11c);
+        src = *(SpriteRect *)&pTexture->field_0x11c;
+        dst = *(SpriteRect *)&pTexture->field_0x11c;
         src.h = height;
         dst.h = height;
         dst.x = (int)(g_pGraphics->resX * 0x165) / 0x280;
