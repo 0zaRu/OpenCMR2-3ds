@@ -34,10 +34,10 @@ int CGame::m_unk0x0059ce18;
 // GLOBAL: CMR2 0x0059ce1c
 int CGame::m_unk0x0059ce1c;
 int CGame::m_unk0x0059ce20;
-int CGame::m_unk0x0059ce28;
-int CGame::m_unk0x0059ce2c;
-void *CGame::m_unk0x00593cb0[4096];
-void *CGame::m_unk0x00597d04[4096];
+int CGame::m_deferredDrawCount;
+int CGame::m_transparentDrawCount;
+void *CGame::m_deferredDrawObjects[4096];
+void *CGame::m_transparentDrawNodes[4096];
 int CGame::m_unk0x005207f8 = 3;
 int CGame::m_unk0x00663dc4;
 DPlayConnection CGame::m_connections[10];
@@ -1324,7 +1324,7 @@ extern int g_unk0x00537efc;
 extern int g_unk0x00537df0;
 
 void InRaceMenu_UpdateStateMachineFrame(CallbackStateMachine *param1);
-void InRaceMenu_AdvanceScreenEntries(BYTE *param1);
+void InRaceMenu_AdvanceScreenEntries(CallbackStateMachine *param1);
 void StageUI_ResetRaceEndEventCount(void);
 unsigned int *RallyData_GetChampionshipState(void);
 char RallyData_GetUsableRecordCategory(BYTE param1);
@@ -1340,7 +1340,7 @@ void RallyData_RunChallengeLoadingScreen(int param1, char param2);
 void GameInfo_EnterStageGroup(CallbackStateMachine *param1, int param2);
 void GameInfo_LeaveStageGroup(CallbackStateMachine *param1, int param2);
 void InRaceMenu_AdvanceCascade(CallbackStateMachine *param1, int param2);
-void RallyData_GrowEntryAndInvokeAction(BYTE *param1, unsigned int param2);
+void RallyData_GrowEntryAndInvokeAction(CallbackStateMachine *param1, unsigned int param2);
 void Knockout_UpdateRaceStateAndFades(BYTE *param_1, unsigned int param_2);
 void StageObject_ClearAndDrawSplitPositions(int unused1, int unused2);
 void Race_UpdateDriverPreRaceScene(CallbackStateMachine *param1, unsigned int param2);
@@ -1350,11 +1350,11 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2);
 void Race_UpdateInterStageFadeJobs(CallbackStateMachine *param1, unsigned int param2);
 void Race_UpdateState12(CallbackStateMachine *p, BYTE index);
 void Race_LeaveAndFadeOut(CallbackStateMachine *param1, char param2);
-void RallyData_GrowEntryAndRefreshRecords(BYTE *param1, unsigned int param2);
-void RallyData_GrowEntryPanel(BYTE *param1, unsigned int param2);
-void RallyData_UpdateUnavailableEntryText(BYTE *param1, unsigned int param2);
-void RallyData_ShrinkEntryAndNotifyCompletion(BYTE *param1, unsigned int param2);
-void RallyData_ShrinkEntryAndDrawStageStarted(BYTE *param1, unsigned int param2);
+void RallyData_GrowEntryAndRefreshRecords(CallbackStateMachine *param1, unsigned int param2);
+void RallyData_GrowEntryPanel(CallbackStateMachine *param1, unsigned int param2);
+void RallyData_UpdateUnavailableEntryText(CallbackStateMachine *param1, unsigned int param2);
+void RallyData_ShrinkEntryAndNotifyCompletion(CallbackStateMachine *param1, unsigned int param2);
+void RallyData_ShrinkEntryAndDrawStageStarted(CallbackStateMachine *param1, unsigned int param2);
 
 // In-race state table: pairs of (update, render) callbacks indexed by the state
 // of each slot of the callback group (0x537dd0).
@@ -1424,7 +1424,7 @@ BOOL CGame::UpdateInRaceCallbackMachine(void)
     if (g_unk0x00537ef4 != 0 && g_unk0x00537ef5 == 0 && g_unk0x00537ef8 == 0) {
         if (CGameInfo::IsInRaceMenuOpen() != 0) {
             InRaceMenu_UpdateStateMachineFrame(&g_raceCallbackStorage.machine);
-            InRaceMenu_AdvanceScreenEntries(((BYTE *)&g_raceCallbackStorage.machine));
+            InRaceMenu_AdvanceScreenEntries(&g_raceCallbackStorage.machine);
             AdvanceCallbackStateTimers(&g_raceCallbackStorage.machine);
             return FALSE;
         }
@@ -2158,15 +2158,15 @@ void Game_DrawViewMaskNode(SceneNode *pNode, int bit)
 // FUNCTION: CMR2 0x0049cb50
 void CGame::QueuePrimaryDrawObject(void *param1)
 {
-    m_unk0x00593cb0[m_unk0x0059ce28] = param1;
-    m_unk0x0059ce28++;
+    m_deferredDrawObjects[m_deferredDrawCount] = param1;
+    m_deferredDrawCount++;
 }
 
 // FUNCTION: CMR2 0x0049cb70
 void CGame::QueueSecondaryDrawObject(void *param1)
 {
-    m_unk0x00597d04[m_unk0x0059ce2c] = param1;
-    m_unk0x0059ce2c++;
+    m_transparentDrawNodes[m_transparentDrawCount] = param1;
+    m_transparentDrawCount++;
 }
 
 // qsort comparator of the deferred draw list (0x49cc50): sorts by the
@@ -2219,20 +2219,20 @@ void Game_DrawDeferredObjects(void)
 {
     unsigned int i;
 
-    if ((unsigned int)CGame::m_unk0x0059ce28 >= 1) {
+    if ((unsigned int)CGame::m_deferredDrawCount >= 1) {
         if (g_unk0x005207b4 != 0)
-            qsort(CGame::m_unk0x00593cb0, CGame::m_unk0x0059ce28, 4, Game_CompareDeferredDrawDepth);
-        for (i = 0; i < (unsigned int)CGame::m_unk0x0059ce28; i++) {
+            qsort(CGame::m_deferredDrawObjects, CGame::m_deferredDrawCount, sizeof(CGame::m_deferredDrawObjects[0]), Game_CompareDeferredDrawDepth);
+        for (i = 0; i < (unsigned int)CGame::m_deferredDrawCount; i++) {
             Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[
-                ((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->pMesh->pTriangles->textureIndex], 0);
-            Gfx_SetTransform(GFX_TRANSFORM_WORLD, (GfxMatrix *)((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->matrix);
-            if (*(int *)((BYTE *)((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->pMesh + 0x114) < 0xc80000)
-                ((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->pMesh->flags |= 8;
+                ((StageObjectDraw *)CGame::m_deferredDrawObjects[i])->pMesh->pTriangles->textureIndex], 0);
+            Gfx_SetTransform(GFX_TRANSFORM_WORLD, (GfxMatrix *)((StageObjectDraw *)CGame::m_deferredDrawObjects[i])->matrix);
+            if (((StageObjectDraw *)CGame::m_deferredDrawObjects[i])->pMesh->field_0x114 < 0xc80000)
+                ((StageObjectDraw *)CGame::m_deferredDrawObjects[i])->pMesh->flags |= 8;
             else
-                ((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->pMesh->flags &= 0xfffffff7;
-            Graphics_DrawMeshLOD(((StageObjectDraw *)CGame::m_unk0x00593cb0[i])->pMesh, 1, 0, 0);
+                ((StageObjectDraw *)CGame::m_deferredDrawObjects[i])->pMesh->flags &= 0xfffffff7;
+            Graphics_DrawMeshLOD(((StageObjectDraw *)CGame::m_deferredDrawObjects[i])->pMesh, 1, 0, 0);
         }
-        CGame::m_unk0x0059ce28 = 0;
+        CGame::m_deferredDrawCount = 0;
     }
 }
 
@@ -2242,21 +2242,21 @@ void Game_DrawDeferredObjects(void)
 // FUNCTION: CMR2 0x0049cbc0
 int __cdecl Game_CompareTransparentDrawEntries(const void *a, const void *b)
 {
-    BYTE *pA = *(BYTE **)a;
-    BYTE *pB = *(BYTE **)b;
+    SceneNode *pA = *(SceneNode **)a;
+    SceneNode *pB = *(SceneNode **)b;
     int depthA;
     int depthB;
 
-    if ((*(unsigned int *)(pA + 0x30) & 0xff) == 0x14)
+    if ((pA->flags & 0xff) == 0x14)
         return 1;
-    if ((*(unsigned int *)(pB + 0x30) & 0xff) == 0x14)
+    if ((pB->flags & 0xff) == 0x14)
         return 1;
-    depthA = *(int *)(pA + 0x16c);
-    depthB = *(int *)(pB + 0x16c);
+    depthA = pA->cameraDistance;
+    depthB = pB->cameraDistance;
     if (FIX_ABS(depthA - depthB) < 0x10000) {
-        if ((*(unsigned int *)(pA + 0x30) & 0xff) == 5 && (*(unsigned int *)(pB + 0x30) & 0xff) == 0)
+        if ((pA->flags & 0xff) == 5 && (pB->flags & 0xff) == 0)
             return 1;
-        if ((*(unsigned int *)(pA + 0x30) & 0xff) == 0 && (*(unsigned int *)(pB + 0x30) & 0xff) == 5)
+        if ((pA->flags & 0xff) == 0 && (pB->flags & 0xff) == 5)
             return -1;
     }
     return depthA < depthB ? 1 : -1;
@@ -2342,12 +2342,12 @@ void Game_DrawSortedNodes(int bit)
 {
     unsigned int i;
 
-    if ((unsigned int)CGame::m_unk0x0059ce2c >= 1) {
+    if ((unsigned int)CGame::m_transparentDrawCount >= 1) {
         if (g_unk0x005207b4 != 0)
-            qsort(CGame::m_unk0x00597d04, CGame::m_unk0x0059ce2c, 4, Game_CompareTransparentDrawEntries);
-        for (i = 0; i < (unsigned int)CGame::m_unk0x0059ce2c; i++)
-            Game_DrawViewMaskNode((SceneNode *)CGame::m_unk0x00597d04[i], bit);
-        CGame::m_unk0x0059ce2c = 0;
+            qsort(CGame::m_transparentDrawNodes, CGame::m_transparentDrawCount, sizeof(CGame::m_transparentDrawNodes[0]), Game_CompareTransparentDrawEntries);
+        for (i = 0; i < (unsigned int)CGame::m_transparentDrawCount; i++)
+            Game_DrawViewMaskNode((SceneNode *)CGame::m_transparentDrawNodes[i], bit);
+        CGame::m_transparentDrawCount = 0;
     }
 }
 
@@ -2492,7 +2492,7 @@ void Game_QueueVisibleSectorNodes(int param1)
                     delta.x = g_unk0x0059be6c->world.position.x - pNode->world.position.x;
                     delta.y = 0;
                     delta.z = g_unk0x0059be6c->world.position.z - pNode->world.position.z;
-                    *(int *)((BYTE *)pNode + 0x16c) = FixVecLength(&delta);
+                    pNode->cameraDistance = FixVecLength(&delta);
                     CGame::QueueSecondaryDrawObject(pNode);
                 }
                 pNode = pNode->pNextInSector;
