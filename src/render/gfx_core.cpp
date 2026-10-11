@@ -6,6 +6,8 @@
 #include "port/diagnostics.h"
 #include "render/gfx_internal.h"
 
+#include <stdio.h>
+#include <stdlib.h>
 #include <math.h>
 #include <stdlib.h>
 #include <string.h>
@@ -73,10 +75,49 @@ uint32_t AppendVertices(const void *data, size_t bytes)
     return (uint32_t)offset;
 }
 
+// OPENCMR2_GFX_TRACE=file: one line per draw (primitive, counts, a hash of the
+// vertices, indices and bound texture sizes, and the calling game function),
+// "F n" per presented frame. Builds for different targets must write the same
+// lines; diffing them finds drawing that differs (tools: addr2line on caller).
+static FILE *TraceFile()
+{
+    static FILE *file = getenv("OPENCMR2_GFX_TRACE") ? fopen(getenv("OPENCMR2_GFX_TRACE"), "w") : NULL;
+    return file;
+}
+static const void *s_traceCaller;
+static unsigned s_traceFrame;
+
+static uint32_t TraceHash(uint32_t h, const void *data, size_t size)
+{
+    const uint8_t *p = (const uint8_t *)data;
+    for (size_t i = 0; i < size; i++)
+        h = (h ^ p[i]) * 16777619u;
+    return h;
+}
+
 // Records a draw; fans become lists (SDL_GPU has no fans).
 void RecordDraw(int primitive, bool transformed, const void *vertices, DWORD vertexCount, const WORD *indices,
                 DWORD indexCount)
 {
+    if (FILE *trace = TraceFile()) {
+        uint32_t h = TraceHash(2166136261u, vertices, vertexCount * (transformed ? sizeof(GfxTLVertex) : sizeof(GfxVertex)));
+        if (indices != NULL)
+            h = TraceHash(h, indices, indexCount * sizeof(WORD));
+        for (int k = 0; k < 2; k++) {
+            const GfxTexture *t = s_state.stages[k].texture;
+            int size[2] = {t ? t->width : 0, t ? t->height : 0};
+            h = TraceHash(h, size, sizeof(size));
+        }
+        fprintf(trace, "%d %d %u %u %08x %p\n", primitive, transformed ? 1 : 0, (unsigned)vertexCount,
+                (unsigned)indexCount, h, s_traceCaller);
+        static int dumpFrame = getenv("OPENCMR2_GFX_TRACE_FRAME") ? atoi(getenv("OPENCMR2_GFX_TRACE_FRAME")) : -1;
+        if ((int)s_traceFrame == dumpFrame && transformed)
+            for (DWORD v = 0; v < vertexCount; v++) {
+                const GfxTLVertex *t = (const GfxTLVertex *)vertices + v;
+                fprintf(trace, "  v %g %g %g %g c=%08x s=%08x uv=%g,%g tex=%dx%d\n", t->sx, t->sy, t->sz, t->rhw, t->color, t->specular, t->tu, t->tv,
+                        s_state.stages[0].texture ? s_state.stages[0].texture->width : 0, s_state.stages[0].texture ? s_state.stages[0].texture->height : 0);
+            }
+    }
     if (vertexCount == 0 || s_executor == NULL)
         return;
     std::vector<uint16_t> fan;
@@ -263,6 +304,8 @@ extern "C" void Gfx_EndScene(void)
 
 static void Present(BOOL vsync, bool stretch)
 {
+    if (FILE *trace = TraceFile())
+        fprintf(trace, "F %u\n", s_traceFrame++);
     if (Diagnostics::observer)
         Diagnostics::observer->BeginPresent();
     if (s_executor != NULL)
@@ -498,6 +541,7 @@ extern "C" void Gfx_UnlockVertexBuffer(GfxVertexBuffer *)
 
 extern "C" void Gfx_DrawPrimitiveVB(int primitive, GfxVertexBuffer *buffer, DWORD firstVertex, DWORD vertexCount)
 {
+    s_traceCaller = __builtin_return_address(0);
     if (buffer == NULL || firstVertex + vertexCount > buffer->vertices.size())
         return;
     RecordDraw(primitive, false, buffer->vertices.data() + firstVertex, vertexCount, NULL, 0);
@@ -506,6 +550,7 @@ extern "C" void Gfx_DrawPrimitiveVB(int primitive, GfxVertexBuffer *buffer, DWOR
 extern "C" void Gfx_DrawIndexedPrimitiveVB(int primitive, GfxVertexBuffer *buffer, DWORD firstVertex, DWORD vertexCount,
                                            const WORD *indices, DWORD indexCount)
 {
+    s_traceCaller = __builtin_return_address(0);
     if (buffer == NULL || firstVertex + vertexCount > buffer->vertices.size())
         return;
     RecordDraw(primitive, false, buffer->vertices.data() + firstVertex, vertexCount, indices, indexCount);
@@ -513,23 +558,27 @@ extern "C" void Gfx_DrawIndexedPrimitiveVB(int primitive, GfxVertexBuffer *buffe
 
 extern "C" void Gfx_DrawPrimitive(int primitive, const GfxVertex *vertices, DWORD vertexCount)
 {
+    s_traceCaller = __builtin_return_address(0);
     RecordDraw(primitive, false, vertices, vertexCount, NULL, 0);
 }
 
 extern "C" void Gfx_DrawIndexedPrimitive(int primitive, const GfxVertex *vertices, DWORD vertexCount, const WORD *indices,
                                          DWORD indexCount)
 {
+    s_traceCaller = __builtin_return_address(0);
     RecordDraw(primitive, false, vertices, vertexCount, indices, indexCount);
 }
 
 extern "C" void Gfx_DrawPrimitiveTL(int primitive, const GfxTLVertex *vertices, DWORD vertexCount)
 {
+    s_traceCaller = __builtin_return_address(0);
     RecordDraw(primitive, true, vertices, vertexCount, NULL, 0);
 }
 
 extern "C" void Gfx_DrawIndexedPrimitiveTL(int primitive, const GfxTLVertex *vertices, DWORD vertexCount,
                                            const WORD *indices, DWORD indexCount)
 {
+    s_traceCaller = __builtin_return_address(0);
     RecordDraw(primitive, true, vertices, vertexCount, indices, indexCount);
 }
 

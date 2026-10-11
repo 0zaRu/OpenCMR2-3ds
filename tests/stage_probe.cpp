@@ -11,6 +11,7 @@
 #include "port/input.h"
 #include "main.h"
 #include "Game.h"
+#include "Frontend.h"
 #include "GameInfo.h"
 #include "FrontendMenus.h"
 #include "Menu.h"
@@ -229,8 +230,24 @@ struct Probe : Diagnostics::TimingObserver {
     }
 };
 
+// OPENCMR2_PROBE_CURSORS="id:cursor,..." forces the cursor of the menus with
+// those ids (as printed by "probe: menu"), to reach other game modes.
+static int ForcedCursor(int id) {
+    const char *spec = getenv("OPENCMR2_PROBE_CURSORS");
+    while (spec && *spec) {
+        int menu, cursor, used = 0;
+        if (sscanf(spec, "%d:%d%n", &menu, &cursor, &used) != 2) break;
+        if (menu == id) return cursor;
+        spec += used;
+        if (*spec == ',') spec++;
+    }
+    return -1;
+}
+
 static void ConfigureMenu(Menu *menu) {
     if (!menu) return;
+    int forced = ForcedCursor(menu->field_0x4);
+    if (forced >= 0) { menu->cursor = (char)forced; return; }
     if (menu == FrontendMenu_GetMain()) menu->cursor = 1;
     else if (menu == FrontendMenu_GetRallyModes()) menu->cursor = 2;
     else if (menu == FrontendMenu_GetTimeTrialDifficulty()) { menu->cursor = 0; menu->items[0].max = 0; }
@@ -299,6 +316,10 @@ int main(int argc, char **argv) {
             Menu *menu = mode == 2 ? g_pMenu0x00831778 : FrontendMenu_GetActiveMenu();
             if (menu && menu != lastMenu) {
                 fprintf(stderr, "probe: menu %d (%d entries)\n", menu->field_0x4, menu->itemCount);
+                if (getenv("OPENCMR2_PROBE_MENU_TEXT"))
+                    for (int item = 0; item < menu->itemCount; item++)
+                        fprintf(stderr, "probe:   %d: %s\n", item, menu->items[item].text ? menu->items[item].text
+                                : menu->items[item].id >= 0 ? CFrontend::GetTextString(menu->items[item].id) : "");
                 lastMenu = menu;
             }
             if (mode == 2 && menu && menu->itemCount >= 4) menu->cursor = 3;
