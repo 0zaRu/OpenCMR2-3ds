@@ -28,6 +28,14 @@ add_executable(movie_render_state_test movie_render_state.cpp
 target_link_libraries(movie_render_state_test PRIVATE opencmr2_bink SDL3::SDL3)
 add_test(NAME movie_render_state COMMAND movie_render_state_test)
 
+# FTOI vs a real x87 FISTP (the /QIfist conversion of the original).
+if(CMAKE_SYSTEM_PROCESSOR MATCHES "i[3-6]86|x86|AMD64|amd64")
+    add_executable(ftoi_fistp_test ftoi_fistp.cpp)
+    target_include_directories(ftoi_fistp_test PRIVATE ${PROJECT_SOURCE_DIR}/game)
+    target_compile_options(ftoi_fistp_test PRIVATE "SHELL:-include ${PROJECT_SOURCE_DIR}/src/port/types.h")
+    add_test(NAME ftoi_fistp COMMAND ftoi_fistp_test)
+endif()
+
 # Tests that run game code, on every target.
 add_executable(math_tables_test math_tables.cpp)
 target_link_libraries(math_tables_test PRIVATE opencmr2_platform)
