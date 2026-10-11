@@ -443,6 +443,13 @@ def resolve(layout, origin, width, site):
     return out, problems
 
 
+def is_storage(t):
+    """An array of plain scalars: bytes the code lays its own records over."""
+    while t and "a" in t:
+        t = t["a"]
+    return bool(t) and "s" in t
+
+
 def stride_labels(layout, origin, terms):
     labels = []
     if origin.type is None and origin.kind != "alloc":
@@ -482,7 +489,7 @@ def classify(key, sites, layouts, tracers, base, others):
     """Verdict for one access, comparing the base target against the others."""
     s0 = sites[base]
     result = {"key": key, "fn": s0["fn"], "text": s0["text"], "verdict": "safe", "reasons": [], "origins": [],
-              "notes": []}
+              "notes": [], "storage": []}
     per_target = {}
     for target, site in sites.items():
         view = site.get("view") or {}
@@ -521,6 +528,13 @@ def classify(key, sites, layouts, tracers, base, others):
             b = o1[i]
             c0, p0 = resolve(layouts[base], a, view_width(s0), s0)
             c1, p1 = resolve(layouts[target], b, view_width(sites[target]), sites[target])
+            if a.kind == "object" and is_storage(a.type):
+                # Scalar storage: what matters is where each view lies, checked
+                # against the other views of the same object afterwards.
+                if not a.terms and view_width(s0) > 0:
+                    result["storage"].append((a.prov, a.offset, view_width(s0), b.offset,
+                                              view_width(sites[target])))
+                c0 = c1 = []
             # Out of bounds on every target is not a 64-bit problem (and often
             # a path-insensitive merge of call sites); note it only.
             result["notes"] += [p for p in p0 if p not in result["notes"]]
@@ -614,6 +628,27 @@ def fmt_cover(cover):
     return ", ".join(parts)
 
 
+def check_storage(results):
+    """Records laid over scalar arrays: two views that were apart on i386 must
+    stay apart on 64-bit (bounds were checked per access)."""
+    views = collections.defaultdict(list)
+    for r in results:
+        for prov, o32, w32, o64, w64 in r["storage"]:
+            views[prov].append((o32, w32, o64, w64, r))
+    for prov, rows in views.items():
+        distinct = {(o32, w32, o64, w64): r for o32, w32, o64, w64, r in rows}
+        items = list(distinct.items())
+        for i, ((a32, aw32, a64, aw64), ra) in enumerate(items):
+            for (b32, bw32, b64, bw64), rb in items[i + 1:]:
+                apart32 = a32 + aw32 <= b32 or b32 + bw32 <= a32
+                apart64 = a64 + aw64 <= b64 or b64 + bw64 <= a64
+                if apart32 and not apart64:
+                    for r, other in ((ra, rb), (rb, ra)):
+                        r["verdict"] = "bug"
+                        r["reasons"].append(f"overlaps {other['key']} in {prov} on 64-bit "
+                                            f"(0x{a64:x}+{aw64} / 0x{b64:x}+{bw64})")
+
+
 # ---- reporting -------------------------------------------------------------------
 
 def markdown(results, targets):
@@ -698,6 +733,7 @@ def main():
         r = classify(key, sites, layouts, tracers, base, others)
         r["address"] = addresses.get((key.split(":")[0], r["fn"]))
         results.append(r)
+    check_storage(results)
 
     counts = collections.Counter(r["verdict"] for r in results)
     print(f"{len(results)} raw accesses: {counts['bug']} bug, {counts['unresolved']} unresolved, {counts['safe']} safe"
