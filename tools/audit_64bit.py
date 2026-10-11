@@ -26,7 +26,7 @@ from pathlib import Path
 
 ROOT = Path(__file__).resolve().parent.parent
 FLAGS = ["-m64", "-fsyntax-only", "-std=gnu++17", "-fwrapv", "-fno-strict-aliasing", "-fms-extensions",
-         f"-I{ROOT / 'game'}", f"-I{ROOT / 'src'}", "-include", str(ROOT / "src/port/types.h"),
+         f"-I{ROOT / 'game'}", f"-I{ROOT / 'src'}", f"-I{ROOT / 'src/port/compat'}", "-include", str(ROOT / "src/port/types.h"),
          "-include", str(ROOT / "src/port/msvcrt.h"), "-Wno-everything", "-Wpointer-to-int-cast",
          "-Wint-to-pointer-cast", "-Wvoid-pointer-to-int-cast", "-Wint-to-void-pointer-cast",
          "-Wshorten-64-to-32", "-ferror-limit=0", "-fno-color-diagnostics"]
