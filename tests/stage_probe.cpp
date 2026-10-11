@@ -20,6 +20,11 @@
 #include "ReplayStream.h"
 #include "CarPhysics.h"
 #include "RallyData.h"
+#include "Sector.h"
+#include "Mesh.h"
+#include "MeshVertex.h"
+#include "SceneNode.h"
+#include "LightZone.h"
 #define SDL_MAIN_HANDLED
 #include <SDL3/SDL_main.h>
 #include <cstdio>
@@ -304,6 +309,52 @@ static void ConfigureMenu(Menu *menu) {
     }
 }
 
+extern unsigned short *g_sceneLightData;
+extern BYTE *g_sceneLightZones;
+extern short *g_sceneSectorZone;
+extern Mesh **g_sceneShadowMeshes;
+
+// Pointer-free digests of the stage lighting records and shadow meshes, by
+// part: zones, items, owners (sector, position in its object list), zone mesh
+// data, sector shadow meshes.
+static void LightingDigest(unsigned *zonesOut, unsigned long long out[5])
+{
+    for (int k = 0; k < 5; k++) out[k] = 1469598103934665603ULL;
+    auto mix = [&](int k, const void *p, size_t n) {
+        for (size_t i = 0; i < n; i++) { out[k] ^= ((const BYTE *)p)[i]; out[k] *= 1099511628211ULL; }
+    };
+    auto mixInt = [&](int k, long long v) { mix(k, &v, sizeof(v)); };
+    unsigned zones = g_sceneLightData ? *g_sceneLightData : 0;
+    *zonesOut = zones;
+    for (unsigned z = 0; z < zones; z++) {
+        const LightZone &zone = ((const LightZone *)g_sceneLightZones)[z];
+        mixInt(0, zone.sector); mixInt(0, zone.itemCount); mixInt(0, zone.x); mixInt(0, zone.z);
+        for (unsigned i = 0; i < zone.itemCount; i++) {
+            const LightZoneItem &item = zone.pItems[i];
+            mix(1, &item, offsetof(LightZoneItem, intensity));
+            mixInt(1, item.field_0x24); mixInt(1, item.vertexCount);
+            long long owner = -1;
+            for (int s = 0; s < g_sectorCount && owner < 0; s++) {
+                int n = 0;
+                for (StageObject *o = g_sectors[s]->pObjects; o; o = o->pNext, n++)
+                    if (o == item.pOwner) { owner = (long long)s << 16 | n; break; }
+            }
+            mixInt(2, owner);
+        }
+        const LightZoneMesh &mesh = *zone.pMesh;
+        mixInt(3, mesh.triangleCount); mixInt(3, mesh.vertexCount);
+        mix(3, mesh.pVertices, mesh.vertexCount * 0x30);
+        mix(3, mesh.pTriangles, mesh.triangleCount * 0x4c);
+        mix(3, mesh.pLevels, mesh.vertexCount * 4);
+    }
+    for (int s = 0; g_sceneSectorZone && s < g_sectorCount; s++) {
+        mixInt(4, g_sceneSectorZone[s]);
+        Mesh *m = g_sceneShadowMeshes ? g_sceneShadowMeshes[s] : nullptr;
+        mixInt(4, m != nullptr);
+        if (m) { mixInt(4, m->field_0x10); mixInt(4, m->triangleCount); mixInt(4, m->flags); mix(4, m->field_0x0, 0xc); }
+    }
+}
+
 int main(int argc, char **argv) {
     // Keep probe arguments out of the legacy command-line parser.
     if (argc != 5 && argc != 6) { fprintf(stderr, "usage: stage_probe DATA TRACE.jsonl FPS|variable TICKS [INPUTS.csv]\n"); return 2; }
@@ -355,6 +406,17 @@ int main(int argc, char **argv) {
             raceOrigin = virtualTime;
         }
         if (mode != lastMode) { fprintf(stderr, "probe: resource mode %d at %u ms\n", mode, virtualTime); lastMode = mode; }
+        // Stage lighting (shadow zones) is loaded only with this graphics option.
+        if (mode != 3 && getenv("OPENCMR2_PROBE_LIGHTING")) CGameInfo::SetGraphicsOptionBit4(1);
+        static bool lightingDone;
+        if (mode == 3 && probe.tick > 0 && !lightingDone && getenv("OPENCMR2_PROBE_LIGHTING")) {
+            lightingDone = true;
+            unsigned zones;
+            unsigned long long d[5];
+            LightingDigest(&zones, d);
+            fprintf(stderr, "probe: lighting %u zones %016llx %016llx %016llx %016llx %016llx\n",
+                    zones, d[0], d[1], d[2], d[3], d[4]);
+        }
         memset(keys, 0, sizeof(keys));
         bool holdMap = false;
         if (mode != 3 || probe.finishInjected) {

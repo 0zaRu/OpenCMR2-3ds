@@ -70,6 +70,10 @@ if(OPENCMR2_BINK_TEST_DATA_DIR)
             ${CMAKE_CURRENT_SOURCE_DIR}/runtime_scenarios.py --probe $<TARGET_FILE:stage_probe>
             --data ${OPENCMR2_BINK_TEST_DATA_DIR})
         set_tests_properties(runtime_scenarios PROPERTIES TIMEOUT 180)
+        add_test(NAME stage_lighting COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/stage_lighting.py --probe $<TARGET_FILE:stage_probe>
+            --data ${OPENCMR2_BINK_TEST_DATA_DIR})
+        set_tests_properties(stage_lighting PROPERTIES TIMEOUT 300)
     endif()
     file(GLOB_RECURSE BINK_TEST_FILES "${OPENCMR2_BINK_TEST_DATA_DIR}/*.bik" "${OPENCMR2_BINK_TEST_DATA_DIR}/*.BIK")
     foreach(movie IN LISTS BINK_TEST_FILES)
