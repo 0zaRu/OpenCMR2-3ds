@@ -4,12 +4,8 @@ project(OpenCMR2 LANGUAGES C CXX)
 # Targets (see CMakePresets.json):
 #  - linux-x86: 32-bit x86, the reference build. The game's data structures
 #    have the original's layout there, which the golden tests compare against.
-#  - linux-x64, windows-x64, macos-arm64: 64-bit builds. They compile and link;
-#    the game code is still being made pointer-size clean (docs/PLAN.md, F4),
-#    so they do not load a stage yet.
-if(NOT CMAKE_SIZEOF_VOID_P EQUAL 4)
-    message(STATUS "OpenCMR2: 64-bit build; the game code is not pointer-size clean yet (docs/PLAN.md, F4)")
-endif()
+#  - linux, windows-x64, macos: native 64-bit builds. Raw access review and
+#    original-game parity checks are tracked in docs/64bit-raw-access.md.
 
 # The game source needs Clang with GNU-style options: -fms-extensions for the
 # MSVC dialect it was written in, forced includes and the semantics below.

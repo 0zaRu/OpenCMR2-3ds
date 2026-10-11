@@ -404,7 +404,6 @@ void RallyTiming_SortOrder(int *piTimes, char *pcOrder, int iDirection, int iCou
 {
 	int i;
 	int remaining;
-	int offset;
 	char *pCurrent;
 	int a;
 	int b;
@@ -418,10 +417,9 @@ void RallyTiming_SortOrder(int *piTimes, char *pcOrder, int iDirection, int iCou
 	if (iCount > 0)
 	{
 		pCurrent = pcOrder;
-		offset = 1 - (int)pcOrder;
 		for (remaining = iCount; remaining > 0; remaining--, pCurrent++)
 		{
-			for (i = offset + (int)pCurrent; i < iCount; i++)
+			for (i = 1 + (int)(pCurrent - pcOrder); i < iCount; i++)
 			{
 				a = *pCurrent;
 				b = pcOrder[i];

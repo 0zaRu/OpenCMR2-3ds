@@ -91,6 +91,21 @@ public:
         return true;
     }
 
+    bool VisitCastExpr(CastExpr *e)
+    {
+        if (e->getCastKind() != CK_PointerToIntegral || !inGame(e->getExprLoc()))
+            return true;
+        Chain c;
+        decomposePtr(e->getSubExpr(), c);
+        json::Object site = siteBase(c, e, "ptr-int");
+        site["view"] = nullptr;
+        site["width"] = 0;
+        site["pointerBits"] = sizeOf(e->getSubExpr()->getType()) * 8;
+        site["integerBits"] = sizeOf(e->getType()) * 8;
+        emit(std::move(site));
+        return true;
+    }
+
     bool VisitVarDecl(VarDecl *vd)
     {
         if (vd->hasInit() && !isa<ParmVarDecl>(vd) && inGame(vd->getLocation()))

@@ -4,10 +4,10 @@
     "x86_64"
   ],
   "guards": {
-    "game/StageObjects.cpp": "28ebed572397d5ee6102db09d14f6d117580f6ad28d10cbb8b2acfa6cbe2d57a",
+    "game/StageObjects.cpp": "d50909fa8a2eea06d150a53b0b0ab0dfce6e5fe3e3923e7883f23d391e05ee0f",
     "game/ReplayStream.h": "e89389fbf879a5d9c3fb21d524ac95c46cdefb5555168473f56a6d3315119b22",
     "game/FixedPoint.h": "4742a0cbb0f9d301f4cd8101a7009ee02aec54b568a0a2fee86793028b20fee5",
-    "game/FileBuffer.cpp": "4cc93e0038963864ad6bd04187467cde01051417bae63505aa3c1e5e50edf656",
+    "game/FileBuffer.cpp": "de696af61b34e3acf85abf4427020cdcd9e0f0c0f247f1d87069823a7e9b2fca",
     "src/port/types.h": "89d6d811b93c80dbb12c04a89f148cd990f6d76eea085362e707aee611414ebe",
     "src/port/replay_disk.cpp": "50eabe569961f6f40de0c7b7e2b99d374d11871ff0b2f12c97e6f0841c1b51c5",
     "src/port/disk_layouts.h": "607bb3c399a9471d87ac7466e9d15b47cd6f0117eb6341c50860e7a926ca15bb"

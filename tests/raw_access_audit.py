@@ -35,7 +35,7 @@ def flow(root, off=0, view=None):
 
 
 class ClassificationTests(unittest.TestCase):
-    def classify(self, root_for, offset_for, width_for, flows_for=lambda p: {}):
+    def classify(self, root_for, offset_for, width_for, flows_for=lambda p: {}, fields_for=lambda p: {}):
         layouts, tracers, sites = {}, {}, {}
         for target, pointer_size in (("i386", 4), ("x86_64", 8)):
             layout = header_layout(pointer_size)
@@ -45,7 +45,21 @@ class ClassificationTests(unittest.TestCase):
             sites[target] = {"root": root_for(pointer_size), "off": offset_for(pointer_size),
                              "terms": [], "width": width_for(pointer_size), "fn": "fixture",
                              "text": "fixture access", "view": {"s": "int", "sz": 4}}
+            sites[target].update(fields_for(pointer_size))
         return audit.classify("fixture", sites, layouts, tracers, "i386", ["x86_64"])
+
+    def test_pointer_truncation_is_independent_of_pointee_layout(self):
+        result = self.classify(lambda p: {"k": "untyped", "prov": "param:fixture#0"},
+                               lambda p: 0, lambda p: 0,
+                               fields_for=lambda p: {"pointerBits": p * 8, "integerBits": 32})
+        self.assertEqual(result["verdict"], "bug", result)
+        self.assertIn("pointer truncated from 64 to 32", result["reasons"][0])
+
+    def test_pointer_sized_integer_is_not_truncation(self):
+        result = self.classify(lambda p: {"k": "untyped", "prov": "param:fixture#0"},
+                               lambda p: 0, lambda p: 0,
+                               fields_for=lambda p: {"pointerBits": p * 8, "integerBits": p * 8})
+        self.assertNotEqual(result["verdict"], "bug", result)
 
     def test_equal_distance_after_header_does_not_skip_wrong_field(self):
         # On i386 this reads the next Header.count; on x64 it reads half of
@@ -149,6 +163,25 @@ class ReviewTests(unittest.TestCase):
 
 @unittest.skipUnless(WITH_PLUGIN, "use --plugin to test the Clang integration")
 class PluginTests(unittest.TestCase):
+    def test_pointer_cast_widths_are_recorded_even_in_return_expressions(self):
+        audit.build_plugin()
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            source = directory / "Fixture.cpp"
+            source.write_text("int narrow(void *p) { return (int)p; }\n"
+                              "__UINTPTR_TYPE__ wide(void *p) { return (__UINTPTR_TYPE__)p; }\n")
+            for target, pointer_bits in [("i386", 32), ("x86_64", 64)]:
+                output = directory / (target + ".jsonl")
+                subprocess.run(["clang++", "-target", audit.TARGETS[target], "-fsyntax-only", "-std=c++17",
+                                "-fms-extensions", "-Wno-everything", f"-fplugin={audit.PLUGIN}",
+                                f"-fplugin-arg-rawaccess-out={output}",
+                                f"-fplugin-arg-rawaccess-dir={directory}/", str(source)], check=True)
+                sites = [json.loads(line) for line in output.read_text().splitlines()]
+                casts = {s["fn"]: s for s in sites if "pointerBits" in s}
+                self.assertEqual(casts["narrow"]["pointerBits"], pointer_bits)
+                self.assertEqual(casts["narrow"]["integerBits"], 32)
+                self.assertEqual(casts["wide"]["integerBits"], pointer_bits)
+
     def test_allocation_ast_and_calloc_argument_order(self):
         audit.build_plugin()
         with tempfile.TemporaryDirectory() as temp:

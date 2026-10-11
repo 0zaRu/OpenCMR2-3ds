@@ -38,13 +38,12 @@ system when it is installed; otherwise CMake downloads and builds it (or pass
 | Preset | Target | Status |
 |---|---|---|
 | `linux-x86` | Linux, 32-bit x86 | Reference build: plays the game; golden tests compare it with the original |
-| `linux` | Linux, 64-bit (x86-64 or ARM64) | Compiles and passes the unit tests; does not load a stage yet |
-| `macos` | macOS, Apple silicon | Same as `linux`; Metal shaders are translated from SPIR-V |
-| `windows-x64` | Windows x64 (`clang++`, MSVC runtime) | Same as `linux`; renders through Vulkan |
+| `linux` | Linux, 64-bit (x86-64 or ARM64) | x86-64 plays stages and passes original physics fixtures; ARM64 needs gameplay validation |
+| `macos` | macOS, Apple silicon | Metal shaders are translated from SPIR-V; gameplay validation remains open |
+| `windows-x64` | Windows x64 (`clang++`, MSVC runtime) | Vulkan renderer; also cross-built with LLVM-MinGW and checked under Wine |
 
-The 64-bit builds wait for the game code to become pointer-size clean
-([docs/PLAN.md](docs/PLAN.md), F4). That work happens in CMR2Decomp, keeping
-its MSVC6 build byte-exact.
+The remaining raw accesses are tracked in [docs/64bit-raw-access.md](docs/64bit-raw-access.md).
+Preservation changes are also checked in CMR2Decomp with MSVC6 and original-code comparisons.
 
 ### Linux, 32-bit reference build
 
@@ -81,6 +80,13 @@ component (or LLVM's installer), Ninja and `glslangValidator` on the PATH:
 
 `clang-cl` is not supported: the build uses GNU-style options. SDL_GPU runs on
 Vulkan there (Direct3D 12 would need DXIL shaders).
+
+CI builds and tests all platforms. Successful Windows jobs upload a portable
+ZIP containing the executable, runtime DLLs, licenses and launcher. A `v*` tag
+publishes that ZIP and its SHA-256 after all platform jobs pass. The original
+game data is added locally, so it is never included in public release assets.
+See [docs/WINDOWS_PORTABLE.md](docs/WINDOWS_PORTABLE.md) for USB packaging and
+cross-building on Linux.
 
 To record and replay a real stage at different render cadences, or measure CPU
 frame/tick/presentation timings, see [docs/BASELINE.md](docs/BASELINE.md).

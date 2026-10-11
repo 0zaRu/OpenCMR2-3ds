@@ -207,7 +207,7 @@ void NetRace_DrainPendingMessages(void)
 
     while (Network_PollReceivedMessageBuffer(&from, &pData)) {
         if (from == 0)
-            NetRace_HandleDeviceNotification((int)&from, (int *)pData);
+            NetRace_HandleDeviceNotification(0, (int *)pData);
         else
             NetRace_DispatchRacePacket(&from, (BYTE *)pData);
     }
@@ -1369,13 +1369,13 @@ void NetRace_PollPlayerStatisticsPackets(Car *pCars)
             }
             g_unk0x005393ac[i] = ((unsigned)pStats->seq + (unsigned)g_unk0x005393ac[i]) >> 1;
             if (i == 0)
-                RallyData_ValidateIndex((int)CInput::FormatString(g_str0x00519988, pStats->seq,
+                RallyData_ValidateIndex((INT_PTR)CInput::FormatString(g_str0x00519988, pStats->seq,
                                                                  0, g_unk0x005393ac[i]));
         } else {
             if (g_unk0x005393ac[i] != 0)
                 g_unk0x005393ac[i]++;
             if (i == 0)
-                RallyData_ValidateIndex((int)CInput::FormatString(g_str0x0051995c, 0,
+                RallyData_ValidateIndex((INT_PTR)CInput::FormatString(g_str0x0051995c, 0,
                                                                  g_unk0x005393ac[0]));
         }
         i++;

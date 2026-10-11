@@ -162,9 +162,9 @@ public:
     static Unk0x0059f8cc m_unk0x0059f8cc;
     static char m_strKeyboard[12];
     static InputDeviceState m_deviceState;
-    static PVOID m_keyboardDelay;
+    static unsigned int m_keyboardDelay;
     static DWORD m_mouseGranularity;
-    static PVOID m_keyboardSpeed;
+    static unsigned int m_keyboardSpeed;
 
 
     static InputDevice *m_pDirectInputMouse;

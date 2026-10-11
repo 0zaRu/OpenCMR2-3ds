@@ -235,9 +235,22 @@ bool Platform_Init(int argc, char **argv)
         return false;
     }
 
-    char *pref = SDL_GetPrefPath("OpenCMR2", "OpenCMR2");
-    s_userDir = pref ? pref : "./";
-    SDL_free(pref);
+    std::string userDir;
+    for (int i = 1; i < argc; ++i) {
+        if (strcmp(argv[i], "--user-dir") == 0 && i + 1 < argc)
+            userDir = argv[++i];
+    }
+    if (!userDir.empty()) {
+        s_userDir = WithSlash(userDir);
+        if (!SDL_CreateDirectory(s_userDir.c_str())) {
+            fprintf(stderr, "Cannot create user directory: %s\n", SDL_GetError());
+            return false;
+        }
+    } else {
+        char *pref = SDL_GetPrefPath("OpenCMR2", "OpenCMR2");
+        s_userDir = pref ? pref : "./";
+        SDL_free(pref);
+    }
     s_logFile = fopen((s_userDir + "opencmr2.log").c_str(), "w");
 
     std::string settingsFile = s_userDir + "opencmr2.ini";
@@ -253,6 +266,8 @@ bool Platform_Init(int argc, char **argv)
     for (int i = 1; i < argc; i++) {
         if (strcmp(argv[i], "--data") == 0 && i + 1 < argc) {
             dataDir = argv[++i];
+        } else if (strcmp(argv[i], "--user-dir") == 0 && i + 1 < argc) {
+            ++i;
         } else {
             if (!s_commandLine.empty())
                 s_commandLine += ' ';

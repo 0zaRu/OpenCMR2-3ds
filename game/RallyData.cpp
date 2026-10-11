@@ -781,7 +781,7 @@ unsigned char RallyData_GetFlag25(void)
 // Index check compiled out of the release build; kept because every
 // RallyData accessor still calls it.
 // FUNCTION: CMR2 0x004083f0
-void RallyData_ValidateIndex(int index)
+void RallyData_ValidateIndex(INT_PTR index)
 {
 }
 
@@ -1120,7 +1120,7 @@ int RallyData_IsDriverViewModeAllowed(unsigned char index, int mode)
 void RallyData_ValidateType3Entry(int *p)
 {
     if (p[1] == 3)
-        RallyData_ValidateIndex((int)p);
+        RallyData_ValidateIndex((INT_PTR)p);
 }
 
 // FUNCTION: CMR2 0x00406940
@@ -2842,7 +2842,7 @@ void RallyData_DrawAndHandleCarHUD(int car, short *pRect)
                 RallyData_DrawStageResultRows(car, rect);
             }
         } else if ((BYTE)RallyData_GetSelectionFlag27() && !CGameInfo::GetGameModeOptionBit19()) {
-            StageUI_NoOpMapEvent(car, (int)rect);
+            StageUI_NoOpMapEvent(car, 0);
         } else if (CGameInfo::GetConfiguredGameMode() == 2 || CGameInfo::GetConfiguredGameMode() == 0 ||
                    CGameInfo::GetConfiguredGameMode() == 1) {
             RallyData_DrawSplitStandingsPanel(car, rect);
@@ -6333,7 +6333,7 @@ void RallyData_UpdateViewFrameAndDebugOverlay(CallbackStateMachine *param1, int 
                 (int)g_pGraphics->field917_0x3c0 + 1);
         Font_DrawText(1, CFrontend::m_stringDest, 0, 0x69, (int *)colour, 9);
     }
-    CarDamage_UpdateOrderedCarsOffRoadState(pOrder, (short)orderCount, (int)g_unk0x00536ad4, maskedView);
+    CarDamage_UpdateOrderedCarsOffRoadState(pOrder, (short)orderCount, 0, maskedView);
     if (CGameInfo::GetGameModeOptionBit19() != 0) {
         if (CGameInfo::GetConfiguredGameMode() != 0xa) {
             if ((char)((CallbackStateMachine *)StageUI_GetRaceResultTable())->records[0].packedState == '\n')
@@ -6358,14 +6358,14 @@ void RallyData_UpdateViewFrameAndDebugOverlay(CallbackStateMachine *param1, int 
     if ((BYTE)RallyData_IsChampionshipFinalStage() != 0)
         return;
     if ((BYTE)RallyDataState() == 1 && param3 != 0) {
-        Dash_Draw(maskedView, (int)g_unk0x00536ad4);
+        Dash_Draw(maskedView, 0);
         RallyData_DrawAndHandleCarHUD(maskedView, (short *)g_unk0x00536ad4);
-        Race_DrawPlayerCallSlots(maskedView, (int)g_unk0x00536ad4);
+        Race_DrawPlayerCallSlots(maskedView, 0);
     }
     if ((BYTE)RallyDataState() == 2 && param3 != 0) {
-        Dash_Draw(maskedView, (int)g_unk0x00536ad4);
+        Dash_Draw(maskedView, 0);
         RallyData_DrawAndHandleCarHUD(maskedView, (short *)g_unk0x00536ad4);
-        Race_DrawPlayerCallSlots(maskedView, (int)g_unk0x00536ad4);
+        Race_DrawPlayerCallSlots(maskedView, 0);
     }
 }
 

@@ -1242,9 +1242,9 @@ void CarEffects_UpdateSpiralParticle(void *pParticle, ParticleType *pType, int p
     int car;
 
     p = (Particle *)pParticle;
-    index = ((int)p / 3 & 0xffffff) % 10;
+    index = ((int32_t)(uintptr_t)p / 3 & 0xffffff) % 10;
     if (p->age == 0xc70000)
-        p->field0x50 = (short)(((int)p / 7 & 0xffffff) % 0x24) * 0x71;
+        p->field0x50 = (short)(((int32_t)(uintptr_t)p / 7 & 0xffffff) % 0x24) * 0x71;
     p->field0x50 += 0x71;
     if (p->field0x50 > 0x1000)
         p->field0x50 -= 0x1000;

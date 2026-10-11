@@ -103,3 +103,23 @@ add_test(NAME sector_geometry COMMAND sector_geometry_test)
 add_executable(headlight_collision_test headlight_collision.cpp)
 target_link_libraries(headlight_collision_test PRIVATE opencmr2_platform)
 add_test(NAME headlight_collision COMMAND headlight_collision_test)
+
+add_library(high_address_fixture STATIC high_address.c)
+target_link_libraries(headlight_collision_test PRIVATE high_address_fixture)
+target_link_libraries(sector_culling_test PRIVATE high_address_fixture)
+
+if(WIN32)
+    # Windows searches beside each test executable for SDL3.dll. Copy once
+    # before linking the tests, including when only stage_probe is requested.
+    add_custom_target(opencmr2_test_runtime
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different
+            $<TARGET_FILE:SDL3::SDL3-shared> ${CMAKE_CURRENT_BINARY_DIR}
+        DEPENDS SDL3::SDL3-shared)
+    get_property(test_targets DIRECTORY PROPERTY BUILDSYSTEM_TARGETS)
+    foreach(target IN LISTS test_targets)
+        get_target_property(kind ${target} TYPE)
+        if(kind STREQUAL "EXECUTABLE")
+            add_dependencies(${target} opencmr2_test_runtime)
+        endif()
+    endforeach()
+endif()

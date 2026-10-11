@@ -34,10 +34,10 @@ InputDeviceState CInput::m_deviceState;
 DWORD CInput::m_mouseGranularity;
 
 // GLOBAL: CMR2 0x0059f8d8
-PVOID CInput::m_keyboardDelay;
+unsigned int CInput::m_keyboardDelay;
 
 // GLOBAL: CMR2 0x0059f8dc
-PVOID CInput::m_keyboardSpeed;
+unsigned int CInput::m_keyboardSpeed;
 
 
 // GLOBAL: CMR2 0x0059f7c4
@@ -215,8 +215,8 @@ BOOL CInput::SetupKeyboard(void) {
         DWORD delay, interval;
 
         Input_GetKeyRepeat(&delay, &interval);
-        m_keyboardDelay = (PVOID)(uintptr_t)delay;
-        m_keyboardSpeed = (PVOID)(uintptr_t)interval;
+        m_keyboardDelay = delay;
+        m_keyboardSpeed = interval;
     }
 
     m_pDirectInputKeyboard = DInputCreateDevice(0, 0);

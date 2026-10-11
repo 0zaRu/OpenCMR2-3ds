@@ -76,7 +76,7 @@ StageFile g_stageFiles[7];
 char g_stageSplitUnk0x00541f78[10][2];
 
 // GLOBAL: CMR2 0x00541f8c
-int g_unk0x00541f8c;
+INT_PTR g_unk0x00541f8c;
 
 // GLOBAL: CMR2 0x00541f90
 char g_unk0x00541f90[8];
@@ -211,7 +211,7 @@ StageFile *StageTiming_GetStageFile6(void)
 }
 
 // FUNCTION: CMR2 0x00455460
-int StageTiming_GetStageArchiveState(void)
+INT_PTR StageTiming_GetStageArchiveState(void)
 {
     return g_unk0x00541f8c;
 }
@@ -2380,7 +2380,7 @@ void StageDeform_ApplyRadialDent(void)
             Mesh *pMesh = (Mesh *)((DeformMeshSources *)pSlot)->nodes[0]->pObject;
             if (pMesh != NULL) {
                 Mesh_RefreshVertices(pMesh);
-                RallyData_ValidateIndex((int)pMesh);
+                RallyData_ValidateIndex((INT_PTR)pMesh);
                 Scene_MarkShadowPartDirty(pCar->pBodyNode, pMesh);
             }
         }
@@ -2499,7 +2499,7 @@ void StageDeform_ApplyPlanarDent(void)
             Mesh *pMesh = (Mesh *)((DeformMeshSources *)pSlot)->nodes[0]->pObject;
             if (pMesh != NULL) {
                 Mesh_RefreshVertices(pMesh);
-                RallyData_ValidateIndex((int)pMesh);
+                RallyData_ValidateIndex((INT_PTR)pMesh);
                 Scene_MarkShadowPartDirty(pCar->pBodyNode, pMesh);
             }
         }
@@ -4325,7 +4325,7 @@ extern int g_carDamageModelEnabled[8];
 
 void StageObject_SetModelSubmeshVisibility(Car *pCar, int param_2, char param_3);
 void Mesh_Rebuild(Mesh *pMesh);
-void RallyData_ValidateIndex(int index);
+void RallyData_ValidateIndex(INT_PTR index);
 void CarLight_SetChannelMasks(int index, char set0, char set1, BYTE mask);
 
 // Rebuilds the part meshes of a damaged car from its packed vertices, then
@@ -4356,7 +4356,7 @@ void StageTiming_RebuildDamagedPartMeshes(Car *pCar)
             pMesh = (Mesh *)set->geometry.nodes[i]->pObject;
             if (pMesh != NULL) {
                 Mesh_Rebuild(pMesh);
-                RallyData_ValidateIndex((int)pMesh);
+                RallyData_ValidateIndex((INT_PTR)pMesh);
                 Scene_MarkShadowPartDirty(pCar->pBodyNode, pMesh);
             }
         }
@@ -5520,7 +5520,7 @@ void NetRace_PackCarState(Car *car);
 NetStats *NetPlayers_GetStatisticsRecord(int index);
 int NetPlayers_FindPlayerByField8(int value);
 short RallyData_GetActiveCarRaceRecordField14(Car *p);
-int Replay_GetStreamFrameState(void);
+INT_PTR Replay_GetStreamFrameState(void);
 unsigned int RallyData_GetFlag21(void);
 
 // Snapshots a car's body axes and position into its network record and marks
@@ -5670,7 +5670,7 @@ void StageTiming_LoadSelectedTeamArchive(void)
             index = CGameInfo::GetConfiguredDifficulty();
         }
         memcpy(dest, bufs[index], sizes[index]);
-        g_unk0x00541f8c = (int)dest + sizes[index];
+        g_unk0x00541f8c = (INT_PTR)dest + sizes[index];
         g_unk0x0054241c = (char *)dest;
         if (dest != NULL)
             g_unk0x00542604 = 1;
@@ -8384,7 +8384,7 @@ wheelsDone:
     }
     if ((char)RallyData_GetFlag24() == 0 && (letter == 'C' || letter == 'A')) {
         sprintf(CFrontend::m_stringDest, g_strCarModelFormat, Car_GetDirectoryPath(model), letterInt, lod);
-        StageTiming_InitStageTypeEvents((int)CFrontend::m_stringDest, car, teamByte);
+        StageTiming_InitStageTypeEvents(0, car, teamByte);
     }
     if (hasVariant == 0 || CGameInfo::IsRecordFlagSet(0x10)) {
         pCar = Car_Get(car);

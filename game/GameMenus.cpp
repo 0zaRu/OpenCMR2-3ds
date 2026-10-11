@@ -2592,7 +2592,7 @@ void GameMenu_DrawInGameBreadcrumb(Menu *pMenu)
                   (int *)g_menuFrameColour, 0x11);
     if (flag) {
         GAMEMENUS_HEADER_MARKER(CFrontend::m_stringDest)
-        GameMenus_FormatModeName((int)CFrontend::m_stringDest,
+        GameMenus_FormatModeName(0,
                                  (BYTE)RallyData_GetSelectionBits10To11() * 3 + (BYTE)RallyData_GetSelectionBits12To13());
         CGenericFileLoader::StrLowerPolish(CFrontend::m_stringDest);
         Font_DrawText(2, CFrontend::m_stringDest, x, (int)(g_pGraphics->resY * 0x43) / 0x1e0,

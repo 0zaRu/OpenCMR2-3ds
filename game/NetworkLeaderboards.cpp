@@ -17,13 +17,8 @@ void CNetworkLeaderboards::Reset() {
     m_leaderboardId = -1;
     m_totalLeaderboards = 0;
 
-    int addr = (int)&m_leaderboards;
-    int endAddr = addr + sizeof(m_leaderboards);
-    
-    while (addr < endAddr) {
-        *(BYTE*)addr = 0;
-        addr += 0x104;
-    }
+    for (NetworkLeaderboard &board : m_leaderboards)
+        board.isLoaded = 0;
 }
 
 // FUNCTION: CMR2 0x0040e3f0

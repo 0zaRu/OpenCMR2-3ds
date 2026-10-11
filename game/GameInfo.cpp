@@ -1594,7 +1594,7 @@ void GameInfo_ProcessNetworkMessages(void)
 
     while (Network_PollReceivedMessageBuffer(&senderId, &pMessage) != 0) {
         if (senderId == 0)
-            OptionMenu_HandleItemNotification((int)&senderId, (int *)pMessage);
+            OptionMenu_HandleItemNotification(0, (int *)pMessage);
         else
             OptionMenu_HandleNetworkNotification((NetPlayerID *)&senderId, (BYTE *)pMessage);
     }
@@ -5861,18 +5861,18 @@ BYTE OptionMenu_LoadSounds(void)
 {
     BYTE result;
     char *name;
-    int nameEnd;
+    char *nameEnd;
 
     result = 1;
     g_unk0x00831888 = 0;
     name = (char *)g_unk0x005296c4;
-    nameEnd = (int)g_unk0x005296c4 + sizeof(g_unk0x005296c4);
+    nameEnd = (char *)g_unk0x005296c4 + sizeof(g_unk0x005296c4);
     do {
         sprintf(CFrontend::m_stringDest, g_str0x005296e8, CInstallInfo::GetSoundsDir(), name);
         if (Sound_LoadSample(CFrontend::m_stringDest, 0, OptionMenu_GetCommonArchive()) == 0)
             result = 0;
         name += 7;
-    } while ((int)name < nameEnd);
+    } while (name < nameEnd);
     return result;
 }
 
@@ -6908,7 +6908,7 @@ void OptionPreview_RebuildMeshRecord(int index)
                 i--;
         }
     }
-    OptionPreview_AssignConvertedVertexBuffers(index, (int)pEntry->bodyNode, pRecord);
+    OptionPreview_AssignConvertedVertexBuffers(index, 0, pRecord);
 }
 
 // GLOBAL: CMR2 0x0082fd00
@@ -8287,7 +8287,7 @@ void OptionMenu_DrawScreenTitle(void)
             flag = 1;
     }
     sprintf(CFrontend::m_stringDest, CFrontend::GetTextString(0x131));
-    Font_Unused((int)CFrontend::m_stringDest, flag);
+    Font_Unused(0, flag);
     width = Font_GetTextWidth(0, (BYTE *)CFrontend::m_stringDest);
     OptionMenu_DrawTransitionTextShortCoords(4, 0, 0, CFrontend::m_stringDest,
                  (int)g_pGraphics->resX * 0x140 / 0x280 - width / 2,
@@ -9751,7 +9751,7 @@ void OptionMenu_DispatchRecordEditState(unsigned int param_1)
         OptionMenu_DrawClampedStageTime();
         OptionMenu_DrawRightColumn();
         OptionMenu_DrawRecalledRallyEntry(param_1, 0);
-        OptionMenu_DrawGameInfoLayout((int)OptionMenu_GetValueSliderMenu(), 0);
+        OptionMenu_DrawGameInfoLayout(0, 0);
         OptionMenu_DrawResultsRallyInfo(0);
         OptionMenu_DrawSeparators(CGameInfo::GetActiveOptionSlot());
         if (g_unk0x00529430 !=
@@ -10540,7 +10540,7 @@ void OptionMenu_LoadGameItem(Menu *pMenu, MenuItem *pItem)
 void OptionMenu_ApplyHighlightedValue(Menu *pMenu, MenuItem *pItem)
 {
     if (OptionMenu_GetRecordGroupAppliedFlag(CGameInfo::GetActiveOptionSlot(), OptionMenu_GetColumnWeight(pItem->max)) != 0)
-        OptionMenu_ApplySecondModeItem(pMenu, (int)pItem);
+        OptionMenu_ApplySecondModeItem(pMenu, 0);
     else
         OptionMenu_ConfirmOrRevertHighlightedValue(pMenu, pItem);
 }

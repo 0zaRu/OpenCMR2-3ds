@@ -1101,8 +1101,7 @@ void View_PositionFromCarProfile(CameraRecord *pObj, FixMatrix *pRef)
     } else {
         mode = g_carPartStateTables.modes[pObj->index];
     }
-    base = (int)g_carCameraOffsets[g_viewObjectCarIndices[pObj->index]];
-    src = ((FixVector *)base)[mode];
+    src = ((FixVector *)g_carCameraOffsets[g_viewObjectCarIndices[pObj->index]])[mode];
 
     FixMatrix_Identity(&identity);
     FixMatrix_SetPosition(&src, &identity);

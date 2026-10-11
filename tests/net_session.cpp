@@ -3,7 +3,7 @@
 
 #include "net/net_session.h"
 
-#include <enet/enet.h>
+#include "net/enet_platform.h"
 
 #include <stdarg.h>
 #include <stdio.h>

@@ -155,6 +155,16 @@ struct Probe : Diagnostics::TimingObserver {
             // The capture holds the original (Win32) layout: where Car and
             // CarPartSet hold wider pointers, pack the captured ones first.
             static unsigned char cars[8][0xc24], parts[8][0x4d0];
+            const void *worldMatrices[8]{}, *bodyMatrices[8]{};
+            for (int i = 0; i < g_carOrderCount; ++i) {
+                const int id = g_carOrder[i];
+                if (id >= 0 && id < 8) {
+                    worldMatrices[id] = g_carBuffer[id].pWorld;
+                    bodyMatrices[id] = g_carBuffer[id].pBodyMatrix;
+                }
+            }
+            view.worldMatrices = worldMatrices;
+            view.bodyMatrices = bodyMatrices;
             const unsigned char *pCars = reinterpret_cast<const unsigned char *>(g_carBuffer);
             const unsigned char *pParts = reinterpret_cast<const unsigned char *>(g_carPartSets);
             if (sizeof(Car) != sizeof(cars[0]) || sizeof(CarPartSet) != sizeof(parts[0])) {
@@ -406,8 +416,9 @@ int main(int argc, char **argv) {
     }
     SDL_SetMainReady();
     char dataArg[] = "--data";
-    char *platformArgs[] = {argv[0], dataArg, argv[1]};
-    if (!Platform_Init(3, platformArgs)) { fclose(file); return 1; }
+    char userArg[] = "--user-dir";
+    char *platformArgs[] = {argv[0], dataArg, argv[1], userArg, getenv("XDG_DATA_HOME")};
+    if (!Platform_Init(5, platformArgs)) { fclose(file); return 1; }
     const PlatformTestClock clock{Ticks, Sleep, 1700000000};
     BYTE keys[256]{};
     Platform_SetTestClock(&clock);

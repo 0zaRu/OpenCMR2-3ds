@@ -6523,7 +6523,7 @@ int Graphics_ReserveCubeMapsAndLoadEnvironment(char *name, int count, GenericFil
     }
     pTexture = (unsigned short *)CTexture::FindLoadTexture(pFile, name, NULL, 0, 0, 0x8000);
     if (pTexture == NULL)
-        return (int)pTexture;
+        return 0;
     {
         g_unk0x005210b8 = *pTexture;
         Frontend_SetObjectField118(CGraphics::m_pTextureManager->textureBuffer[g_unk0x005210b8], 4);

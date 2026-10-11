@@ -3307,7 +3307,7 @@ void Race_TeardownStage(CallbackStateMachine *param1, int param2, char flag)
 // Differential fixtures cover every entry of the original five jump tables;
 // teardown/replay/view/sound actions are controlled boundaries in those tests.
 // FUNCTION: CMR2 0x0041e8d0
-void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
+void Race_HandleStageReplayViewTransitions(CallbackStateMachine *param1, unsigned int param2)
 {
     int i;
     int n;
@@ -3315,11 +3315,11 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
     int count;
     BYTE *p;
     BYTE **pp;
-    BYTE *pPlayers = param1;
+    CallbackStateMachine *pPlayers = param1;
 
-    count = *pPlayers;
+    count = pPlayers->count;
     if (count >= 1) {
-        p = (BYTE *)((CallbackStateMachine *)pPlayers)->records;
+        p = (BYTE *)pPlayers->records;
         for (i = 0; i < count; i++) {
             if (*p != 11)
                 return;
@@ -3349,8 +3349,8 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
         case 1:
             CGame::SetFrontendResourceMode(2);
             RallyData_SetStageSelectionAndRefreshFlags(0);
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 3);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 3);
             RallyData_ClearDriverGroupRecords();
             RallyData_CopyCountryPlayerDefaults();
             Race_ReleaseFrameResources();
@@ -3359,8 +3359,8 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
         case 8:
             CGame::SetFrontendResourceMode(2);
             RallyData_SelectFirstAvailableStage();
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 3);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 3);
             RallyData_ClearDriverGroupRecords();
             RallyData_CopyCountryPlayerDefaults();
             Race_ReleaseFrameResources();
@@ -3375,19 +3375,19 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
             RallyData_ClearDriverGroupRecords();
             if (g_unk0x00537ffa != 0) {
                 CGame::SetFrontendResourceMode(2);
-                for (i = 0; i < *pPlayers; i++)
-                    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 3);
+                for (i = 0; i < pPlayers->count; i++)
+                    CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 3);
                 Race_ReleaseFrameResources();
                 StageUI_ClearRaceEndLatch();
                 NetPlayers_ResetRaceReadyAndTimeState(1, 0);
                 return;
             }
             if (StageUI_GetRaceResultValue() == 4) {
-                Race_TeardownStage((CallbackStateMachine *)pPlayers, param2, 0);
+                Race_TeardownStage(pPlayers, param2, 0);
                 Race_FreeSoundsAndUnwindCallbacks();
                 Sound_FreeAll();
                 StageSound_ResetRecordsAndRegisterCleanup();
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, 0, 3, 2);
+                CGame::PromoteCallbackEntryByRule(pPlayers, 0, 3, 2);
                 return;
             }
             break;
@@ -3395,8 +3395,8 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
             RallyData_ClearDriverGroupRecords();
             Race_ResetStateByteToFF();
             if (Knockout_GetRoundActiveFlag() == 0) {
-                for (i = 0; i < *pPlayers; i++)
-                    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 3);
+                for (i = 0; i < pPlayers->count; i++)
+                    CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 3);
                 Race_ReleaseFrameResources();
                 StageUI_ClearRaceEndLatch();
                 RallyData_InitKnockoutBracket();
@@ -3406,14 +3406,14 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
             break;
         case 5:
             RallyData_SetSelectionBits12To13(0);
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 3);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 3);
             RallyData_ClearDriverGroupRecords();
             Race_ReleaseFrameResources();
             StageUI_ClearRaceEndLatch();
             return;
         }
-        Race_TeardownStage((CallbackStateMachine *)pPlayers, param2, 1);
+        Race_TeardownStage(pPlayers, param2, 1);
         if (CGameInfo::GetConfiguredGameMode() != 4)
             return;
         if (Knockout_GetRoundActiveFlag() == 0)
@@ -3423,9 +3423,10 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
         if ((char)RallyData_GetSelectionFlag26() != 0)
             CSound::CloseMusicStreamAndClearPath(0);
         if (CGameInfo::GetGameInfoSessionFlag() == 0) {
-            CGameInfo::GetRecordFlagsWord((unsigned int **)&param1);
+            unsigned int *elapsed;
+            CGameInfo::GetRecordFlagsWord(&elapsed);
             n = CMain::GetFrameDelta();
-            *(int *)param1 += n - g_unk0x00537ffc;
+            *elapsed += n - g_unk0x00537ffc;
             g_unk0x00537ffc = CMain::GetFrameDelta();
         }
         for (i = 0; i < (BYTE)RallyDataState(); i++)
@@ -3434,19 +3435,19 @@ void Race_HandleStageReplayViewTransitions(BYTE *param1, unsigned int param2)
         if (CGameInfo::GetConfiguredGameMode() != 4)
             Frontend_AccumulateDeviceKeyCounters();
         if (CGameInfo::GetConfiguredGameMode() != 4) {
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
         } else {
             if (Knockout_ClearChampionshipPendingFlag() != 0) {
-                for (i = 0; i < *pPlayers; i++)
-                    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+                for (i = 0; i < pPlayers->count; i++)
+                    CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
                 goto L_teardown;
             }
             Race_FreeSoundsAndUnwindCallbacks();
             Sound_FreeAll();
             StageSound_ResetRecordsAndRegisterCleanup();
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 7, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 7, 2);
             g_unk0x0053810d = 0;
             return;
         }
@@ -3462,8 +3463,8 @@ L_teardown:
         switch (CGameInfo::GetConfiguredGameMode()) {
         case 0:
         case 1:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             if ((char)RallyData_AdvanceSelectedStage() != 0) {
                 if ((char)RallyDataStageIndex() != 0)
                     goto L_stage_restore;
@@ -3471,8 +3472,8 @@ L_teardown:
             }
             goto L_teardown2;
         case 8:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             if ((char)RallyData_AdvanceSelectedStage() != 0)
                 CGame::SetFrontendResourceMode(2);
             else
@@ -3487,26 +3488,26 @@ L_teardown:
         case 10:
         case 11:
         case 12:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             goto L_teardown2;
         case 3:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             goto L_teardown2;
         case 5:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             if (RallyData_AdvanceRallySelectionPair())
                 goto L_restore;
             goto L_teardown2;
         case 6:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             goto L_teardown2;
         case 7:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             goto L_teardown2;
         }
         break;
@@ -3514,8 +3515,8 @@ L_teardown:
         switch (CGameInfo::GetConfiguredGameMode()) {
         case 0:
         case 1:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             if ((char)RallyData_AdvanceSelectedStage() != 0) {
                 if ((char)RallyDataStageIndex() != 0)
                     goto L_stage_restore;
@@ -3523,20 +3524,20 @@ L_teardown:
             }
             goto L_teardown2;
         case 2:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
-            if (*pPlayers != 1)
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
+            if (pPlayers->count != 1)
                 return;
             goto L_teardown2;
         case 5:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             if (RallyData_AdvanceRallySelectionPair())
                 goto L_restore;
             goto L_teardown2;
         case 6:
-            for (i = 0; i < *pPlayers; i++)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+            for (i = 0; i < pPlayers->count; i++)
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
             goto L_teardown2;
         }
         break;
@@ -3545,7 +3546,7 @@ L_teardown:
         case 0:
         case 1:
             if ((BYTE)StageUI_GetRaceEndEventCount() + 1 == (BYTE)CGameInfo::GetConfiguredPlayerCount()) {
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, 0, 0, 2);
+                CGame::PromoteCallbackEntryByRule(pPlayers, 0, 0, 2);
                 if ((char)RallyData_AdvanceSelectedStage() != 0) {
                     if ((char)RallyDataStageIndex() != 0)
                         goto L_stage_restore;
@@ -3558,7 +3559,7 @@ L_teardown:
             if ((char)RallyData_GetSelectionFlag28() == 0)
                 skip = 1;
             StageSound_ResetRecordsAndRegisterCleanup();
-            CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, 0, 3, 2);
+            CGame::PromoteCallbackEntryByRule(pPlayers, 0, 3, 2);
             StageUI_RecordRaceEndEvent(0);
             if (skip != 0)
                 return;
@@ -3566,7 +3567,7 @@ L_teardown:
         case 2:
             if ((BYTE)StageUI_GetRaceEndEventCount() + 1 == (BYTE)CGameInfo::GetConfiguredPlayerCount())
                 goto L_winner;
-            CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, 0, 3, 2);
+            CGame::PromoteCallbackEntryByRule(pPlayers, 0, 3, 2);
             Race_FreeSoundsAndUnwindCallbacks();
             Sound_FreeAll();
             StageSound_ResetRecordsAndRegisterCleanup();
@@ -3579,7 +3580,7 @@ L_teardown:
                 Race_FreeSoundsAndUnwindCallbacks();
                 Sound_FreeAll();
                 StageSound_ResetRecordsAndRegisterCleanup();
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, 0, 3, 2);
+                CGame::PromoteCallbackEntryByRule(pPlayers, 0, 3, 2);
                 StageUI_RecordRaceEndEvent(0);
             }
             break;
@@ -3587,9 +3588,9 @@ L_teardown:
         break;
     case 2:
     case 3:
-        for (i = 0; i < *pPlayers; i++) {
+        for (i = 0; i < pPlayers->count; i++) {
             if (Knockout_GetRoundActiveFlag() == 0)
-                CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, i, 0, 2);
+                CGame::PromoteCallbackEntryByRule(pPlayers, i, 0, 2);
         }
         if (CGameInfo::GetConfiguredGameMode() == 4)
             Knockout_ClearRoundActiveFlag();
@@ -3631,7 +3632,7 @@ L_restore:
     StageUI_ClearRaceEndLatch();
     return;
 L_winner:
-    CGame::PromoteCallbackEntryByRule((CallbackStateMachine *)pPlayers, 0, 0, 2);
+    CGame::PromoteCallbackEntryByRule(pPlayers, 0, 0, 2);
 L_teardown2:
     CGame::SetFrontendResourceMode(0);
     Race_ReleaseFrameResources();
@@ -5394,7 +5395,7 @@ void Race_UpdatePlayerViewAndDrivenCars(BYTE param1, int param2)
         }
         if (player != 0) {
             if (first == 0 || second != 0)
-                Particle_UpdateAll((int)g_viewNodes[g_unk0x00537f04]);
+                Particle_UpdateAll(0);
             if (CGameInfo::GetConfiguredGameMode() == 0xc && StageTiming_GetCheckpointField19(0) != 0) {
                 NetRace_SendStageAndOverallTimes(StageTiming_GetCarSplitTime(0, StageTiming_GetCheckpointGroupIndex(0)));
                 NetPlayers_UpdateBestRaceTime(StageTiming_GetCarSplitTime(0, StageTiming_GetCheckpointGroupIndex(0)));

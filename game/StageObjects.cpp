@@ -213,7 +213,7 @@ int Replay_ResetBufferIfActive(int *p);
 BYTE *Replay_LoadValidatedBuffer(char *path);
 int Replay_Save(BYTE *pBuffer, char *pName);
 void Replay_SetupPointers(ReplayStream *p, int unused);
-int Replay_GetStreamFrameState(void);
+INT_PTR Replay_GetStreamFrameState(void);
 void Replay_RecordPeriodicCarSamples(void);
 void Replay_RecordAllStreamFrames(void);
 
@@ -742,7 +742,7 @@ int g_carPairValuePending[16];
 // GLOBAL: CMR2 0x00588cd4
 ReplayLevelState g_replayLevelState;
 // GLOBAL: CMR2 0x00588d38
-int g_unk0x00588d38;
+INT_PTR g_unk0x00588d38;
 // GLOBAL: CMR2 0x00589438
 SceneNode *g_stageSkyNode;
 // GLOBAL: CMR2 0x0058943c
@@ -1658,7 +1658,7 @@ int Replay_ResetBufferIfActive(int *p)
 }
 
 // FUNCTION: CMR2 0x0046d500
-int Replay_GetStreamFrameState(void)
+INT_PTR Replay_GetStreamFrameState(void)
 {
     return g_unk0x00588d38;
 }
@@ -2187,7 +2187,7 @@ void Knockout_UpdateRaceStateAndFades(BYTE *param_1, unsigned int param_2)
                 g_unk0x0058cf64 = 0;
                 return;
             } else {
-                g_unk0x0058ce5c = (unsigned int)RallyData_GetRoundEntry();
+                g_unk0x0058ce5c = RallyData_GetRoundEntry();
                 g_unk0x0058cf64 = 0;
                 g_unk0x0058cf7c = 4;
                 return;
@@ -6923,7 +6923,7 @@ void StageLights_SetTransform(FixVector *pAxes)
     FixVector *pNext;
 
     if (pAxes == NULL) {
-        g_stageLightHasMatrix = (int)pAxes;
+        g_stageLightHasMatrix = 0;
         return;
     }
     g_stageLightHasMatrix = 1;
@@ -11724,7 +11724,7 @@ void StageObject_UpdateCarLightFlagsAndGlows(Car *pCar)
                 break;
             }
             FixVecScale(&colour, &colour, intensity);
-            Glow_NoOpEntryCallback((BYTE)(int)glow, (BYTE)colour.x, colour.y, colour.z);
+            Glow_NoOpEntryCallback((BYTE)(uintptr_t)glow, (BYTE)colour.x, colour.y, colour.z);
         }
         idx = 0;
         if (glow->pos.x < 0)
@@ -11863,7 +11863,7 @@ void Replay_InitObjectListCarState(ReplayInputLane *pLane, BYTE param_2)
     RallyData_ResetRaceRecordAndRouteProbe((int)param_2);
     StageTiming_ResetScaledViewObjectStates();
     RallyData_MarkAllElementsReached();
-    RallyData_ValidateIndex((int)param_2);
+    RallyData_ValidateIndex((INT_PTR)param_2);
 }
 
 // Initialises the stage-object state of one car (list type 2): same reset as
@@ -11878,7 +11878,7 @@ void Replay_InitMeshListCarState(ReplayStateLane *pLane, BYTE param_2)
     RallyData_ResetRaceRecordAndRouteProbe((int)param_2);
     StageTiming_ResetScaledViewObjectStates();
     RallyData_MarkAllElementsReached();
-    RallyData_ValidateIndex((int)param_2);
+    RallyData_ValidateIndex((INT_PTR)param_2);
 }
 
 // Selects one lane of one car's stage-object state and initialises it for the
@@ -13654,7 +13654,7 @@ BYTE Car_GetDrawnFlag(int index);
 void Car_ResetWheelLoadsAfterShift(Car *pCar);
 void StageObject_UpdatePlayerControlIndicators(int player, int device);
 BYTE *GameMenu_GetChampionshipTransitionState(void);
-int StageTiming_GetStageArchiveState(void);
+INT_PTR StageTiming_GetStageArchiveState(void);
 unsigned int RallyData_GetFlag22(void);
 
 // Works out the controls of a CPU car from the route data: the route

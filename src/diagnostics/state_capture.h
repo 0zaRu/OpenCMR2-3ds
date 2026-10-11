@@ -12,6 +12,7 @@ struct StateCaptureView {
     const short *order;
     unsigned int count;
     int physicsStep, physicsScale, stageClock;
+    const void *const *worldMatrices, *const *bodyMatrices;
 };
 struct StateCaptureInput {
     unsigned int tick, state;
@@ -54,8 +55,10 @@ inline void CaptureTick(FILE *file, unsigned int tick, unsigned int state,
             unsigned int world, body;
             memcpy(&world, view.cars + id * 0xc24 + 0x750, 4);
             memcpy(&body, view.cars + id * 0xc24 + 0x754, 4);
-            sprintf(name, "world.%d", id); CaptureBlock(file, name, (void *)world, 0x40);
-            sprintf(name, "body.%d", id); CaptureBlock(file, name, (void *)body, 0x40);
+            const void *worldMatrix = view.worldMatrices ? view.worldMatrices[id] : (void *)(size_t)world;
+            const void *bodyMatrix = view.bodyMatrices ? view.bodyMatrices[id] : (void *)(size_t)body;
+            sprintf(name, "world.%d", id); CaptureBlock(file, name, worldMatrix, 0x40);
+            sprintf(name, "body.%d", id); CaptureBlock(file, name, bodyMatrix, 0x40);
         }
     }
     CaptureWord(file, 0); // end of this tick's blocks

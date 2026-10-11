@@ -2,6 +2,7 @@
 #include "Car.h"
 #include "CarLightState.h"
 #include "Collision2D.h"
+#include "high_address.h"
 #include <cstdio>
 #include <cstdlib>
 #include <cstring>
@@ -16,7 +17,7 @@ int main()
     Scene_InitFixedMathTables();
     // A high native centre pointer with a zero pArray exposes reading word
     // 0x25: on x64 that word is the upper half of pArray, not pVertex.
-    FixVector *centre = (FixVector *)calloc(1, 2 * 1024 * 1024);
+    FixVector *centre = (FixVector *)Test_AllocateHighAddress(2 * 1024 * 1024);
     REQUIRE(centre);
     if (sizeof(void *) == 8) REQUIRE((uintptr_t)centre > UINT32_MAX);
     CollisionBox box = {};
@@ -42,7 +43,7 @@ int main()
     StageObject_TestHeadlightGlowsAgainstCarBox(&car, &box);
     REQUIRE(glow.active && !memcmp(&car, &original, sizeof(car)));
     memset(g_carHeadlightGlowRecords, 0, sizeof(g_carHeadlightGlowRecords));
-    free(centre);
+    Test_FreeHighAddress(centre);
     puts("glow collision: native centre pointer, distant/axis rejection and owner filter passed");
     return 0;
 }

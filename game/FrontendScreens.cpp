@@ -3887,7 +3887,7 @@ void FrontendMenu_ApplyGraphicsOptions(Menu *pMenu, int param)
 void FrontendMenu_LeaveGraphicsOptions(Menu *pMenu, char param)
 {
     if (param == 0)
-        FrontendMenu_ApplyGraphicsOptions(pMenu, (int)&pMenu->items[pMenu->cursor]);
+        FrontendMenu_ApplyGraphicsOptions(pMenu, 0);
 }
 
 DWORD Graphics_GetDeviceCaps98(void);
@@ -9990,7 +9990,7 @@ void FrontendMenu_DrawMultiplayerStageSelection(Menu *pMenu)
                 strcpy(g_unk0x00818368, CFrontend::GetTextString(0xdf));
             } else {
                 sprintf(g_unk0x00818368, CFrontend::GetTextString(0x13b));
-                Font_Unused((int)g_unk0x00818368, Frontend_GetOverlayMode());
+                Font_Unused(0, Frontend_GetOverlayMode());
                 FrontendDraw_RallyInfoHeader();
                 FrontendDraw_HelpText(CFrontend::GetTextString(0xf9), 1);
                 return;

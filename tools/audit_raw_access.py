@@ -528,6 +528,18 @@ def classify(key, sites, layouts, tracers, base, others):
         per_target[target] = exact or origins
     o0 = per_target[base]
     result["origins"] = [describe_origin(o) for o in o0]
+    narrowing = [f"pointer truncated from {sites[t]['pointerBits']} to {sites[t]['integerBits']} bits on {t}"
+                 for t in others if sites[t].get("pointerBits", 0) > sites[t].get("integerBits", 0)]
+    if narrowing:
+        result["verdict"] = "bug"
+        result["reasons"] = narrowing
+        return result
+    if "pointerBits" in s0:
+        # Merely converting an address does not read its pointee; in particular
+        # a one-past array sentinel is legal. Dereferences/flows have their own
+        # separately recorded sites and still receive layout/bounds checks.
+        result["verdict"] = "safe"
+        return result
     unresolved = []
     verdicts = []
     for o in o0:

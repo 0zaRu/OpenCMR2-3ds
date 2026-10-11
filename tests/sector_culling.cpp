@@ -2,6 +2,7 @@
 #include "Sector.h"
 #include "SceneNode.h"
 #include "Graphics.h"
+#include "high_address.h"
 #include <cassert>
 #include <cstdlib>
 #include <cstdio>
@@ -19,7 +20,7 @@ int main(){
  g_sectorsPerRow=columns;g_sectorRows=rows;g_sectorCount=count;g_sectorSize=size*65536;g_sectorHalfSize=size*32768;g_sectorScale=65536/size;
  // Use a large allocation so a non-PIE Linux executable also exercises high
  // native addresses, rather than its low brk heap. The fixture has 64 cells.
- auto *cells=(Sector *)calloc(1,2*1024*1024);assert(cells);
+ auto *cells=(Sector *)Test_AllocateHighAddress(2*1024*1024);assert(cells);
  if(sizeof(void *)==8)assert((uintptr_t)cells>UINT32_MAX);
  for(int r: {0,3,4,7})for(int c:{0,3,4,7})for(int yaw=0;yaw<8;yaw++)for(int radius:{20,50,100}){
   for(int i=0;i<count;i++){
@@ -47,5 +48,5 @@ int main(){
    }
   }
  }
- free(cells);puts("PASS 384 native culling cases, three passes each: stable bounds, full records, masks and sector lists");
+ Test_FreeHighAddress(cells);puts("PASS 384 native culling cases, three passes each: stable bounds, full records, masks and sector lists");
 }
