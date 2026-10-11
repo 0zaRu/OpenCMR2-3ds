@@ -1,15 +1,25 @@
-# Writes a C++ header with the given SPIR-V files as byte arrays:
-#   cmake -DOUTPUT=out.h -DINPUTS="a.spv|b.spv" -P embed_spirv.cmake
+# Writes a C++ header with the given shader files as byte arrays:
+#   cmake -DOUTPUT=out.h -DINPUTS="a.spv|b.spv|a.msl" -P embed_spirv.cmake
 # Each array is named g_<file name with dots turned into underscores>,
-# without the .spv extension.
+# without the .spv extension (fixed.frag.spv -> g_fixed_frag,
+# fixed.frag.msl -> g_fixed_frag_msl). MSL is source text: its array ends with
+# a NUL that is not part of the shader. With MSL inputs the header also
+# defines OPENCMR2_SHADERS_MSL.
 string(REPLACE "|" ";" INPUTS "${INPUTS}")
-set(content "// Generated from the SPIR-V shaders. Do not edit.\n#pragma once\n\n")
+set(content "// Generated from the compiled shaders. Do not edit.\n#pragma once\n\n")
 foreach(input IN LISTS INPUTS)
     get_filename_component(name "${input}" NAME)
     string(REGEX REPLACE "\\.spv$" "" name "${name}")
     string(REPLACE "." "_" name "${name}")
     file(READ "${input}" hex HEX)
+    if(input MATCHES "\\.msl$")
+        string(APPEND hex "00")
+        set(have_msl TRUE)
+    endif()
     string(REGEX REPLACE "([0-9a-f][0-9a-f])" "0x\\1," bytes "${hex}")
     string(APPEND content "static const unsigned char g_${name}[] = {${bytes}};\n\n")
 endforeach()
+if(have_msl)
+    string(APPEND content "#define OPENCMR2_SHADERS_MSL 1\n")
+endif()
 file(WRITE "${OUTPUT}" "${content}")

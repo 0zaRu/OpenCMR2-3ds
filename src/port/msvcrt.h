@@ -11,8 +11,10 @@
 
 #include <stdlib.h>
 #include <string.h>
-#include <strings.h>
 #include <stdio.h>
+#ifndef _WIN32
+#include <strings.h>
+#endif
 
 #ifdef __cplusplus
 extern "C" {
@@ -34,9 +36,13 @@ char *Crt_Itoa(int value, char *buffer, int radix);
 /* Splits a DOS path ('\\' or '/' separators, optional drive letter). */
 void Crt_SplitPath(const char *path, char *drive, char *dir, char *fname, char *ext);
 
+#ifdef _WIN32
+#define stricmp _stricmp
+#else
 #define _stricmp strcasecmp
 #define _strnicmp strncasecmp
 #define stricmp strcasecmp
+#endif
 #define _strlwr Crt_Strlwr
 #define _strupr Crt_Strupr
 #define _itoa Crt_Itoa

@@ -2,22 +2,71 @@
   "version": 6,
   "configurePresets": [
     {
-      "name": "linux-x86",
-      "displayName": "Linux, 32-bit x86 (reference build)",
+      "name": "base",
+      "hidden": true,
       "generator": "Ninja",
       "binaryDir": "${sourceDir}/build/${presetName}",
+      "cacheVariables": {
+        "CMAKE_BUILD_TYPE": "RelWithDebInfo",
+        "CMAKE_C_COMPILER": "clang",
+        "CMAKE_CXX_COMPILER": "clang++"
+      }
+    },
+    {
+      "name": "linux-x86",
+      "inherits": "base",
+      "displayName": "Linux, 32-bit x86 (reference build)",
       "toolchainFile": "${sourceDir}/cmake/linux-i686.cmake",
-      "cacheVariables": { "CMAKE_BUILD_TYPE": "RelWithDebInfo" }
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
     },
     {
       "name": "linux-x86-debug",
       "inherits": "linux-x86",
       "displayName": "Linux, 32-bit x86, debug + ASan/UBSan",
       "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "OPENCMR2_SANITIZE": "ON" }
+    },
+    {
+      "name": "linux",
+      "inherits": "base",
+      "displayName": "Linux, 64-bit (x86-64 or ARM64, the host's)",
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Linux" }
+    },
+    {
+      "name": "linux-debug",
+      "inherits": "linux",
+      "displayName": "Linux, 64-bit, debug + ASan/UBSan",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Debug", "OPENCMR2_SANITIZE": "ON" }
+    },
+    {
+      "name": "macos",
+      "inherits": "base",
+      "displayName": "macOS, Apple silicon (ARM64)",
+      "cacheVariables": {
+        "CMAKE_OSX_ARCHITECTURES": "arm64",
+        "CMAKE_OSX_DEPLOYMENT_TARGET": "11.0"
+      },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Darwin" }
+    },
+    {
+      "name": "windows-x64",
+      "inherits": "base",
+      "displayName": "Windows, x64 (clang++ from LLVM or Visual Studio, MSVC runtime)",
+      "architecture": { "value": "x64", "strategy": "external" },
+      "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
     }
   ],
   "buildPresets": [
     { "name": "linux-x86", "configurePreset": "linux-x86" },
-    { "name": "linux-x86-debug", "configurePreset": "linux-x86-debug" }
+    { "name": "linux-x86-debug", "configurePreset": "linux-x86-debug" },
+    { "name": "linux", "configurePreset": "linux" },
+    { "name": "linux-debug", "configurePreset": "linux-debug" },
+    { "name": "macos", "configurePreset": "macos" },
+    { "name": "windows-x64", "configurePreset": "windows-x64" }
+  ],
+  "testPresets": [
+    { "name": "linux-x86", "configurePreset": "linux-x86", "output": { "outputOnFailure": true } },
+    { "name": "linux", "configurePreset": "linux", "output": { "outputOnFailure": true } },
+    { "name": "macos", "configurePreset": "macos", "output": { "outputOnFailure": true } },
+    { "name": "windows-x64", "configurePreset": "windows-x64", "output": { "outputOnFailure": true } }
   ]
 }

@@ -10,7 +10,9 @@ file(GLOB ZLIB_C_SOURCES CONFIGURE_DEPENDS ${GAME_DIR}/Zlib*.cpp)
 list(REMOVE_ITEM ZLIB_C_SOURCES ${GAME_DIR}/ZlibZutil.cpp)
 set_source_files_properties(${ZLIB_C_SOURCES} PROPERTIES LANGUAGE C)
 
-add_library(cmr2_game STATIC ${GAME_SOURCES})
+# Built as objects: the game and the platform layer call each other, so both
+# go into one archive (opencmr2_platform) and link on every toolchain.
+add_library(cmr2_game OBJECT ${GAME_SOURCES})
 target_include_directories(cmr2_game PUBLIC ${GAME_DIR} ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/port/compat)
 target_compile_options(cmr2_game PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-x c>
@@ -21,24 +23,57 @@ target_compile_options(cmr2_game PRIVATE
     -ferror-limit=0)
 target_link_libraries(cmr2_game PUBLIC SDL3::SDL3)
 
-# Platform layer and the executable.
+# Platform layer plus the game objects; tests link this too.
 add_library(opencmr2_platform STATIC
     platform/sys.cpp
     platform/keys.cpp
-    platform/msvcrt.cpp)
+    platform/msvcrt.cpp
+    $<TARGET_OBJECTS:cmr2_game>)
 target_sources(opencmr2_platform PRIVATE diagnostics/observer.cpp diagnostics/timing.cpp)
-target_include_directories(opencmr2_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${GAME_DIR})
+target_include_directories(opencmr2_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${GAME_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/port/compat)
 target_link_libraries(opencmr2_platform PUBLIC SDL3::SDL3)
 
 add_executable(opencmr2 platform/main.cpp)
-# The game and the platform layer call each other.
-target_link_libraries(opencmr2 PRIVATE -Wl,--start-group cmr2_game opencmr2_platform -Wl,--end-group)
+target_link_libraries(opencmr2 PRIVATE opencmr2_platform)
+if(WIN32)
+    # SDL3.dll (and any other runtime DLL) next to the executable.
+    add_custom_command(TARGET opencmr2 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:opencmr2> $<TARGET_FILE_DIR:opencmr2>
+        COMMAND_EXPAND_LISTS)
+endif()
 
-# ---- shaders (GLSL -> SPIR-V, embedded) -------------------------------------------
+# ---- shaders (GLSL -> SPIR-V, plus MSL for Metal; embedded) ----------------------
+# SDL_GPU takes SPIR-V on Vulkan (Linux, Windows) and MSL on Metal (macOS).
+# The MSL comes from the same SPIR-V through SPIRV-Cross; the SPIR-V bindings
+# already follow SDL_GPU's resource order, so they become the Metal indices.
+option(OPENCMR2_SHADERS_MSL "Also build Metal (MSL) shaders" ${APPLE})
 find_program(GLSLANG_VALIDATOR glslangValidator REQUIRED)
+if(OPENCMR2_SHADERS_MSL)
+    find_program(SPIRV_CROSS_EXECUTABLE spirv-cross)
+    if(SPIRV_CROSS_EXECUTABLE)
+        set(SPIRV_CROSS ${SPIRV_CROSS_EXECUTABLE})
+    else()
+        message(STATUS "OpenCMR2: building spirv-cross from source")
+        include(FetchContent)
+        # The command-line tool needs the GLSL, HLSL, MSL, C++ and reflection back ends.
+        foreach(option SPIRV_CROSS_ENABLE_TESTS SPIRV_CROSS_ENABLE_C_API SPIRV_CROSS_SHARED)
+            set(${option} OFF CACHE BOOL "" FORCE)
+        endforeach()
+        set(SPIRV_CROSS_CLI ON CACHE BOOL "" FORCE)
+        set(SPIRV_CROSS_STATIC ON CACHE BOOL "" FORCE)
+        set(SPIRV_CROSS_SKIP_INSTALL ON CACHE BOOL "" FORCE)
+        FetchContent_Declare(SPIRV-Cross
+            GIT_REPOSITORY https://github.com/KhronosGroup/SPIRV-Cross.git
+            GIT_TAG vulkan-sdk-1.4.363.0
+            GIT_SHALLOW TRUE)
+        FetchContent_MakeAvailable(SPIRV-Cross)
+        set(SPIRV_CROSS $<TARGET_FILE:spirv-cross>)
+    endif()
+endif()
+
 set(SHADER_DIR ${CMAKE_CURRENT_SOURCE_DIR}/render/shaders)
 set(SHADER_SOURCES fixed3d.vert fixedtl.vert fixed.frag clear.vert clear.frag)
-set(SPIRV_FILES)
+set(SHADER_FILES)
 foreach(shader IN LISTS SHADER_SOURCES)
     set(output ${CMAKE_CURRENT_BINARY_DIR}/shaders/${shader}.spv)
     add_custom_command(
@@ -47,15 +82,24 @@ foreach(shader IN LISTS SHADER_SOURCES)
         COMMAND ${GLSLANG_VALIDATOR} -V --target-env vulkan1.0 -o ${output} ${SHADER_DIR}/${shader}
         DEPENDS ${SHADER_DIR}/${shader} ${SHADER_DIR}/common.glsl
         COMMENT "Compiling shader ${shader}")
-    list(APPEND SPIRV_FILES ${output})
+    list(APPEND SHADER_FILES ${output})
+    if(OPENCMR2_SHADERS_MSL)
+        set(msl ${CMAKE_CURRENT_BINARY_DIR}/shaders/${shader}.msl)
+        add_custom_command(
+            OUTPUT ${msl}
+            COMMAND ${SPIRV_CROSS} --msl --msl-version 20100 --msl-decoration-binding --output ${msl} ${output}
+            DEPENDS ${output}
+            COMMENT "Translating shader ${shader} to MSL")
+        list(APPEND SHADER_FILES ${msl})
+    endif()
 endforeach()
 set(SHADER_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/shaders_spirv.h)
-string(REPLACE ";" "|" SPIRV_LIST "${SPIRV_FILES}")
+string(REPLACE ";" "|" SHADER_LIST "${SHADER_FILES}")
 add_custom_command(
     OUTPUT ${SHADER_HEADER}
-    COMMAND ${CMAKE_COMMAND} -DOUTPUT=${SHADER_HEADER} -DINPUTS=${SPIRV_LIST} -P ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
+    COMMAND ${CMAKE_COMMAND} -DOUTPUT=${SHADER_HEADER} -DINPUTS=${SHADER_LIST} -P ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
     VERBATIM
-    DEPENDS ${SPIRV_FILES} ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
+    DEPENDS ${SHADER_FILES} ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
     COMMENT "Embedding shaders")
 
 # ---- network (UDP with ENet, third_party/enet) -------------------------------------

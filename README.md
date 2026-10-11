@@ -28,17 +28,59 @@ OpenCMR2 contains no game data. You need your own copy of the original game.
   quality and lighting, modern controllers and force feedback, and
   quality-of-life improvements. The original look is one preset away.
 
-## Building (Linux)
+## Building
 
-Fedora packages for the 32-bit reference build:
+OpenCMR2 builds with Clang, CMake (3.24+), Ninja and `glslangValidator`, on
+every platform from the presets in `CMakePresets.json`. SDL3 comes from the
+system when it is installed; otherwise CMake downloads and builds it (or pass
+`-DOPENCMR2_VENDORED_SDL=ON`).
 
-    sudo dnf install glibc-devel.i686 libstdc++-devel.i686 SDL3-devel.i686 ninja-build glslang
+| Preset | Target | Status |
+|---|---|---|
+| `linux-x86` | Linux, 32-bit x86 | Reference build: plays the game; golden tests compare it with the original |
+| `linux` | Linux, 64-bit (x86-64 or ARM64) | Compiles and passes the unit tests; does not load a stage yet |
+| `macos` | macOS, Apple silicon | Same as `linux`; Metal shaders are translated from SPIR-V |
+| `windows-x64` | Windows x64 (`clang++`, MSVC runtime) | Same as `linux`; renders through Vulkan |
+
+The 64-bit builds wait for the game code to become pointer-size clean
+([docs/PLAN.md](docs/PLAN.md), F4). That work happens in CMR2Decomp, keeping
+its MSVC6 build byte-exact.
+
+### Linux, 32-bit reference build
+
+Fedora packages:
+
+    sudo dnf install clang glibc-devel.i686 libstdc++-devel.i686 SDL3-devel.i686 ninja-build glslang
 
 Then:
 
     cmake --preset linux-x86
     cmake --build --preset linux-x86
-    ctest --test-dir build/linux-x86
+    ctest --preset linux-x86
+
+### Linux, 64-bit
+
+    sudo dnf install clang SDL3-devel ninja-build glslang     # Fedora
+    cmake --preset linux && cmake --build --preset linux
+
+### macOS
+
+    brew install ninja glslang sdl3
+    cmake --preset macos && cmake --build --preset macos
+
+SDL_GPU uses Metal there, which takes MSL: the build fetches and builds
+SPIRV-Cross to translate the shaders (or uses `spirv-cross` from the PATH).
+
+### Windows
+
+From a "x64 Native Tools" prompt of Visual Studio 2022 with its Clang
+component (or LLVM's installer), Ninja and `glslangValidator` on the PATH:
+
+    cmake --preset windows-x64
+    cmake --build --preset windows-x64
+
+`clang-cl` is not supported: the build uses GNU-style options. SDL_GPU runs on
+Vulkan there (Direct3D 12 would need DXIL shaders).
 
 To record and replay a real stage at different render cadences, or measure CPU
 frame/tick/presentation timings, see [docs/BASELINE.md](docs/BASELINE.md).

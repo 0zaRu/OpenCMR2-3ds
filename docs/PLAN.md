@@ -51,7 +51,13 @@ adding passes. A working renderer does not by itself establish simulation parity
 - [ ] Remaining raw-offset accesses typed; pointer-holding structures loaded
       from disk split into on-disk and in-memory forms; size/offset
       `static_assert`s in the 32-bit build.
-- [ ] Linux x86-64, Windows x64, macOS ARM64 builds and CI.
+- [x] Linux x86-64/ARM64, Windows x64, macOS ARM64 presets that compile and
+      link; CI for all of them (`.github/workflows/build.yml`); Metal shaders
+      from SPIR-V; SDL3 fetched where there is no package.
+- [ ] Fixed sizes and strides (`AllocateLockedBuffer(0x130)`, `* 0x30`) as
+      `sizeof`; `long` in on-disk structures as `DWORD`. Done in CMR2Decomp,
+      MSVC6 bytes unchanged.
+- [ ] 64-bit builds load and play a stage; physics parity test on 64-bit.
 
 ## F5: Modernisation (every item optional, "Original" preset)
 

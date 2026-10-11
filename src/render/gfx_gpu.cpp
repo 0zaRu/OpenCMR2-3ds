@@ -8,6 +8,13 @@
 
 #include "shaders_spirv.h"
 
+// SPIR-V and, when built, MSL code of one shader for Executor::Shader.
+#ifdef OPENCMR2_SHADERS_MSL
+#define SHADER_CODE(name) g_##name, sizeof(g_##name), g_##name##_msl, sizeof(g_##name##_msl)
+#else
+#define SHADER_CODE(name) g_##name, sizeof(g_##name), nullptr, 0
+#endif
+
 #include <math.h>
 #include <string.h>
 
@@ -179,13 +186,23 @@ struct Executor : GfxExecutor {
         SDL_DestroyGPUDevice(device);
     }
 
-    SDL_GPUShader *Shader(const unsigned char *code, size_t size, SDL_GPUShaderStage stage, int samplers, int uniforms)
+    // The shader format the device takes: SPIR-V (Vulkan) or MSL (Metal).
+    SDL_GPUShaderFormat shaderFormat = SDL_GPU_SHADERFORMAT_SPIRV;
+
+    SDL_GPUShader *Shader(const unsigned char *spirv, size_t spirvSize, const unsigned char *msl, size_t mslSize,
+                          SDL_GPUShaderStage stage, int samplers, int uniforms)
     {
         SDL_GPUShaderCreateInfo info = {};
-        info.code = code;
-        info.code_size = size;
-        info.entrypoint = "main";
-        info.format = SDL_GPU_SHADERFORMAT_SPIRV;
+        if (shaderFormat == SDL_GPU_SHADERFORMAT_MSL) {
+            info.code = msl;
+            info.code_size = mslSize - 1; // without the NUL the embedding adds
+            info.entrypoint = "main0";    // SPIRV-Cross renames main for MSL
+        } else {
+            info.code = spirv;
+            info.code_size = spirvSize;
+            info.entrypoint = "main";
+        }
+        info.format = shaderFormat;
         info.stage = stage;
         info.num_samplers = samplers;
         info.num_uniform_buffers = uniforms;
@@ -221,11 +238,17 @@ struct Executor : GfxExecutor {
             return false;
         }
         bool debug = Platform_GetSettingInt("video.gpu_debug", 0) != 0;
-        device = SDL_CreateGPUDevice(SDL_GPU_SHADERFORMAT_SPIRV, debug, NULL);
+        SDL_GPUShaderFormat formats = SDL_GPU_SHADERFORMAT_SPIRV;
+#ifdef OPENCMR2_SHADERS_MSL
+        formats |= SDL_GPU_SHADERFORMAT_MSL;
+#endif
+        device = SDL_CreateGPUDevice(formats, debug, NULL);
         if (device == NULL) {
             Sys_Log("gfx: SDL_CreateGPUDevice: %s", SDL_GetError());
             return false;
         }
+        if (!(SDL_GetGPUShaderFormats(device) & SDL_GPU_SHADERFORMAT_SPIRV))
+            shaderFormat = SDL_GPU_SHADERFORMAT_MSL;
         if (!SDL_ClaimWindowForGPUDevice(device, window)) {
             Sys_Log("gfx: SDL_ClaimWindowForGPUDevice: %s", SDL_GetError());
             return false;
@@ -237,11 +260,11 @@ struct Executor : GfxExecutor {
         bcSupported = SDL_GPUTextureSupportsFormat(device, SDL_GPU_TEXTUREFORMAT_BC3_RGBA_UNORM,
                                                    SDL_GPU_TEXTURETYPE_2D, SDL_GPU_TEXTUREUSAGE_SAMPLER);
 
-        vs3d = Shader(g_fixed3d_vert, sizeof(g_fixed3d_vert), SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
-        vsTL = Shader(g_fixedtl_vert, sizeof(g_fixedtl_vert), SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
-        fs = Shader(g_fixed_frag, sizeof(g_fixed_frag), SDL_GPU_SHADERSTAGE_FRAGMENT, 4, 1);
-        vsClear = Shader(g_clear_vert, sizeof(g_clear_vert), SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
-        fsClear = Shader(g_clear_frag, sizeof(g_clear_frag), SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 1);
+        vs3d = Shader(SHADER_CODE(fixed3d_vert), SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
+        vsTL = Shader(SHADER_CODE(fixedtl_vert), SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
+        fs = Shader(SHADER_CODE(fixed_frag), SDL_GPU_SHADERSTAGE_FRAGMENT, 4, 1);
+        vsClear = Shader(SHADER_CODE(clear_vert), SDL_GPU_SHADERSTAGE_VERTEX, 0, 1);
+        fsClear = Shader(SHADER_CODE(clear_frag), SDL_GPU_SHADERSTAGE_FRAGMENT, 0, 1);
         if (!vs3d || !vsTL || !fs || !vsClear || !fsClear)
             return false;
 

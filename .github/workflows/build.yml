@@ -1,0 +1,63 @@
+name: build
+
+on:
+  push:
+  pull_request:
+
+jobs:
+  # 32-bit x86 reference build, in the environment the README documents.
+  linux-x86:
+    runs-on: ubuntu-24.04
+    container: fedora:41
+    steps:
+      - run: dnf install -y git cmake ninja-build clang glslang python3 glibc-devel.i686 libstdc++-devel.i686 SDL3-devel.i686
+      - uses: actions/checkout@v4
+      - run: cmake --preset linux-x86
+      - run: cmake --build --preset linux-x86
+      - run: ctest --preset linux-x86
+
+  linux:
+    strategy:
+      fail-fast: false
+      matrix:
+        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+    runs-on: ${{ matrix.runner }}
+    steps:
+      - run: |
+          sudo apt-get update
+          sudo apt-get install -y clang ninja-build glslang-tools \
+            libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxkbcommon-dev \
+            libwayland-dev wayland-protocols libegl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+      - uses: actions/checkout@v4
+      # Ubuntu 24.04 has no SDL3 package: the build fetches it.
+      - run: cmake --preset linux
+      - run: cmake --build --preset linux
+      - run: ctest --preset linux
+
+  macos:
+    runs-on: macos-14
+    steps:
+      - run: brew install ninja glslang sdl3
+      - uses: actions/checkout@v4
+      # Builds spirv-cross for the Metal shaders.
+      - run: cmake --preset macos
+      - run: cmake --build --preset macos
+      - run: ctest --preset macos
+
+  windows:
+    runs-on: windows-2022
+    steps:
+      - uses: actions/checkout@v4
+      - uses: ilammy/msvc-dev-cmd@v1
+        with:
+          arch: x64
+      - name: glslang
+        shell: pwsh
+        run: |
+          Invoke-WebRequest https://github.com/KhronosGroup/glslang/releases/download/main-tot/glslang-master-windows-Release.zip -OutFile glslang.zip
+          Expand-Archive glslang.zip -DestinationPath glslang
+          Add-Content $env:GITHUB_PATH "$PWD\glslang\bin"
+      # clang++ from Visual Studio's LLVM component; SDL3 is fetched.
+      - run: cmake --preset windows-x64 -DOPENCMR2_VENDORED_SDL=ON
+      - run: cmake --build --preset windows-x64
+      - run: ctest --preset windows-x64

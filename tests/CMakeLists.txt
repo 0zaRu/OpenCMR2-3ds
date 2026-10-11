@@ -28,25 +28,21 @@ add_executable(movie_render_state_test movie_render_state.cpp
 target_link_libraries(movie_render_state_test PRIVATE opencmr2_bink SDL3::SDL3)
 add_test(NAME movie_render_state COMMAND movie_render_state_test)
 
-if(CMAKE_SIZEOF_VOID_P EQUAL 4)
-    add_executable(math_tables_test math_tables.cpp)
-    target_link_libraries(math_tables_test PRIVATE
-        -Wl,--start-group cmr2_game opencmr2_platform -Wl,--end-group)
-    add_test(NAME math_tables COMMAND math_tables_test
-        ${CMAKE_CURRENT_SOURCE_DIR}/reference/finland-stage1/math-tables.bin)
-    add_executable(car_scheduler_test car_scheduler.cpp)
-    target_link_libraries(car_scheduler_test PRIVATE
-        -Wl,--start-group cmr2_game opencmr2_platform -Wl,--end-group)
-    add_test(NAME car_scheduler COMMAND car_scheduler_test)
-    add_executable(stage_probe stage_probe.cpp)
-    target_link_libraries(stage_probe PRIVATE
-        -Wl,--start-group cmr2_game opencmr2_platform -Wl,--end-group)
-    add_executable(preview_cleanup_test preview_cleanup.cpp)
-    target_include_directories(preview_cleanup_test PRIVATE ${PROJECT_SOURCE_DIR}/game)
-    target_link_libraries(preview_cleanup_test PRIVATE
-        -Wl,--start-group cmr2_game opencmr2_platform -Wl,--end-group)
-    add_test(NAME preview_cleanup COMMAND preview_cleanup_test)
-endif()
+# Tests that run game code. They pass on 64-bit too; stage_probe still
+# crashes there when it loads a stage (see physics_original_parity below).
+add_executable(math_tables_test math_tables.cpp)
+target_link_libraries(math_tables_test PRIVATE opencmr2_platform)
+add_test(NAME math_tables COMMAND math_tables_test
+    ${CMAKE_CURRENT_SOURCE_DIR}/reference/finland-stage1/math-tables.bin)
+add_executable(car_scheduler_test car_scheduler.cpp)
+target_link_libraries(car_scheduler_test PRIVATE opencmr2_platform)
+add_test(NAME car_scheduler COMMAND car_scheduler_test)
+add_executable(stage_probe stage_probe.cpp)
+target_link_libraries(stage_probe PRIVATE opencmr2_platform)
+add_executable(preview_cleanup_test preview_cleanup.cpp)
+target_include_directories(preview_cleanup_test PRIVATE ${PROJECT_SOURCE_DIR}/game)
+target_link_libraries(preview_cleanup_test PRIVATE opencmr2_platform)
+add_test(NAME preview_cleanup COMMAND preview_cleanup_test)
 
 add_executable(bink_decode bink_decode.cpp)
 target_link_libraries(bink_decode PRIVATE opencmr2_bink)
@@ -59,7 +55,8 @@ endif()
 
 set(OPENCMR2_BINK_TEST_DATA_DIR "" CACHE PATH "Optional original game data for movie and physics regression tests")
 if(OPENCMR2_BINK_TEST_DATA_DIR)
-    if(Python3_Interpreter_FOUND AND TARGET stage_probe)
+    # 32-bit only until the game code loads a stage on 64-bit (docs/PLAN.md, F4).
+    if(Python3_Interpreter_FOUND AND TARGET stage_probe AND CMAKE_SIZEOF_VOID_P EQUAL 4)
         add_test(NAME physics_original_parity COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/physics_parity.py --probe $<TARGET_FILE:stage_probe>
             --data ${OPENCMR2_BINK_TEST_DATA_DIR})
