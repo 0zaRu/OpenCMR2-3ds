@@ -1,0 +1,37 @@
+{
+  "targets": [
+    "i386",
+    "x86_64"
+  ],
+  "guards": {
+    "game/StageObjects.cpp": "28ebed572397d5ee6102db09d14f6d117580f6ad28d10cbb8b2acfa6cbe2d57a",
+    "game/ReplayStream.h": "e89389fbf879a5d9c3fb21d524ac95c46cdefb5555168473f56a6d3315119b22",
+    "game/FixedPoint.h": "4742a0cbb0f9d301f4cd8101a7009ee02aec54b568a0a2fee86793028b20fee5",
+    "game/FileBuffer.cpp": "4cc93e0038963864ad6bd04187467cde01051417bae63505aa3c1e5e50edf656",
+    "src/port/types.h": "89d6d811b93c80dbb12c04a89f148cd990f6d76eea085362e707aee611414ebe",
+    "src/port/replay_disk.cpp": "50eabe569961f6f40de0c7b7e2b99d374d11871ff0b2f12c97e6f0841c1b51c5",
+    "src/port/disk_layouts.h": "607bb3c399a9471d87ac7466e9d15b47cd6f0117eb6341c50860e7a926ca15bb"
+  },
+  "accesses": [
+    {
+      "key": "StageObjects.cpp:7261:22:flow:assign",
+      "fn": "Replay_SetupPointers",
+      "text": "(ReplayInputLane *)((BYTE *)p + sizeof(ReplayStream))",
+      "automatic_verdict": "bug",
+      "automatic_reasons": [
+        "touches *[1..14], *[15].steeringModeOption, *[15].playing, *[15].playStarted, *[15].recording, *[15].recordStarted, ... 9 more on x86_64, meant *[1..16], *[17].steeringModeOption, *[17].playing, *[17].playStarted, *[17].recording, *[17].recordStarted, ... 16 more"
+      ],
+      "reason": "This forms a ReplayInputLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x114c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayInputLane has the same pointer-free 0x114c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions."
+    },
+    {
+      "key": "StageObjects.cpp:7265:22:flow:assign",
+      "fn": "Replay_SetupPointers",
+      "text": "(ReplayStateLane *)((BYTE *)p + sizeof(ReplayStream))",
+      "automatic_verdict": "bug",
+      "automatic_reasons": [
+        "touches *[1].steeringModeOption, *[1].playing, *[1].playStarted, *[1].recording, *[1].recordStarted, *[1].field_0x14, ... 12 more on x86_64, meant *[1].steeringModeOption, *[1].playing, *[1].playStarted, *[1].recording, *[1].recordStarted, *[1].field_0x14, ... 17 more"
+      ],
+      "reason": "This forms a ReplayStateLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x5c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayStateLane has the same pointer-free 0x5c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions."
+    }
+  ]
+}

@@ -6,260 +6,80 @@ original meant) and the x86_64 layout (what the port touches).
 
 | Verdict | Accesses |
 | --- | --- |
-| bug | 90 |
-| unresolved | 689 |
-| safe | 6513 |
+| bug | 0 |
+| unresolved | 648 |
+| safe | 6546 |
+
+`safe` means the layout checks passed or the access was individually reviewed below. It is not
+a proof of bounds, lifetime, control flow or physics equivalence. `bug` is an automatic finding
+that still needs inspection; `unresolved` is not a clean bill of health.
+
+## Individually reviewed accesses
+
+Reviews live in `tools/raw_access/reviewed.json`, with exact sites, explanations and SHA-256
+guards for the source and headers. A source change or new automatic evidence invalidates the review and stops
+report generation until it is checked again. The JSON report retains automatic verdicts and
+reasons. Use `--without-reviews` to inspect all automatic findings.
+
+- `StageObjects.cpp:7261:22:flow:assign` (Replay_SetupPointers): `(ReplayInputLane *)((BYTE *)p + sizeof(ReplayStream))` — This forms a ReplayInputLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x114c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayInputLane has the same pointer-free 0x114c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions.
+- `StageObjects.cpp:7265:22:flow:assign` (Replay_SetupPointers): `(ReplayStateLane *)((BYTE *)p + sizeof(ReplayStream))` — This forms a ReplayStateLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x5c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayStateLane has the same pointer-free 0x5c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions.
 
 ## Bugs
-
-### Network_GetSessionNamePointer (0x004a14c0) — Game.cpp
-
-- `Game.cpp:2998` `(LPVOID *)g_networkSession.lpszSessionNameA`: touches m_unk0x005a00b8[0..7] on x86_64, meant m_unk0x005a00b8[0..3]
-
-### Network_GetSessionPasswordPointer (0x004a14d0) — Game.cpp
-
-- `Game.cpp:3004` `(LPVOID *)g_networkSession.lpszPasswordA`: touches m_unk0x005a02c0[0..7] on x86_64, meant m_unk0x005a02c0[0..3]
-
-### InRaceMenu_DrawLabelAndValueRows (0x00402000) — GameInfo.cpp
-
-- `GameInfo.cpp:8754` `(int *)sub`: touches var:InRaceMenu_DrawLabelAndValueRows:sub:8689[0] part+0:4/8/ptr on x86_64, meant var:InRaceMenu_DrawLabelAndValueRows:sub:8689[0]
-- `GameInfo.cpp:8755` `(int *)sub + 1`: touches var:InRaceMenu_DrawLabelAndValueRows:sub:8689[0] part+4:4/8/ptr on x86_64, meant var:InRaceMenu_DrawLabelAndValueRows:sub:8689[1]
-
-### InRaceMenu_DrawNetworkPlayerList (0x00402460) — GameInfo.cpp
-
-- `GameInfo.cpp:5003` `(int *)sub + 1`: touches var:InRaceMenu_DrawNetworkPlayerList:sub:4946[0] part+4:4/8/ptr on x86_64, meant var:InRaceMenu_DrawNetworkPlayerList:sub:4946[1]
-- `GameInfo.cpp:5004` `(int *)sub`: touches var:InRaceMenu_DrawNetworkPlayerList:sub:4946[0] part+0:4/8/ptr on x86_64, meant var:InRaceMenu_DrawNetworkPlayerList:sub:4946[0]
-
-### OptionMenu_GetCommonArchive (0x0050f620) — GameInfo.cpp
-
-- `GameInfo.cpp:2313` `(GenericFile *)g_optionCommonArchive`: touches g_optionCommonArchive on x86_64, meant g_optionCommonArchive[0..2]
-
-### OptionMenu_GetLanguageArchive (0x0050f630) — GameInfo.cpp
-
-- `GameInfo.cpp:2319` `(GenericFile *)g_optionLanguageArchive`: touches g_optionLanguageArchive on x86_64, meant g_optionLanguageArchive[0..2]
-
-### OptionMenu_GetStageArchive (0x0050f640) — GameInfo.cpp
-
-- `GameInfo.cpp:2325` `(GenericFile *)g_optionStageArchive`: touches g_optionStageArchive on x86_64, meant g_optionStageArchive[0..2]
-
-### OptionMenu_ReleaseTextures (0x0050f480) — GameInfo.cpp
-
-- `GameInfo.cpp:6041` `((GenericFile *)g_optionCommonArchive)->buffer`: touches g_optionCommonArchive[0..1] on x86_64, meant g_optionCommonArchive[0]
-- `GameInfo.cpp:6042` `((GenericFile *)g_optionCommonArchive)->buffer`: touches g_optionCommonArchive[0..1] on x86_64, meant g_optionCommonArchive[0]
-- `GameInfo.cpp:6043` `((GenericFile *)g_optionCommonArchive)->buffer`: touches g_optionCommonArchive[0..1] on x86_64, meant g_optionCommonArchive[0]
-- `GameInfo.cpp:6045` `((GenericFile *)g_optionCommonArchive)->didFileLoad`: touches g_optionCommonArchive[3] on x86_64, meant g_optionCommonArchive[2]
-- `GameInfo.cpp:6046` `((GenericFile *)g_optionCommonArchive)->fileSize`: touches g_optionCommonArchive[2] on x86_64, meant g_optionCommonArchive[1]
-- `GameInfo.cpp:6047` `((GenericFile *)g_optionStageArchive)->buffer`: touches g_optionStageArchive[0..1] on x86_64, meant g_optionStageArchive[0]
-- `GameInfo.cpp:6048` `((GenericFile *)g_optionStageArchive)->buffer`: touches g_optionStageArchive[0..1] on x86_64, meant g_optionStageArchive[0]
-- `GameInfo.cpp:6049` `((GenericFile *)g_optionStageArchive)->buffer`: touches g_optionStageArchive[0..1] on x86_64, meant g_optionStageArchive[0]
-- `GameInfo.cpp:6051` `((GenericFile *)g_optionStageArchive)->didFileLoad`: touches g_optionStageArchive[3] on x86_64, meant g_optionStageArchive[2]
-- `GameInfo.cpp:6052` `((GenericFile *)g_optionStageArchive)->fileSize`: touches g_optionStageArchive[2] on x86_64, meant g_optionStageArchive[1]
-- `GameInfo.cpp:6053` `((GenericFile *)g_optionLanguageArchive)->buffer`: touches g_optionLanguageArchive[0..1] on x86_64, meant g_optionLanguageArchive[0]
-- `GameInfo.cpp:6054` `((GenericFile *)g_optionLanguageArchive)->buffer`: touches g_optionLanguageArchive[0..1] on x86_64, meant g_optionLanguageArchive[0]
-- `GameInfo.cpp:6055` `((GenericFile *)g_optionLanguageArchive)->buffer`: touches g_optionLanguageArchive[0..1] on x86_64, meant g_optionLanguageArchive[0]
-- `GameInfo.cpp:6057` `((GenericFile *)g_optionLanguageArchive)->didFileLoad`: touches g_optionLanguageArchive[3] on x86_64, meant g_optionLanguageArchive[2]
-- `GameInfo.cpp:6058` `((GenericFile *)g_optionLanguageArchive)->fileSize`: touches g_optionLanguageArchive[2] on x86_64, meant g_optionLanguageArchive[1]
-
-### EvictManagedTextureResources (0x004a5be0) — Graphics.cpp
-
-- `Graphics.cpp:228` `(RenderTexture *)m_pTextureManager->textureBuffer2[index]`: touches *[0..5], *[6].textureId, *[6].field_0x2, *[6].name[0..33] on x86_64, meant *[0..5], *[6].textureId, *[6].field_0x2, *[6].name[0..9]
-
-### Graphics_AllocateCubeMapTextureSlot (0x004a4b10) — Graphics.cpp
-
-- `Graphics.cpp:4734` `(RenderTexture *)p`: touches *[0..5], *[6].textureId, *[6].field_0x2, *[6].name[0..33] on x86_64, meant *[0..5], *[6].textureId, *[6].field_0x2, *[6].name[0..9]
-
-### Graphics_InitializeFlareTextureSurface (0x004bca70) — Graphics.cpp
-
-- `Graphics.cpp:3666` `(Texture *)g_unk0x00816298`: touches g_unk0x00816298[0..319] on x86_64, meant g_unk0x00816298[0..303]
-
-### Graphics_ReloadAllTextures (0x004a4c40) — Graphics.cpp
-
-- `Graphics.cpp:2128` `(RenderTexture *)CGraphics::m_pTextureManager->textureBuffer2[i]`: touches *[0..5], *[6].textureId, *[6].field_0x2, *[6].name[0..33] on x86_64, meant *[0..5], *[6].textureId, *[6].field_0x2, *[6].name[0..9]
-
-### Mesh_GetShadowCylinder (0x004b67f0) — Graphics.cpp
-
-- `Graphics.cpp:2903` `pCyl`: touches *[0].field_0x0, *[0].pVertexData, *[0].field_0x10, *[0].vertexBufferIndex, *[0].vertexOffset, *[0].field_0x1c, ... 7 more on x86_64, meant *[0].field_0x0, *[0].pVertexData, *[0].field_0x10, *[0].vertexBufferIndex, *[0].vertexOffset, *[0].field_0x1c, ... 9 more
-
-### Scene_AttenuateSectorLight (0x004b6ca0) — Graphics.cpp
-
-- `Graphics.cpp:3005` `&((LightZone *)g_sceneLightZones)[g_sceneSectorZone[sector]]`: file data (ret:FindFile) viewed as LightZone, whose layout differs on 64-bit
-- `Graphics.cpp:3027` `&((LightZone *)g_sceneLightZones)[g_sceneSectorZone[sector]]`: file data (ret:FindFile) viewed as LightZone, whose layout differs on 64-bit
-
-### Dash_UpdateCameraModeOffset (0x00447530) — HudDash.cpp
-
-- `HudDash.cpp:849` `(short *)&param_1`: touches param:Dash_UpdateCameraModeOffset#0 part+0:2/8/ptr on x86_64, meant param:Dash_UpdateCameraModeOffset#0 part+0:2/4/ptr
-- `HudDash.cpp:852` `*(short *)&param_1`: touches param:Dash_UpdateCameraModeOffset#0 part+0:2/8/ptr on x86_64, meant param:Dash_UpdateCameraModeOffset#0 part+0:2/4/ptr
-- `HudDash.cpp:854` `(short *)&param_1`: touches param:Dash_UpdateCameraModeOffset#0 part+0:2/8/ptr on x86_64, meant param:Dash_UpdateCameraModeOffset#0 part+0:2/4/ptr
-- `HudDash.cpp:858` `*(short *)&param_1`: touches param:Dash_UpdateCameraModeOffset#0 part+0:2/8/ptr on x86_64, meant param:Dash_UpdateCameraModeOffset#0 part+0:2/4/ptr
-
-### Scene_CollectNearbyLightZones (0x004b5f90) — SceneNode.cpp
-
-- `SceneNode.cpp:2100` `(LightZone *)(g_sceneLightZones + zone * 0x14)`: file data (ret:FindFile) viewed as LightZone, whose layout differs on 64-bit
-
-### Scene_EmitProjectedShadowMesh (0x004b4180) — SceneNode.cpp
-
-- `SceneNode.cpp:2742` `*(BYTE **)((char *)pi + off + (pi - index) * (sizeof(*pEdge) - sizeof(*pi)))`: touches var:Scene_EmitProjectedShadowMesh:index:2671[0..1] on x86_64, meant var:Scene_EmitProjectedShadowMesh:index:2671[0]
-- `SceneNode.cpp:2766` `*(BYTE **)((char *)pi + off + (pi - index) * (sizeof(*pEdge) - sizeof(*pi)))`: touches var:Scene_EmitProjectedShadowMesh:index:2671[0..1] on x86_64, meant var:Scene_EmitProjectedShadowMesh:index:2671[0]
-
-### Scene_LoadLighting (0x004b4aa0) — SceneNode.cpp
-
-- `SceneNode.cpp:1346` `*(BYTE **)(g_sceneLightZones + off + 0xc)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1350` `*(BYTE **)(g_sceneLightZones + off + 0x10)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1354` `*(int **)(g_sceneLightZones + off + 0x10)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1359` `*(int **)(g_sceneLightZones + off + 0x10)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1364` `*(int **)(g_sceneLightZones + off + 0x10)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1396` `*(BYTE **)(g_sceneLightZones + zoneOff + 0xc)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1424` `*(int **)(g_sceneLightZones + off + 0x10)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1427` `*(BYTE **)(g_sceneLightZones + off + 0xc)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1428` `*(BYTE **)(*(BYTE **)(pOwner[0xb] + 0xc) + 0x24)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1428` `*(BYTE **)(pOwner[0xb] + 0xc)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `SceneNode.cpp:1458` `*(int **)(g_sceneLightZones + off + 0x10)`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-
-### Scene_RelightSector (0x004b3c00) — SceneNode.cpp
-
-- `SceneNode.cpp:1080` `&((LightZone *)g_sceneLightZones)[g_sceneSectorZone[sector]]`: file data (ret:FindFile) viewed as LightZone, whose layout differs on 64-bit
-
-### Sector_ComputeBounds (0x004b9170) — Sector.cpp
-
-- `Sector.cpp:924` `&((SectorMesh *)pSector->pMesh)[pSector->pMesh->lodIndex]`: touches *[0].field_0x0, *[0].pVertexData, *[0].field_0x10, *[0].vertexBufferIndex, *[0].vertexOffset, *[0].field_0x1c, ... 7 more on x86_64, meant *[0].field_0x0, *[0].pVertexData, *[0].field_0x10, *[0].vertexBufferIndex, *[0].vertexOffset, *[0].field_0x1c, ... 9 more
-
-### Sector_NearestCornerHeight (0x004b8e30) — Sector.cpp
-
-- `Sector.cpp:454` `&((SectorMesh *)g_sectors[index]->pMesh)[g_sectors[index]->pMesh->lodIndex]`: touches *[0].field_0x0, *[0].pVertexData, *[0].field_0x10, *[0].vertexBufferIndex, *[0].vertexOffset, *[0].field_0x1c, ... 7 more on x86_64, meant *[0].field_0x0, *[0].pVertexData, *[0].field_0x10, *[0].vertexBufferIndex, *[0].vertexOffset, *[0].field_0x1c, ... 9 more
-
-### AI_LoadStageRouteTables (0x0047c2f0) — StageObjects.cpp
-
-- `StageObjects.cpp:13965` `((char *)&g_unk0x0058e394[0x42])[1]`: touches g_unk0x0058e394[66] part+1:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+1:1/4/ptr
-- `StageObjects.cpp:13967` `((char *)&g_unk0x0058e394[0x42])[1]`: touches g_unk0x0058e394[66] part+1:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+1:1/4/ptr
-- `StageObjects.cpp:13971` `((char *)&g_unk0x0058e394[0x42])[2]`: touches g_unk0x0058e394[66] part+2:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+2:1/4/ptr
-- `StageObjects.cpp:13973` `((char *)&g_unk0x0058e394[0x42])[2]`: touches g_unk0x0058e394[66] part+2:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+2:1/4/ptr
-- `StageObjects.cpp:13977` `((char *)&g_unk0x0058e394[0x42])[0]`: touches g_unk0x0058e394[66] part+0:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+0:1/4/ptr
-- `StageObjects.cpp:13979` `((char *)&g_unk0x0058e394[0x42])[0]`: touches g_unk0x0058e394[66] part+0:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+0:1/4/ptr
-- `StageObjects.cpp:13983` `((char *)&g_unk0x0058e394[0x42])[3]`: touches g_unk0x0058e394[66] part+3:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+3:1/4/ptr
-- `StageObjects.cpp:13985` `((char *)&g_unk0x0058e394[0x42])[3]`: touches g_unk0x0058e394[66] part+3:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+3:1/4/ptr
-- `StageObjects.cpp:13992` `((char *)&g_unk0x0058e394[0x42])[3]`: touches g_unk0x0058e394[66] part+3:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+3:1/4/ptr
-- `StageObjects.cpp:13996` `&pNative[i - 1]`: touches * before-48:16 on x86_64, meant * before-32:16
-- `StageObjects.cpp:13997` `(BYTE *)&pNative[i - 1]`: touches * before-48:0 on x86_64, meant * before-32:0
-- `StageObjects.cpp:14001` `((char *)&g_unk0x0058e394[0x42])[3]`: touches g_unk0x0058e394[66] part+3:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+3:1/4/ptr
-- `StageObjects.cpp:14005` `((AINetwork *)pEntry)->pWeights[k]`: pointer-sized access in file data (ret:FindFile), whose slots are 32-bit
-- `StageObjects.cpp:14012` `((char *)&g_unk0x0058e394[0x42])[0]`: touches g_unk0x0058e394[66] part+0:1/8/ptr on x86_64, meant g_unk0x0058e394[66] part+0:1/4/ptr
-
-### Replay_AdvanceLiveRecordingStreams (0x0046c8e0) — StageObjects.cpp
-
-- `StageObjects.cpp:10194` `(ReplayInputLane *)(p->pInputs + p->laneCount * 0x114c)`: touches *[1..14], *[15].steeringModeOption, *[15].playing, *[15].playStarted, *[15].recording, *[15].recordStarted, ... 9 more on x86_64, meant *[1..16], *[17].steeringModeOption, *[17].playing, *[17].playStarted, *[17].recording, *[17].recordStarted, ... 16 more
-- `StageObjects.cpp:10209` `(ReplayStateLane *)(p->pStates + p->laneCount * 0x5c)`: touches *[1].steeringModeOption, *[1].playing, *[1].playStarted, *[1].recording, *[1].recordStarted, *[1].field_0x14, ... 12 more on x86_64, meant *[1].steeringModeOption, *[1].playing, *[1].playStarted, *[1].recording, *[1].recordStarted, *[1].field_0x14, ... 17 more
-
-### Replay_CaptureCarSnapshot (0x0046c240) — StageObjects.cpp
-
-- `StageObjects.cpp:1640` `(Block6 *)(pDst + 0x10f4)`: touches *[14].step, *[14].padf9, *[14].laneCapacity, *[14].samplesPerLane, *[14].laneCount, *[14].pad102, ... 3 more on x86_64, meant *[16].pLaneSamples, *[16].lane, *[16].frame, *[16].field_0x10c, *[16].pad10d, *[17].steeringModeOption, ... 2 more
-
-### Replay_InitCarStreamState (0x0046c750) — StageObjects.cpp
-
-- `StageObjects.cpp:10882` `p->pInputs[0x1110]`: touches *[15].steeringModeOption part+0:1/4 on x86_64, meant *[17].recordStarted part+0:1/4
-- `StageObjects.cpp:10883` `*(short *)(p->pInputs + 0x110c)`: touches *[14].field_0x10c, *[14].pad10d[0] on x86_64, meant *[17].recording part+0:2/4
-- `StageObjects.cpp:10884` `*(short *)(p->pInputs + 0x110e)`: touches *[14].pad10d[1..2] on x86_64, meant *[17].recording part+2:2/4
-- `StageObjects.cpp:10885` `p->pInputs[0x1148]`: touches *[15].pInputRecLane part+0:1/8/ptr on x86_64, meant *[17].pose.from.right.y part+0:1/4
-- `StageObjects.cpp:10894` `p->pStates[0x58]`: touches *[1].pFrames part+0:1/8/ptr on x86_64, meant *[1].pose.from.up.y part+0:1/4
-
-### Replay_InitObjectListCarState (0x0046c2a0) — StageObjects.cpp
-
-- `StageObjects.cpp:11855` `(Block0x309 *)(pLane + 0x4d0)`: touches *[4].pLaneSamples, *[4].lane, *[4].frame, *[4].field_0x10c, *[4].pad10d, *[5..13], ... 30 more on x86_64, meant *[5].pose.to.rw, *[5].pose.to.up, *[5].pose.to.uw, *[5].pose.to.forward, *[5].pose.to.fw, *[5].pose.to.position, ... 60 more
-- `StageObjects.cpp:11857` `(Block0x134 *)pLane`: touches *[1..3], *[4].steeringModeOption, *[4].playing, *[4].playStarted, *[4].recording, *[4].recordStarted, ... 31 more on x86_64, meant *[1..4], *[5].steeringModeOption, *[5].playing, *[5].playStarted, *[5].recording, *[5].recordStarted, ... 16 more
-- `StageObjects.cpp:11857` `(Block0x134 *)StageTiming_GetCarReplayRecord((int)param_2)`: touches *[0].geometry, *[0].centres, *[0].halfExtents, *[0].damageGrid, *[0].damageValues, *[0].damageScales, ... 12 more on x86_64, meant *[0]
-- `StageObjects.cpp:11860` `(Block6 *)(pLane + 0x10f4)`: touches *[14].step, *[14].padf9, *[14].laneCapacity, *[14].samplesPerLane, *[14].laneCount, *[14].pad102, ... 3 more on x86_64, meant *[16].pLaneSamples, *[16].lane, *[16].frame, *[16].field_0x10c, *[16].pad10d, *[17].steeringModeOption, ... 2 more
-
-### Replay_PlayStreamFrame (0x0046cfa0) — StageObjects.cpp
-
-- `StageObjects.cpp:14070` `((ReplayInputLane *)p->pInputs)[p->lane].eventCount`: touches *[15].pInputRecLane part+0:1/8/ptr on x86_64, meant *[17].pose.from.right.y part+0:1/4
-- `StageObjects.cpp:14071` `((ReplayInputLane *)p->pInputs)[p->lane].events`: touches *[14].field_0x10c, *[14].pad10d, *[15].steeringModeOption part+0:2/4 on x86_64, meant *[17].recording, *[17].recordStarted part+0:2/4
-- `StageObjects.cpp:14081` `((ReplayStateLane *)p->pStates)[p->lane].eventCount`: touches *[1].pFrames part+0:1/8/ptr on x86_64, meant *[1].pose.from.up.y part+0:1/4
-- `StageObjects.cpp:14093` `((ReplayStateLane *)p->pStates)[p->lane].eventCount`: touches *[1].pFrames part+0:1/8/ptr on x86_64, meant *[1].pose.from.up.y part+0:1/4
-- `StageObjects.cpp:14095` `((ReplayInputLane *)p->pInputs)[p->lane].eventCount`: touches *[15].pInputRecLane part+0:1/8/ptr on x86_64, meant *[17].pose.from.right.y part+0:1/4
-
-### Replay_RestoreCarState (0x0046bfd0) — StageObjects.cpp
-
-- `StageObjects.cpp:1556` `*(Block0x309 *)pDst`: touches *[0].<anon0>, *[0].flag0x1d0, *[0].field_0x1d4, *[0].handbrake, *[0].field_0x1dc, *[0].field_0x1e0, ... 209 more on x86_64, meant *[0]
-
-### Replay_SelectAndInitializeLane (0x0046cce0) — StageObjects.cpp
-
-- `StageObjects.cpp:11912` `p->pInputs[lane * 0x114c + 0x1110]`: touches *[15].steeringModeOption part+0:1/4 on x86_64, meant *[17].recordStarted part+0:1/4
-
-### StageObject_InitCarSceneTables (0x00475f80) — StageTiming.cpp
-
-- `StageTiming.cpp:2004` `(int *)&g_carInteriorDashTextures[0].digit`: touches g_stageBlock.carInteriorDashTextures[0].digit part+0:4/8/ptr on x86_64, meant g_stageBlock.carInteriorDashTextures[0].digit
-- `StageTiming.cpp:2005` `(int *)&g_carInteriorNodeRows[0].steeringWheelNode`: touches g_stageBlock.carInteriorTables.nodes[0].steeringWheelNode part+0:4/8/ptr on x86_64, meant g_stageBlock.carInteriorTables.nodes[0].steeringWheelNode
-
-### StageTiming_InitStageFileTable (0x00456bb0) — StageTiming.cpp
-
-- `StageTiming.cpp:2564` `(void **)&g_carModelArchives[0].fileSize`: touches g_stageArchiveTables.archives[0].fileSize, g_stageArchiveTables.archives[0].didFileLoad on x86_64, meant g_stageArchiveTables.archives[0].fileSize
-
-### SurfaceText_LoadRegionalStringTable (0x00478a20) — SurfaceTypes.cpp
-
-- `SurfaceTypes.cpp:1444` `(char **)names[1]`: touches g_strLangEnglish[0..7] on x86_64, meant g_strLangEnglish[0..3]
-
-### TrackCollision_LoadFinishRecords (0x00490c30) — TrackCollision.cpp
-
-- `TrackCollision.cpp:253` `(FinRecord *)CGenericFileLoader::FindFile((GenericFile *)StageTiming_GetStageFile3(), CFrontend::m_stringDest, 0, &size, 0)`: file data (ret:FindFile) viewed as FinRecord, whose layout differs on 64-bit
 
 ## Unresolved, by blocking root
 
 Fixing or typing one root usually settles every access listed under it.
 
 - 65 × root var:BuildLocalizedTextStringTable:p:534: `Font.cpp:201`, `Font.cpp:201`, `Font.cpp:201`, `Font.cpp:201`, `Font.cpp:207`, `Font.cpp:208`, `Font.cpp:220`, `Font.cpp:224:26` ...
-- 34 × root var:g_unk0x00541f8c: `StageObjects.cpp:10671`, `StageObjects.cpp:10672`, `StageObjects.cpp:10673`, `StageObjects.cpp:10697`, `StageObjects.cpp:10709`, `StageObjects.cpp:10710`, `StageObjects.cpp:10711`, `StageObjects.cpp:10734` ...
 - 30 × root param:Race_HandleStageReplayViewTransitions#0: `Race.cpp:3322`, `Race.cpp:3353:51`, `Race.cpp:3363:51`, `Race.cpp:3379:55`, `Race.cpp:3386:36`, `Race.cpp:3390:51`, `Race.cpp:3399:55`, `Race.cpp:3410:51` ...
-- 30 × index INTERIOR_NODES: stride 0x1 matches no array: `StageObjects.cpp:9033`, `StageObjects.cpp:9036`, `StageObjects.cpp:9037`, `StageObjects.cpp:9038`, `StageObjects.cpp:9043`, `StageObjects.cpp:9044`, `StageObjects.cpp:9045`, `StageObjects.cpp:9046` ...
+- 30 × root var:g_unk0x00541f8c: `StageObjects.cpp:10673`, `StageObjects.cpp:10674`, `StageObjects.cpp:10675`, `StageObjects.cpp:10699`, `StageObjects.cpp:10711`, `StageObjects.cpp:10712`, `StageObjects.cpp:10713`, `StageObjects.cpp:10736` ...
+- 30 × index INTERIOR_NODES: stride 0x1 matches no array: `StageObjects.cpp:9035`, `StageObjects.cpp:9038`, `StageObjects.cpp:9039`, `StageObjects.cpp:9040`, `StageObjects.cpp:9045`, `StageObjects.cpp:9046`, `StageObjects.cpp:9047`, `StageObjects.cpp:9048` ...
 - 29 × root var:FrontendNetwork_DrainMessageQueue:pData:1905: `FrontendScreens.cpp:1719`, `FrontendScreens.cpp:1720`, `FrontendScreens.cpp:1721`, `FrontendScreens.cpp:1722`, `FrontendScreens.cpp:1723`, `FrontendScreens.cpp:1724`, `FrontendScreens.cpp:1725`, `FrontendScreens.cpp:1726` ...
-- 28 × index (p->samplesPerLane * p->laneCount + *pIndex): stride 0x4 matches no array: `StageObjects.cpp:10173:33`, `StageObjects.cpp:10184:37`, `StageObjects.cpp:10185`, `StageObjects.cpp:10199`, `StageObjects.cpp:10214`, `StageObjects.cpp:10229`, `StageObjects.cpp:7960`, `StageObjects.cpp:7962` ...
-- 25 × root field:GfxLockedRect::pixels: `Graphics.cpp:1118:25`, `Graphics.cpp:1705:12`, `Graphics.cpp:1706:14`, `Graphics.cpp:2545:16`, `Graphics.cpp:2550:16`, `Graphics.cpp:2552:20`, `Graphics.cpp:3840`, `Graphics.cpp:3856` ...
+- 28 × index (p->samplesPerLane * p->laneCount + *pIndex): stride 0x4 matches no array: `StageObjects.cpp:10175:33`, `StageObjects.cpp:10186:37`, `StageObjects.cpp:10187`, `StageObjects.cpp:10201`, `StageObjects.cpp:10216`, `StageObjects.cpp:10231`, `StageObjects.cpp:7962`, `StageObjects.cpp:7964` ...
+- 25 × root field:GfxLockedRect::pixels: `Graphics.cpp:1119:25`, `Graphics.cpp:1706:12`, `Graphics.cpp:1707:14`, `Graphics.cpp:2546:16`, `Graphics.cpp:2551:16`, `Graphics.cpp:2553:20`, `Graphics.cpp:3842`, `Graphics.cpp:3858` ...
 - 17 × root param:deflateSetDictionary#1: `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36` ...
-- 16 × root var:g_unk0x00538238: `Race.cpp:4427`, `Race.cpp:769:29`, `StageObjects.cpp:6154`, `StageObjects.cpp:6155`, `StageObjects.cpp:6158`, `StageObjects.cpp:6159`, `StageObjects.cpp:6163`, `StageObjects.cpp:6320` ...
-- 16 × root param:StageObject_QueueViewLensFlare#0: `StageObjects.cpp:10000:28`, `StageObjects.cpp:10006:30`, `StageObjects.cpp:10006:55`, `StageObjects.cpp:10019:30`, `StageObjects.cpp:10020:30`, `StageObjects.cpp:10034`, `StageObjects.cpp:10035`, `StageObjects.cpp:9983` ...
-- 16 × root var:StageTiming_LoadSelectedTeamArchive:dest:5651: `StageTiming.cpp:1262`, `StageTiming.cpp:1263`, `StageTiming.cpp:1264`, `StageTiming.cpp:1265`, `StageTiming.cpp:1266`, `StageTiming.cpp:1267`, `StageTiming.cpp:4495`, `StageTiming.cpp:4496` ...
+- 16 × root var:g_unk0x00538238: `Race.cpp:4427`, `Race.cpp:769:29`, `StageObjects.cpp:6156`, `StageObjects.cpp:6157`, `StageObjects.cpp:6160`, `StageObjects.cpp:6161`, `StageObjects.cpp:6165`, `StageObjects.cpp:6322` ...
+- 16 × root param:StageObject_QueueViewLensFlare#0: `StageObjects.cpp:10000`, `StageObjects.cpp:10002:28`, `StageObjects.cpp:10008:30`, `StageObjects.cpp:10008:55`, `StageObjects.cpp:10021:30`, `StageObjects.cpp:10022:30`, `StageObjects.cpp:10036`, `StageObjects.cpp:10037` ...
+- 16 × root var:StageTiming_LoadSelectedTeamArchive:dest:5644: `StageTiming.cpp:1262`, `StageTiming.cpp:1263`, `StageTiming.cpp:1264`, `StageTiming.cpp:1265`, `StageTiming.cpp:1266`, `StageTiming.cpp:1267`, `StageTiming.cpp:4488`, `StageTiming.cpp:4489` ...
 - 15 × root var:NetRace_DrainPendingMessages:pData:206: `NetRace.cpp:1024:37`, `NetRace.cpp:138`, `NetRace.cpp:141:47`, `NetRace.cpp:149`, `NetRace.cpp:149`, `NetRace.cpp:152`, `NetRace.cpp:152`, `NetRace.cpp:156` ...
 - 14 × root var:ApplyStageOptionUnlockFlags:piVar4:893: `GameInfo.cpp:905`, `GameInfo.cpp:906`, `GameInfo.cpp:906`, `GameInfo.cpp:914`, `GameInfo.cpp:915`, `GameInfo.cpp:915`, `GameInfo.cpp:923`, `GameInfo.cpp:924` ...
 - 14 × root var:StageTiming_IndexSerializedStageTables:p:1713: `StageTiming.cpp:1720`, `StageTiming.cpp:1725:44`, `StageTiming.cpp:1728:32`, `StageTiming.cpp:1730:23`, `StageTiming.cpp:1732:11`, `StageTiming.cpp:1733:34`, `StageTiming.cpp:1735:24`, `StageTiming.cpp:1737:11` ...
 - 13 × index PREVIEW_SCENE_AT_OFFSET(off): stride 0x1 matches no array: `GameInfo.cpp:7238`, `GameInfo.cpp:7240`, `GameInfo.cpp:7241`, `GameInfo.cpp:7241`, `GameInfo.cpp:7245`, `GameInfo.cpp:7247`, `GameInfo.cpp:7248`, `GameInfo.cpp:7248` ...
 - 12 × root var:GameInfo_ProcessNetworkMessages:pMessage:1593: `GameInfo.cpp:1531:37`, `GameInfo.cpp:1552`, `GameInfo.cpp:1554:43`, `GameInfo.cpp:1560`, `GameInfo.cpp:1560`, `GameInfo.cpp:1564`, `GameInfo.cpp:1564`, `GameInfo.cpp:1571` ...
-- 12 × index (p->samplesPerLane * p->lane + p->frame): stride 0x4 matches no array: `StageObjects.cpp:14065:61`, `StageObjects.cpp:1490`, `StageObjects.cpp:1492`, `StageObjects.cpp:1499`, `StageObjects.cpp:1500`, `StageObjects.cpp:1501`, `StageObjects.cpp:1502`, `StageObjects.cpp:1503` ...
-- 11 × root var:g_unk0x00538234: `Race.cpp:4427`, `Race.cpp:769:72`, `StageObjects.cpp:6326`, `StageObjects.cpp:6328`, `StageObjects.cpp:6333`, `StageObjects.cpp:6333`, `StageObjects.cpp:6334`, `StageObjects.cpp:6339` ...
+- 12 × index (p->samplesPerLane * p->lane + p->frame): stride 0x4 matches no array: `StageObjects.cpp:14062:61`, `StageObjects.cpp:1492`, `StageObjects.cpp:1494`, `StageObjects.cpp:1501`, `StageObjects.cpp:1502`, `StageObjects.cpp:1503`, `StageObjects.cpp:1504`, `StageObjects.cpp:1505` ...
+- 11 × root var:g_unk0x00538234: `Race.cpp:4427`, `Race.cpp:769:72`, `StageObjects.cpp:6328`, `StageObjects.cpp:6330`, `StageObjects.cpp:6335`, `StageObjects.cpp:6335`, `StageObjects.cpp:6336`, `StageObjects.cpp:6341` ...
 - 9 × index i: stride 0x1 matches no array: `Car.cpp:2895`, `Car.cpp:2895`, `Car.cpp:5288`, `Collision2D.cpp:754`, `Collision2D.cpp:755`, `Collision2D.cpp:756`, `Collision2D.cpp:775`, `Collision2D.cpp:776` ...
 - 9 × root var:FrontendMenu_DrawGraphicsOptions:pColour:11076: `FrontendScreens.cpp:11154:91`, `FrontendScreens.cpp:11159:91`, `FrontendScreens.cpp:11169:99`, `FrontendScreens.cpp:11180:91`, `FrontendScreens.cpp:11187:91`, `FrontendScreens.cpp:11192:91`, `FrontendScreens.cpp:11208:99`, `FrontendScreens.cpp:11218:91` ...
-- 9 × root field:SceneNode::pObject: `GameInfo.cpp:11192`, `Graphics.cpp:2860:50`, `Graphics.cpp:2904:30`, `Mesh.cpp:32`, `StageObjects.cpp:8980`, `StageObjects.cpp:920`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
+- 9 × root field:SceneNode::pObject: `GameInfo.cpp:11192`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8982`, `StageObjects.cpp:922`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
 - 8 × root var:FrontendRecords_BuildScrambledBestTimeTables:local_18:11258: `FrontendScreens.cpp:8101`, `FrontendScreens.cpp:8107`, `FrontendScreens.cpp:8111`, `GameInfo.cpp:11333:88`, `GameInfo.cpp:11334:47`, `GameInfo.cpp:3123`, `GameInfo.cpp:3125`, `GameInfo.cpp:3129`
 - 7 × index off: stride 0x1 matches no array: `Car.cpp:2936:33`, `Car.cpp:2946`, `Car.cpp:2952:33`, `Car.cpp:2957`, `Car.cpp:2958`, `Car.cpp:2959`, `Car.cpp:3069:32`
-- 7 × root field:LightZone::pVertices: `Graphics.cpp:3006:22`, `Graphics.cpp:3029:26`, `SceneNode.cpp:1082:27`, `SceneNode.cpp:1769`, `SceneNode.cpp:1802`, `SceneNode.cpp:1805`, `SceneNode.cpp:2103:41`
-- 7 × root expr:g_unk0x0058e44c[v]: `StageObjects.cpp:9397`, `StageObjects.cpp:9430`, `StageObjects.cpp:9455:54`, `StageObjects.cpp:9462`, `StageTiming.cpp:3654`, `StageTiming.cpp:3657`, `StageTiming.cpp:3703`
+- 7 × root expr:g_unk0x0058e44c[v]: `StageObjects.cpp:9399`, `StageObjects.cpp:9432`, `StageObjects.cpp:9457:54`, `StageObjects.cpp:9464`, `StageTiming.cpp:3647`, `StageTiming.cpp:3650`, `StageTiming.cpp:3696`
+- 6 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4939`, `StageObjects.cpp:14001`
 - 6 × root var:FrontendRecords_BuildScrambledBestTimeTables:puVar7:11231: `GameInfo.cpp:11287`, `GameInfo.cpp:11288:34`, `GameInfo.cpp:11329`, `GameInfo.cpp:11330:30`, `GameInfo.cpp:11442`, `GameInfo.cpp:11443:26`
-- 6 × root load:var:Race_UpdateDriverPreRaceScene:p:2516: `Race.cpp:2625:43`, `Race.cpp:2635:48`, `Race.cpp:2636:52`, `Race.cpp:2638:47`, `StageObjects.cpp:11927:66`, `StageObjects.cpp:11929:62`
-- 5 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4939`
+- 6 × root load:var:Race_UpdateDriverPreRaceScene:p:2516: `Race.cpp:2625:43`, `Race.cpp:2635:48`, `Race.cpp:2636:52`, `Race.cpp:2638:47`, `StageObjects.cpp:11929:66`, `StageObjects.cpp:11931:62`
 - 5 × root var:FrontendRecords_BuildScrambledBestTimeTables:puVar10:11229: `GameInfo.cpp:11351`, `GameInfo.cpp:11363`, `GameInfo.cpp:11364:27`, `GameInfo.cpp:11402`, `GameInfo.cpp:11403:31`
 - 5 × root field:BestTimeCursor::bytes: `GameInfo.cpp:11389:23`, `GameInfo.cpp:11406:88`, `GameInfo.cpp:11407:47`, `GameInfo.cpp:11446:84`, `GameInfo.cpp:11447:43`
-- 5 × root load:var:g_replaySlots: `StageObjects.cpp:10160:13`, `StageObjects.cpp:10181:46`, `StageObjects.cpp:14442:13`, `StageObjects.cpp:14454:38`, `StageObjects.cpp:7852:19`
-- 5 × index p->laneCapacity * recordSize: stride 0x1 matches no array: `StageObjects.cpp:10879`, `StageObjects.cpp:11928:53`, `StageObjects.cpp:11930:77`, `StageObjects.cpp:7268:64`, `StageObjects.cpp:7272:63`
+- 5 × root load:var:g_replaySlots: `StageObjects.cpp:10162:13`, `StageObjects.cpp:10183:46`, `StageObjects.cpp:14440:13`, `StageObjects.cpp:14452:38`, `StageObjects.cpp:7854:19`
+- 5 × index p->laneCapacity * recordSize: stride 0x1 matches no array: `StageObjects.cpp:10881`, `StageObjects.cpp:11930:53`, `StageObjects.cpp:11932:77`, `StageObjects.cpp:7270:64`, `StageObjects.cpp:7274:63`
 - 4 × root opaque (): `FrontendScreens.cpp:11488:93`, `FrontendScreens.cpp:11506:97`, `FrontendScreens.cpp:11515:93`, `FrontendScreens.cpp:11520:93`
 - 4 × root var:OptionMenu_DrawStageSummaryPanel:table:10198: `GameInfo.cpp:10289`, `GameInfo.cpp:10290`, `GameInfo.cpp:10301`, `GameInfo.cpp:10302`
-- 4 × root param:Graphics_LoadTextureRecordList#0: `Graphics.cpp:3617`, `Graphics.cpp:3618:26`, `Graphics.cpp:3639`, `Graphics.cpp:3641:36`
-- 4 × root site:SceneNode.cpp:1769:13:deref: `SceneNode.cpp:1772:13`, `SceneNode.cpp:1773`, `SceneNode.cpp:1775`, `SceneNode.cpp:1817`
-- 4 × index lane: stride 0x5c matches no array: `StageObjects.cpp:11906:47`, `StageObjects.cpp:11908:49`, `StageObjects.cpp:11914`, `StageObjects.cpp:9847:23`
-- 4 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x0: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+0:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+0:1/4/ptr: `StageObjects.cpp:8409`, `StageObjects.cpp:8409`, `StageObjects.cpp:8417`, `StageObjects.cpp:8417`
-- 4 × index INTERIOR_PROFILE: stride 0x1 matches no array: `StageObjects.cpp:9035`, `StageObjects.cpp:9056`, `StageObjects.cpp:9057`, `StageObjects.cpp:9061`
+- 4 × root param:Graphics_LoadTextureRecordList#0: `Graphics.cpp:3619`, `Graphics.cpp:3620:26`, `Graphics.cpp:3641`, `Graphics.cpp:3643:36`
+- 4 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x0: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+0:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+0:1/4/ptr: `StageObjects.cpp:8411`, `StageObjects.cpp:8411`, `StageObjects.cpp:8419`, `StageObjects.cpp:8419`
+- 4 × index INTERIOR_PROFILE: stride 0x1 matches no array: `StageObjects.cpp:9037`, `StageObjects.cpp:9058`, `StageObjects.cpp:9059`, `StageObjects.cpp:9063`
 - 4 × root expr:s->outbuf = Z_NULL: `ZlibDeflate.cpp:408:13`, `ZlibGzio.cpp:387:11`, `ZlibInfutil.cpp:51:11`, `ZlibInfutil.cpp:77:13`
 - 3 × root ret:strchr: `GameInfo.cpp:2795:32`, `GameInfo.cpp:2802:26`, `GameInfo.cpp:2802:36`
 - 3 × root var:RallyData_FormatResultDriverName:entry:5823: `RallyData.cpp:5842:89`, `RallyData.cpp:5853:94`, `RallyData.cpp:5855:75`
-- 3 × root var:Scene_ProjectCasterIntoLightZone:tex:1758: `SceneNode.cpp:1820`, `SceneNode.cpp:1830`, `SceneNode.cpp:2371`
-- 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1842:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3497:24`
+- 3 × root field:MeshTriangle::textureIndex: `SceneNode.cpp:1852`, `SceneNode.cpp:1862`, `SceneNode.cpp:2386`
+- 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1874:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3490:24`
 - 3 × root var:Sound_RewindAndFillMusicBuffer:pAudio1:552: `Sound.cpp:521:21`, `Sound.cpp:535:53`, `Sound.cpp:563:59`
 - 3 × root var:Sound_BuildSlotLoopBuffer:p1:832: `Sound.cpp:814:24`, `Sound.cpp:816:24`, `Sound.cpp:841:53`
-- 3 × index p->lane: stride 0x5c matches no array: `StageObjects.cpp:14055:55`, `StageObjects.cpp:14082:27`, `StageObjects.cpp:14119:44`
-- 3 × root param:Knockout_UpdateRaceStateAndFades#0: `StageObjects.cpp:2261:55`, `StageUI.cpp:929:43`, `StageUI.cpp:946:47`
-- 3 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x0: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+0:4/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0]: `StageObjects.cpp:8415`, `StageObjects.cpp:8415`, `StageObjects.cpp:8415`
+- 3 × root param:Knockout_UpdateRaceStateAndFades#0: `StageObjects.cpp:2263:55`, `StageUI.cpp:929:43`, `StageUI.cpp:946:47`
+- 3 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x0: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+0:4/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0]: `StageObjects.cpp:8417`, `StageObjects.cpp:8417`, `StageObjects.cpp:8417`
 - 3 × root expr:s->inbuf = Z_NULL: `ZlibDeflate.cpp:655:18`, `ZlibGzio.cpp:387:31`, `ZlibInfblock.cpp:203:18`
 - 3 × root param:gzgets#1: `ZlibGzio.cpp:368:20`, `ZlibGzio.cpp:376:16`, `ZlibGzio.cpp:377:26`
 - 2 × root var:FrontendMenu_DrawRallySummary:table:10802: `FrontendScreens.cpp:10865`, `FrontendScreens.cpp:10866`
 - 2 × root var:FrontendMenu_DrawRallyReport:table:10954: `FrontendScreens.cpp:10996`, `FrontendScreens.cpp:10997`
 - 2 × root load:var:RallyData_FindCheatNameIndex:p:1519: `FrontendScreens.cpp:6168:40`, `FrontendScreens.cpp:6169:16`
-- 2 × root param:FrontendMenu_SelectArcadeRallyRow#0: `FrontendScreens.cpp:7840`, `FrontendScreens.cpp:7841`
 - 2 × root param:OptionMenu_RestartEmptyItemRecords#0: `GameInfo.cpp:6346:27`, `GameInfo.cpp:6347`
 - 2 × root param:OptionMenu_DispatchRecordEditState#0: `GameInfo.cpp:9664`, `GameInfo.cpp:9665:54`
 - 2 × root param:OptionMenu_DrawValueSelectionRows#0: `GameInfo.cpp:9683`, `GameInfo.cpp:9701`
@@ -267,20 +87,17 @@ Fixing or typing one root usually settles every access listed under it.
 - 2 × root var:SetupKeyboard:interval:215: `Input.cpp:1045:56`, `Input.cpp:219:27`
 - 2 × root load:var:Race_TeardownStage:pp:3226: `Race.cpp:3272:40`, `Race.cpp:3284:40`
 - 2 × root load:var:Race_HandleStageReplayViewTransitions:pp:3317: `Race.cpp:3605:40`, `Race.cpp:3613:40`
-- 2 × root var:Scene_LoadLighting:pObj:1290: `SceneNode.cpp:1409:42`, `SceneNode.cpp:1413:28`
-- 2 × root var:g_activeReplayStream: `StageObjects.cpp:1352:32`, `StageObjects.cpp:3765:15`
-- 2 × root site:StageObjects.cpp:14133:36:deref: `StageObjects.cpp:14044:9`, `StageObjects.cpp:1513`
-- 2 × index p->lane: stride 0x114c matches no array: `StageObjects.cpp:14053:58`, `StageObjects.cpp:14116:40`
-- 2 × root expr:pBox2 = pText = g_barTextColour: `StageObjects.cpp:5748`, `StageObjects.cpp:5755`
-- 2 × root expr:pText = g_barTextColour: `StageObjects.cpp:5776`, `StageObjects.cpp:5783`
-- 2 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x1: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+1:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+1:1/4/ptr: `StageObjects.cpp:8410`, `StageObjects.cpp:8410`
-- 2 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x2: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+2:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+2:1/4/ptr: `StageObjects.cpp:8411`, `StageObjects.cpp:8411`
-- 2 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x3: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+3:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+3:1/4/ptr: `StageObjects.cpp:8412`, `StageObjects.cpp:8412`
-- 2 × root field:FixVector::x: `StageObjects.cpp:8701:21`, `StageObjects.cpp:8702:21`
-- 2 × root expr:g_unk0x0058e3ac[param_1]: `StageObjects.cpp:9448`, `StageObjects.cpp:9461`
+- 2 × root var:g_activeReplayStream: `StageObjects.cpp:1354:32`, `StageObjects.cpp:3767:15`
+- 2 × root site:StageObjects.cpp:14131:36:deref: `StageObjects.cpp:14041:9`, `StageObjects.cpp:1515`
+- 2 × root expr:pBox2 = pText = g_barTextColour: `StageObjects.cpp:5750`, `StageObjects.cpp:5757`
+- 2 × root expr:pText = g_barTextColour: `StageObjects.cpp:5778`, `StageObjects.cpp:5785`
+- 2 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x1: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+1:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+1:1/4/ptr: `StageObjects.cpp:8412`, `StageObjects.cpp:8412`
+- 2 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x2: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+2:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+2:1/4/ptr: `StageObjects.cpp:8413`, `StageObjects.cpp:8413`
+- 2 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4362 +0x3: touches var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+3:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4362[0] part+3:1/4/ptr: `StageObjects.cpp:8414`, `StageObjects.cpp:8414`
+- 2 × root field:FixVector::x: `StageObjects.cpp:8703:21`, `StageObjects.cpp:8704:21`
+- 2 × root expr:g_unk0x0058e3ac[param_1]: `StageObjects.cpp:9450`, `StageObjects.cpp:9463`
 - 2 × index ((BYTE *)pSlot - (BYTE *)pRecord->geometry.meshes) * (sizeof(Mesh *) - sizeof(int)) / sizeof(Mesh *): stride 0x-1 matches no array: `StageTiming.cpp:2315`, `StageTiming.cpp:2435`
 - 2 × root param:FindLoadTexture#3: `Texture.cpp:35:68`, `Texture.cpp:38:72`
-- 2 × bug through 1 of 2 possible origins: pointee FinRecord via var:TrackCollision_LoadFinishRecords:pNative:261 +0x0: index i: stride 0x30 on x86_64 steps ?, meant [] (0x30): `TrackCollision.cpp:265:33`, `TrackCollision.cpp:267:33`
 - 2 × index vertexOffset: stride 0x1 matches no array: `VehiclePhysics.cpp:271:31`, `VehiclePhysics.cpp:304:41`
 - 2 × root param:gzputs#1: `ZlibGzio.cpp:495:25`, `ZlibGzio.cpp:512:28`
 - 2 × root param:gztell#0: `ZlibGzio.cpp:655:20`, `ZlibGzio.cpp:733:20`
@@ -310,12 +127,8 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × root param:Game_CompareDeferredDrawDepth#1: `Game.cpp:2179`
 - 1 × root param:Game_CompareTransparentDrawEntries#0: `Game.cpp:2246`
 - 1 × root param:Game_CompareTransparentDrawEntries#1: `Game.cpp:2247`
-- 1 × root load:var:InRaceMenu_DrawNetworkPlayerList:pA:4948: `GameInfo.cpp:5006:38`
-- 1 × root load:var:InRaceMenu_DrawNetworkPlayerList:pB:4949: `GameInfo.cpp:5006:52`
 - 1 × root param:OptionMenu_SelectItemAndRefresh#0: `GameInfo.cpp:6313`
 - 1 × root var:g_previewOriginalNodeTypes: `GameInfo.cpp:7991`
-- 1 × root load:var:InRaceMenu_DrawLabelAndValueRows:pB:8692: `GameInfo.cpp:8757:24`
-- 1 × root load:var:InRaceMenu_DrawLabelAndValueRows:pA:8691: `GameInfo.cpp:8759:28`
 - 1 × root param:NetPlayers_ComparePlayerIDs#0: `NetPlayers.cpp:1022`
 - 1 × root param:NetPlayers_ComparePlayerIDs#1: `NetPlayers.cpp:1022`
 - 1 × root param:NetPlayers_CompareResultRecords#0: `NetPlayers.cpp:516:21`
@@ -331,26 +144,18 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × absolute address 0xff00008c: `RallyData.cpp:6883`
 - 1 × absolute address 0xff00008d: `RallyData.cpp:6884`
 - 1 × index scratchOffset: stride 0x1 matches no array: `RallyData.cpp:7504:32`
-- 1 × root site:SceneNode.cpp:1817:20:deref: `SceneNode.cpp:1817`
+- 1 × index itemOff: stride 0x1 matches no array: `SceneNode.cpp:2118:41`
 - 1 × root var:Sound_RefillMusicBufferRegions:pAudio1:625: `Sound.cpp:636:71`
 - 1 × root var:Sound_RefillMusicBufferRegions:pAudio2:626: `Sound.cpp:640:71`
 - 1 × root var:Sound_CopyBufferData:p1:807: `Sound.cpp:814:20`
 - 1 × root var:Sound_CopyBufferData:p2:809: `Sound.cpp:816:20`
-- 1 × index p->laneCount * p->samplesPerLane: stride 0x4 matches no array: `StageObjects.cpp:10227:33`
-- 1 × index p->laneCount: stride 0x114c matches no array: `StageObjects.cpp:10232:47`
-- 1 × index p->laneCount: stride 0x5c matches no array: `StageObjects.cpp:10234:56`
-- 1 × index lane: stride 0x114c matches no array: `StageObjects.cpp:11904:50`
-- 1 × index p->samplesPerLane * p->lane: stride 0x10 matches no array: `StageObjects.cpp:12181:84`
-- 1 × index p->samplesPerLane * p->laneCount: stride 0x10 matches no array: `StageObjects.cpp:14451:107`
-- 1 × index r.native: stride 0x1 matches no array: `StageObjects.cpp:1560:20`
-- 1 × index g_diskLayout_CarPartSet.diskSize: stride 0x1 matches no array: `StageObjects.cpp:1639:15`
-- 1 × index (p->samplesPerLane * extraSize + recordSize) * p->laneCapacity: stride 0x1 matches no array: `StageObjects.cpp:7276:23`
-- 1 × root param:Replay_SaveCarTorqueAndRecordState#0: `StageObjects.cpp:9831:66`
+- 1 × index p->laneCount * p->samplesPerLane: stride 0x4 matches no array: `StageObjects.cpp:10229:33`
+- 1 × index p->samplesPerLane * p->lane: stride 0x10 matches no array: `StageObjects.cpp:12183:84`
+- 1 × index p->samplesPerLane * p->laneCount: stride 0x10 matches no array: `StageObjects.cpp:14449:107`
+- 1 × index r.native: stride 0x1 matches no array: `StageObjects.cpp:1562:20`
+- 1 × index (p->samplesPerLane * extraSize + recordSize) * p->laneCapacity: stride 0x1 matches no array: `StageObjects.cpp:7278:23`
+- 1 × root param:Replay_SaveCarTorqueAndRecordState#0: `StageObjects.cpp:9833:66`
 - 1 × root var:StageUI_DrawStageGrid:pCell:892: `StageUI.cpp:907:27`
-- 1 × bug through 1 of 2 possible origins: pointee FinRecord via var:TrackCollision_LoadFinishRecords:pNative:261 +0x2c: touches *[0].<anon4>.pNext part+4:1/8/ptr on x86_64, meant *[0].type: `TrackCollision.cpp:270`
-- 1 × bug through 1 of 2 possible origins: pointee FinRecord via var:TrackCollision_LoadFinishRecords:pNative:261 +0x2d: touches *[0].<anon4>.pNext part+5:1/8/ptr on x86_64, meant *[0].flags: `TrackCollision.cpp:271`
-- 1 × bug through 1 of 2 possible origins: pointee FinRecord via var:TrackCollision_LoadFinishRecords:pNative:261 +0x2e: touches *[0].<anon4>.pNext part+6:1/8/ptr on x86_64, meant *[0].surfaces[0]: `TrackCollision.cpp:272`
-- 1 × bug through 1 of 2 possible origins: pointee FinRecord via var:TrackCollision_LoadFinishRecords:pNative:261 +0x2f: touches *[0].<anon4>.pNext part+7:1/8/ptr on x86_64, meant *[0].surfaces[1]: `TrackCollision.cpp:273`
 - 1 × root param:deflateInit_#2: `ZlibDeflate.cpp:216`
 - 1 × root param:gzsetparams#0: `ZlibGzio.cpp:221:20`
 - 1 × root param:gzprintf#0: `ZlibGzio.cpp:491:20`

@@ -250,14 +250,14 @@ void TrackCollision_LoadFinishRecords(void)
 
     g_unk0x005918d8 = 0;
     sprintf(CFrontend::m_stringDest, g_strFinFormat, GameMenu_GetChampionshipTransitionState());
-    g_finData = (FinRecord *)CGenericFileLoader::FindFile((GenericFile *)StageTiming_GetStageFile3(),
-                                                     CFrontend::m_stringDest, 0, &size, 0);
+    BYTE *pFile = (BYTE *)CGenericFileLoader::FindFile((GenericFile *)StageTiming_GetStageFile3(),
+                                                    CFrontend::m_stringDest, 0, &size, 0);
+    g_finData = NULL;
     g_finCount = size / 0x30;
     // PORT: the records are linked in place through the 32-bit field at +0x28
     // (Sector_RebuildStageGrid), which cannot hold a pointer on 64-bit
     // targets: copy them to native FinRecords, freed with the file buffer.
-    if (g_finData != NULL) {
-        BYTE *pFile = (BYTE *)g_finData;
+    if (pFile != NULL) {
         FinRecord *pNative = (FinRecord *)CFileBuffer::AllocateLockedBuffer(g_finCount * sizeof(FinRecord) + 1);
         int i;
 

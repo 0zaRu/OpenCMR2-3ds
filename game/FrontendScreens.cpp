@@ -7835,10 +7835,10 @@ void FrontendScroller_UpdateArcadeRally(Menu *pMenu)
 
 // Selects the menu row/page for a front-end list screen.
 // FUNCTION: CMR2 0x004fb370
-void FrontendMenu_SelectArcadeRallyRow(int param_1, int unused)
+void FrontendMenu_SelectArcadeRallyRow(Menu *pMenu, MenuItem *unused)
 {
-    RallyData_SetSelectionBits10To11((int)*(signed char *)(param_1 + 7) / 3);
-    RallyData_SetSelectionBits12To13((int)*(signed char *)(param_1 + 7) % 3);
+    RallyData_SetSelectionBits10To11(pMenu->cursor / 3);
+    RallyData_SetSelectionBits12To13(pMenu->cursor % 3);
     if (CGameInfo::GetConfiguredPlayerCount() == 2)
         RallyData_SetSecondarySelectionNibble(0);
     else

@@ -50,6 +50,8 @@ struct Chain {
     std::string punTo; // a pointer to one record reinterpreted as this record
     json::Value size = nullptr; // alloc roots: size in bytes (number) or source text
     std::vector<Term> sizeTerms; // alloc roots: the size as constant + terms
+    std::string sizeText;        // alloc roots: the size argument as written
+    std::string elementRecord;   // proved from the size expression, not a cast
     int64_t sizeConst = 0;
 };
 
@@ -451,6 +453,53 @@ private:
             c.prov = "expr:" + text(lv);
     }
 
+    bool containsSizeof(const Stmt *s)
+    {
+        if (const auto *u = dyn_cast<UnaryExprOrTypeTraitExpr>(s))
+            if (u->getKind() == UETT_SizeOf)
+                return true;
+        for (const Stmt *child : s->children())
+            if (child && containsSizeof(child))
+                return true;
+        return false;
+    }
+
+    // Only sizeof(record), a product with a count, and optional constant
+    // trailing padding describe a homogeneous record allocation. Merely
+    // finding one sizeof in a mixed arena's expression proves nothing.
+    std::string allocationRecord(const Expr *e)
+    {
+        e = e->IgnoreParenImpCasts();
+        if (const auto *u = dyn_cast<UnaryExprOrTypeTraitExpr>(e)) {
+            if (u->getKind() == UETT_SizeOf) {
+                QualType t = u->getTypeOfArgument();
+                if (const RecordDecl *rd = t->getAsRecordDecl()) {
+                    PendingRecords.insert(rd);
+                    return recordKey(rd);
+                }
+            }
+            return "";
+        }
+        const auto *b = dyn_cast<BinaryOperator>(e);
+        if (!b)
+            return "";
+        for (int reverse = 0; reverse < 2; ++reverse) {
+            const Expr *records = reverse ? b->getRHS() : b->getLHS();
+            const Expr *other = reverse ? b->getLHS() : b->getRHS();
+            std::string name = allocationRecord(records);
+            if (name.empty() || containsSizeof(other))
+                continue;
+            if (b->getOpcode() == BO_Mul)
+                return name;
+            if (b->getOpcode() == BO_Add) {
+                auto n = other->getIntegerConstantExpr(Ctx);
+                if (n && !n->isNegative())
+                    return name;
+            }
+        }
+        return "";
+    }
+
     void callLeaf(const CallExpr *call, Chain &c)
     {
         const FunctionDecl *callee = call->getDirectCallee();
@@ -465,10 +514,20 @@ private:
             int64_t size = 1;
             std::string sizeText;
             std::vector<const Expr *> variable;
+            bool ambiguousRecord = false;
             for (int i : alloc->second) {
                 if (i >= (int)call->getNumArgs())
                     continue;
                 const Expr *arg = call->getArg(i);
+                c.sizeText += (c.sizeText.empty() ? "" : " * ") + ("(" + text(arg) + ")");
+                std::string record = allocationRecord(arg);
+                if (!record.empty()) {
+                    if (!c.elementRecord.empty())
+                        ambiguousRecord = true;
+                    c.elementRecord = record;
+                } else if (containsSizeof(arg)) {
+                    ambiguousRecord = true;
+                }
                 if (auto v = arg->IgnoreParenImpCasts()->getIntegerConstantExpr(Ctx))
                     size *= v->getExtValue();
                 else {
@@ -476,6 +535,8 @@ private:
                     variable.push_back(arg);
                 }
             }
+            if (ambiguousRecord)
+                c.elementRecord.clear();
             if (sizeText.empty())
                 c.size = size;
             else
@@ -766,6 +827,8 @@ private:
             root["size"] = c.size;
             root["sizeConst"] = c.sizeConst;
             root["sizeTerms"] = termsJson(c.sizeTerms);
+            root["sizeText"] = c.sizeText;
+            root["elementRecord"] = c.elementRecord;
         }
         return json::Object{{"t", "site"},
                             {"key", uniqueKey(where(e->getExprLoc()) + ":" + kind)},

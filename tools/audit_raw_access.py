@@ -17,7 +17,7 @@ resolves that against each target's real record layouts and compares:
 Verdicts:
   bug        the access touches different fields, steps through a different
              array, or goes past its object on 64-bit
-  safe       proven to touch the same fields on both targets
+  safe       layout comparison passed, or individually reviewed with a reason
   unresolved the root could not be traced to a typed object or a plain
              buffer; needs a look (listed with the reason)
 
@@ -29,6 +29,7 @@ Needs clang-devel (the plugin is built against the installed Clang).
 import argparse
 import collections
 import concurrent.futures
+import hashlib
 import json
 import os
 import re
@@ -41,6 +42,7 @@ GAME = ROOT / "game"
 PLUGIN_SOURCE = ROOT / "tools/raw_access/RawAccess.cpp"
 CACHE = ROOT / "build/tools/raw_access"
 PLUGIN = ROOT / "build/tools/RawAccess.so"
+REVIEWS = ROOT / "tools/raw_access/reviewed.json"
 TARGETS = {"i386": "i386-pc-linux-gnu", "x86_64": "x86_64-pc-linux-gnu", "windows": "x86_64-pc-windows-msvc"}
 FLAGS = ["-fsyntax-only", "-std=gnu++17", "-fwrapv", "-fno-strict-aliasing", "-fms-extensions", "-fsigned-char",
          f"-I{GAME}", f"-I{ROOT / 'src'}", f"-I{ROOT / 'src/port/compat'}", "-include", str(ROOT / "src/port/types.h"),
@@ -333,7 +335,7 @@ class Tracer:
             return
         if kind == "alloc" and prov in self.alloc_types():
             # A buffer the game also uses as a typed array.
-            kind, root = "pointee", {"k": "pointee", "type": self.alloc_types()[prov], "prov": prov}
+            kind, root = "pointee", dict(root, k="pointee", type=self.alloc_types()[prov])
         rtype = (root.get("type") or {}).get("r")
         # A typed root is trusted when its record has the same layout
         # everywhere (whatever it really points at reads the same bytes).
@@ -386,14 +388,37 @@ class Tracer:
         """Allocations stored straight into a typed pointer: their element type."""
         if self.blob_views is None:
             views = collections.defaultdict(set)
+            carved = set()  # allocations split into several records
+
+            def allocations(root, seen=frozenset()):
+                prov = root.get("prov", "")
+                if root["k"] == "alloc":
+                    return {prov}
+                if prov in seen or len(seen) >= MAX_DEPTH:
+                    return set()
+                return set().union(*(allocations(f["root"], seen | {prov})
+                                     for f in self.flows.get(prov, [])))
+
             for flows in self.flows.values():
                 for f in flows:
                     r = f["root"]
+                    if f["off"] or f["terms"]:
+                        carved.update(allocations(r))
                     if r["k"] == "alloc" and f["off"] == 0 and not f["terms"] and f.get("view") and not f.get("int"):
                         v = f["view"]
                         if "r" in v:
                             views[r["prov"]].add(json.dumps(v, sort_keys=True))
-            self.blob_views = {k: json.loads(next(iter(v))) for k, v in views.items() if len(v) == 1}
+            self.blob_views = {k: json.loads(next(iter(v))) for k, v in views.items()
+                               if len(v) == 1 and k not in carved}
+            # The plugin proves the complete AST describes records and optional
+            # constant trailing padding. A textual sizeof match is not proof.
+            for flows in self.flows.values():
+                for f in flows:
+                    r = f["root"]
+                    record = r.get("elementRecord") if r["k"] == "alloc" else None
+                    if record in self.layout.records \
+                            and r["prov"] not in carved:
+                        self.blob_views[r["prov"]] = {"r": record}
         return self.blob_views
 
     def _loaded_field(self, prov):
@@ -420,6 +445,9 @@ def resolve(layout, origin, width, site):
             problems.append(f"outside {origin.prov} (0x{size:x} bytes) at 0x{off:x}+{width}")
         path = origin.prov.split(":")[-1] if origin.prov.startswith("var:") and origin.prov.count(":") == 1 else origin.prov
     elif origin.kind == "pointee":
+        if isinstance(origin.size, int) and not origin.terms and (
+                off < 0 or off + max(width, 1) > origin.size):
+            problems.append(f"outside the 0x{origin.size:x}-byte allocation at 0x{off:x}+{width}")
         # A pointer may point into an array of its pointee type.
         size = layout.size(t) or 1
         t = {"a": t, "n": 1 << 30, "sz": size << 30}
@@ -544,7 +572,7 @@ def classify(key, sites, layouts, tracers, base, others):
                     doubts.append(f"partial access of a scalar that is wider on {target}: {fmt_cover(c1)}")
                 else:
                     bugs.append(f"touches {fmt_cover(c1)} on {target}, meant {fmt_cover(c0)}")
-            if a.kind == "alloc":
+            if a.kind == "alloc" or a.prov.startswith("alloc:"):
                 # Sized with a fixed record size but indexed with sizeof.
                 for (text, st0), (_, st1) in zip(a.terms, b.terms):
                     for (atext, as0), (_, as1) in zip(a.size_terms, b.size_terms):
@@ -651,6 +679,44 @@ def check_storage(results):
 
 # ---- reporting -------------------------------------------------------------------
 
+def apply_reviews(results, targets, path, root=ROOT):
+    """Apply individually identified reviews of unchanged code, retaining the
+    automatic evidence. Stale, duplicate or missing entries fail closed."""
+    document = json.loads(path.read_text())
+    if document["targets"] != targets:
+        raise ValueError(f"{path}: reviews cover {document['targets']}, requested {targets}")
+    guards = document["guards"]
+    for name, expected in guards.items():
+        source = root / name
+        if not source.is_file() or hashlib.sha256(source.read_bytes()).hexdigest() != expected:
+            raise ValueError(f"{path}: stale review guard for {name}; inspect the accesses again")
+    by_key = {r["key"]: r for r in results}
+    pending, seen = [], set()
+    for entry in document["accesses"]:
+        key = entry["key"]
+        if key in seen:
+            raise ValueError(f"{path}: duplicate review {key}")
+        seen.add(key)
+        if "game/" + key.split(":")[0] not in guards:
+            raise ValueError(f"{path}: unguarded source for {key}")
+        result = by_key.get(key)
+        if not result or result["fn"] != entry["fn"] or result["text"] != entry["text"]:
+            raise ValueError(f"{path}: missing or changed access {key}")
+        if (result["verdict"] != entry["automatic_verdict"] or
+                result["reasons"] != entry["automatic_reasons"]):
+            raise ValueError(f"{path}: changed automatic evidence for {key}; inspect it again")
+        if not entry["reason"].strip():
+            raise ValueError(f"{path}: review without a reason for {key}")
+        pending.append((result, entry))
+    # Validate the entire document before changing any verdict.
+    for result, entry in pending:
+        result["automatic_verdict"] = result["verdict"]
+        result["automatic_reasons"] = result["reasons"]
+        result["review_reason"] = entry["reason"]
+        result["verdict"] = "safe"
+        result["reasons"] = []
+
+
 def markdown(results, targets):
     """Bugs by function, unresolved accesses by the root that blocks them."""
     counts = collections.Counter(r["verdict"] for r in results)
@@ -660,7 +726,18 @@ def markdown(results, targets):
            f"original meant) and the {', '.join(targets[1:])} layout (what the port touches).", "",
            f"| Verdict | Accesses |", "| --- | --- |",
            f"| bug | {counts['bug']} |", f"| unresolved | {counts['unresolved']} |", f"| safe | {counts['safe']} |", "",
-           "## Bugs", ""]
+           "`safe` means the layout checks passed or the access was individually reviewed below. It is not",
+           "a proof of bounds, lifetime, control flow or physics equivalence. `bug` is an automatic finding",
+           "that still needs inspection; `unresolved` is not a clean bill of health.", "",
+           "## Individually reviewed accesses", "",
+           "Reviews live in `tools/raw_access/reviewed.json`, with exact sites, explanations and SHA-256",
+           "guards for the source and headers. A source change or new automatic evidence invalidates the review and stops",
+           "report generation until it is checked again. The JSON report retains automatic verdicts and",
+           "reasons. Use `--without-reviews` to inspect all automatic findings.", ""]
+    for r in results:
+        if r.get("review_reason"):
+            out.append(f"- `{r['key']}` ({r['fn']}): `{r['text']}` — {r['review_reason']}")
+    out += ["", "## Bugs", ""]
     by_fn = collections.defaultdict(list)
     for r in results:
         if r["verdict"] == "bug":
@@ -709,6 +786,8 @@ def main():
     ap.add_argument("--targets", default="i386,x86_64")
     ap.add_argument("--verbose", action="store_true")
     ap.add_argument("--no-run", action="store_true", help="reuse the plugin output in build/tools/raw_access")
+    ap.add_argument("--reviews", type=Path, default=REVIEWS)
+    ap.add_argument("--without-reviews", action="store_true", help="show automatic verdicts without manual reviews")
     args = ap.parse_args()
     targets = args.targets.split(",")
     base, others = targets[0], targets[1:]
@@ -734,10 +813,18 @@ def main():
         r["address"] = addresses.get((key.split(":")[0], r["fn"]))
         results.append(r)
     check_storage(results)
+    if not args.without_reviews and args.reviews.exists():
+        try:
+            apply_reviews(results, targets, args.reviews)
+        except (ValueError, KeyError, OSError) as error:
+            sys.exit(str(error))
+    elif not args.without_reviews and args.reviews != REVIEWS:
+        sys.exit(f"review file does not exist: {args.reviews}")
 
     counts = collections.Counter(r["verdict"] for r in results)
     print(f"{len(results)} raw accesses: {counts['bug']} bug, {counts['unresolved']} unresolved, {counts['safe']} safe"
-          + (f"; {len(missing)} only on {base}" if missing else ""))
+          + (f"; {len(missing)} only on {base}" if missing else "")
+          + f"; {sum('review_reason' in r for r in results)} individually reviewed")
     by_file = collections.defaultdict(collections.Counter)
     for r in results:
         by_file[r["key"].split(":")[0]][r["verdict"]] += 1

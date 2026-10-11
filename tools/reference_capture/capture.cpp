@@ -142,8 +142,21 @@ static void VerifyPatch() {
 }
 
 static BYTE *Menu(const char *name) { return (BYTE *)Call(name); }
+static int ForcedCursor(int id) {
+    const char *spec = getenv("CMR_CAPTURE_CURSORS");
+    while (spec && *spec) {
+        int menu, cursor, used = 0;
+        if (sscanf(spec, "%d:%d%n", &menu, &cursor, &used) != 2) break;
+        if (menu == id) return cursor;
+        spec += used;
+        if (*spec == ',') ++spec;
+    }
+    return -1;
+}
 static void ConfigureMenu(BYTE *menu) {
     if (!menu) return;
+    int forced = ForcedCursor(*(short *)(menu + 4));
+    if (forced >= 0) { menu[7] = (BYTE)forced; return; }
     if (menu == Menu("menu_main")) menu[7] = 1;
     else if (menu == Menu("menu_modes")) menu[7] = 2;
     else if (menu == Menu("menu_difficulty")) { menu[7] = 0; menu[0x1f] = 0; }
@@ -225,9 +238,14 @@ static int WINAPI Dispatch() {
         if (mode == 2 && menu && menu[6] >= 4) menu[7] = 3; else ConfigureMenu(menu);
         if (frame % 12 == 6 || !menu) keys[0x1c] = 0x80;
         if (frame % 60 == 0) { fprintf(logFile, "frame=%u mode=%d time=%u menu=%d\n", frame, mode, now, menu ? *(short *)(menu+4) : -999); fflush(logFile); }
-    } else if (!raceOrigin) {
-        raceOrigin = now = 100000;
-        *(unsigned *)Address("frame_time") = now;
+    } else {
+        // Rally Challenge opens its bracket inside race resource mode.
+        if (!tick && getenv("CMR_CAPTURE_CURSORS") && frame % 12 == 6)
+            keys[0x1c] = 0x80;
+        if (!raceOrigin) {
+            raceOrigin = now = 100000;
+            *(unsigned *)Address("frame_time") = now;
+        }
     }
     EnumThreadWindows(GetCurrentThreadId(), SendKeys, 0);
     int result = realDispatch();

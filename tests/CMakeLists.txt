@@ -58,6 +58,8 @@ find_package(Python3 COMPONENTS Interpreter QUIET)
 if(Python3_Interpreter_FOUND)
     add_test(NAME reference_capture_format
         COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/reference_capture.py)
+    add_test(NAME raw_access_audit
+        COMMAND ${Python3_EXECUTABLE} ${CMAKE_CURRENT_SOURCE_DIR}/raw_access_audit.py)
 endif()
 
 set(OPENCMR2_BINK_TEST_DATA_DIR "" CACHE PATH "Optional original game data for movie and physics regression tests")
@@ -86,6 +88,18 @@ add_executable(replay_disk_test replay_disk.cpp)
 target_link_libraries(replay_disk_test PRIVATE opencmr2_platform)
 add_test(NAME replay_disk COMMAND replay_disk_test)
 
+add_executable(replay_events_test replay_events.cpp)
+target_link_libraries(replay_events_test PRIVATE opencmr2_platform)
+add_test(NAME replay_events COMMAND replay_events_test)
+
 add_executable(sector_culling_test sector_culling.cpp)
 target_link_libraries(sector_culling_test PRIVATE opencmr2_platform)
 add_test(NAME sector_culling COMMAND sector_culling_test)
+
+add_executable(sector_geometry_test sector_geometry.cpp)
+target_link_libraries(sector_geometry_test PRIVATE opencmr2_platform)
+add_test(NAME sector_geometry COMMAND sector_geometry_test)
+
+add_executable(headlight_collision_test headlight_collision.cpp)
+target_link_libraries(headlight_collision_test PRIVATE opencmr2_platform)
+add_test(NAME headlight_collision COMMAND headlight_collision_test)

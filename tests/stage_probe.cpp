@@ -59,6 +59,9 @@ extern void Race_StartPlayerAndOpponentReplays(int);
 extern void StageTiming_RecordDriverTimeoutFinish(int);
 extern BYTE *StageUI_GetRaceResultTable();
 extern Menu *g_pHeaderMenu;
+extern void GameInfo_SetConfiguredCheat(int, int);
+extern void GameInfo_ApplyCheatsForGameMode();
+extern char *Race_GetStagePathBuffer38340();
 
 static DWORD virtualTime = 1000;
 static DWORD Ticks() { return virtualTime; }
@@ -128,9 +131,21 @@ struct Probe : Diagnostics::TimingObserver {
             fprintf(stderr, "probe: country=%u stage=%u mode=%u cars=%d model=%d\n", RallyDataCountryIndex(), RallyDataStageIndex(), CGameInfo::GetConfiguredGameMode(), g_carOrderCount, Car_Get(0)->type);
             const char *expectedCars = getenv("OPENCMR2_PROBE_EXPECT_CARS");
             const char *expectedMode = getenv("OPENCMR2_PROBE_EXPECT_MODE");
-            scenarioCorrect = RallyDataCountryIndex() == 0 && RallyDataStageIndex() == 0 &&
+            const char *expectedCountry = getenv("OPENCMR2_PROBE_EXPECT_COUNTRY");
+            const char *expectedStage = getenv("OPENCMR2_PROBE_EXPECT_STAGE");
+            scenarioCorrect = RallyDataCountryIndex() == (expectedCountry ? atoi(expectedCountry) : 0) &&
+                RallyDataStageIndex() == (expectedStage ? atoi(expectedStage) : 0) &&
                 g_carOrderCount == (expectedCars ? atoi(expectedCars) : 1) &&
                 (!expectedMode || CGameInfo::GetConfiguredGameMode() == atoi(expectedMode));
+            if (const char *expected = getenv("OPENCMR2_PROBE_EXPECT_ARCADE_TRACK")) {
+                const unsigned track = RallyData_GetSelectionBits10To11() * 3 + RallyData_GetSelectionBits12To13();
+                char archive[16];
+                snprintf(archive, sizeof(archive), "\\cha%02d%s", atoi(expected) + 1,
+                         CGameInfo::GetGraphicsOptionBits27To28() == 0 ? "hi" : "lo");
+                const char *path = Race_GetStagePathBuffer38340();
+                fprintf(stderr, "probe: arcade track=%u archive=%s\n", track, path);
+                scenarioCorrect = scenarioCorrect && track == unsigned(atoi(expected)) && strstr(path, archive);
+            }
         }
     }
     void CaptureMemory() {
@@ -185,6 +200,11 @@ struct Probe : Diagnostics::TimingObserver {
             c.handbrake = controls.handbrake;
             c.field_0x1dc = controls.steering;
             c.field_0x1e0 = controls.pedal;
+        } else if (state == 8 && getenv("OPENCMR2_PROBE_IDLE")) {
+            memset(c.flag0x1d0, 0, sizeof(c.flag0x1d0));
+            memset(c.field_0x1d4, 0, sizeof(c.field_0x1d4));
+            c.handbrake = 1;
+            c.field_0x1dc = c.field_0x1e0 = 0;
         } else if (state == 8) {
             c.flag0x1d0[0] = drivingTick >= 100 && drivingTick < 125 ? 32 : 0;
             c.flag0x1d0[1] = drivingTick >= 150 && drivingTick < 175 ? 32 : 0;
@@ -240,6 +260,12 @@ struct Probe : Diagnostics::TimingObserver {
                 input.shift[0], input.shift[1], input.shift[2], input.shift[3]);
         for (int i = 0; i < g_carOrderCount; ++i) {
             const Car &c = g_carBuffer[g_carOrder[i]];
+            if (getenv("OPENCMR2_PROBE_OPPONENT") && c.index == 1 && tick % 100 == 0) {
+                const ReplayStream *p = (const ReplayStream *)Race_GetPlayerRecordPointer(1);
+                if (p) fprintf(stderr, "opponent tick=%u rate=%g playing=%d started=%d type=%d lane=%d/%d frame=%d/%d repeat=%u capacity=%d\n",
+                    tick, c.simulationRateHz, p->playing, p->playStarted, p->type, p->lane, p->laneCount,
+                    p->frame, p->lane < p->laneCount ? p->pLaneSamples[p->lane] : -1, p->field_0x21, p->samplesPerLane);
+            }
             fprintf(trace, "%s{\"id\":%d,\"type\":%d,\"gear\":%d,\"speed\":%d,\"sector\":%d,\"heading\":%u",
                     i ? "," : "", g_carOrder[i], c.type, c.gear, c.speed, c.sector, c.wheelSteeringAngle);
             Vector("position", c.position); Vector("position_prev", c.positionPrev);
@@ -290,6 +316,10 @@ static int ForcedCursor(int id) {
 
 static void ConfigureMenu(Menu *menu) {
     if (!menu) return;
+    // Unlock tracks only in this isolated test profile; still select them
+    // through the real menu and verify the archive chosen by the loader.
+    if (getenv("OPENCMR2_PROBE_UNLOCK_TRACKS") && !CGameInfo::IsRecordFlagSet(0xd))
+        CGameInfo::ToggleRecordFlag(0xd);
     if (menu == FrontendMenu_GetNetworkSessionDetails())
         if (const char *name = getenv("OPENCMR2_PROBE_SESSION_NAME"))
             snprintf(g_unk0x00818ebc, sizeof(g_unk0x00818ebc), "%s", name);
@@ -406,6 +436,10 @@ int main(int argc, char **argv) {
             raceOrigin = virtualTime;
         }
         if (mode != lastMode) { fprintf(stderr, "probe: resource mode %d at %u ms\n", mode, virtualTime); lastMode = mode; }
+        if (getenv("OPENCMR2_PROBE_HEADLIGHT_CHEAT") && CGameInfo::GetConfiguredGameMode() == 5) {
+            GameInfo_SetConfiguredCheat(0, 1);
+            GameInfo_ApplyCheatsForGameMode();
+        }
         // Stage lighting (shadow zones) is loaded only with this graphics option.
         if (mode != 3 && getenv("OPENCMR2_PROBE_LIGHTING")) CGameInfo::SetGraphicsOptionBit4(1);
         static bool lightingDone;
@@ -418,6 +452,10 @@ int main(int argc, char **argv) {
                     zones, d[0], d[1], d[2], d[3], d[4]);
         }
         memset(keys, 0, sizeof(keys));
+        // Rally Challenge has a bracket confirmation screen inside race
+        // resource mode, before any simulation tick can run.
+        if (mode == 3 && probe.tick == 0 && CGameInfo::GetConfiguredGameMode() == 4 && frame % 12 == 6)
+            keys[INPUT_KEY_RETURN] = 0x80;
         bool holdMap = false;
         if (mode != 3 || probe.finishInjected) {
             Menu *menu = mode == 3 ? g_pHeaderMenu : mode == 2 ? g_pMenu0x00831778 : FrontendMenu_GetActiveMenu();

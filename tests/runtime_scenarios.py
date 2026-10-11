@@ -13,6 +13,10 @@ SCENARIOS = {
     'arcade-time-trial': (500, {'OPENCMR2_PROBE_CURSORS': '0:2,88:2,29:0',
                               'OPENCMR2_PROBE_EXPECT_CARS': '2',
                               'OPENCMR2_PROBE_EXPECT_MODE': '7'}),
+    'italy-arcade-championship': (2500, {'OPENCMR2_PROBE_CURSORS': '0:2,88:0',
+                                      'OPENCMR2_PROBE_EXPECT_CARS': '6',
+                                      'OPENCMR2_PROBE_EXPECT_MODE': '5',
+                                      'OPENCMR2_PROBE_HEADLIGHT_CHEAT': '1'}),
     'multiplayer-host': (500, {'OPENCMR2_PROBE_CURSORS': '0:3,33:2,60:0,53:1,61:6,19:2,62:3',
                              'OPENCMR2_PROBE_EXPECT_MODE': '8',
                              'OPENCMR2_PROBE_SESSION_NAME': 'TEST'}),
@@ -24,6 +28,16 @@ SCENARIOS = {
                               'OPENCMR2_PROBE_FINISH_AT_TICK': '500'}),
     'recorded-replay': (1000, {'OPENCMR2_PROBE_REPLAY_AT_TICK': '500'}),
 }
+for mode, cursor, cars in [('single-race', 1, 6), ('time-trial', 2, 2)]:
+    for track, country in enumerate(['italy', 'sweden', 'greece', 'australia',
+                                      'finland', 'france', 'kenya', 'united-kingdom']):
+        SCENARIOS[f'arcade-{mode}-{country}'] = (500, {
+            'OPENCMR2_PROBE_CURSORS': f'0:2,88:{cursor},29:1,37:{track}',
+            'OPENCMR2_PROBE_EXPECT_CARS': str(cars),
+            'OPENCMR2_PROBE_EXPECT_MODE': '6' if cursor == 1 else '7',
+            'OPENCMR2_PROBE_EXPECT_ARCADE_TRACK': str(track),
+            'OPENCMR2_PROBE_UNLOCK_TRACKS': '1',
+        })
 REPLAY = re.compile(r'probe: replay tick=(\d+) playing=(-?\d+) lane=(-?\d+) frame=(-?\d+) length=(-?\d+)')
 
 

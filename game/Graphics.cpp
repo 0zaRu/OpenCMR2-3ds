@@ -2899,7 +2899,8 @@ Mesh *Mesh_GetShadowCylinder(Mesh *pMesh)
             }
         }
 
-        pCyl = (Mesh *)CFileBuffer::AllocateLockedBuffer(offsetof(Mesh, field_0x108));
+        // A native Mesh object needs its complete header, including the tail.
+        pCyl = (Mesh *)CFileBuffer::AllocateLockedBuffer(sizeof(Mesh));
         g_shadowCylinders[g_shadowCylinderCount++] = pCyl;
         memset(pCyl, 0, offsetof(Mesh, field_0x108));
         strcpy((char *)pCyl, (char *)pMesh);

@@ -344,7 +344,7 @@ void FrontendMenu_UpdateArcadeChampionshipTransmission(Menu *pMenu);
 void FrontendMenu_SelectArcadeChampionshipTransmission(Menu *pMenu, int param);
 void FrontendScroller_InitArcadeRally(Menu *pMenu, int param);
 void FrontendScroller_UpdateArcadeRally(Menu *pMenu);
-void FrontendMenu_SelectArcadeRallyRow(int param_1, int unused);
+void FrontendMenu_SelectArcadeRallyRow(Menu *pMenu, MenuItem *unused);
 
 extern int g_unk0x00819128;
 unsigned int RallyData_GetSelectionBits10To11(void);

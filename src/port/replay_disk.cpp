@@ -21,8 +21,8 @@ bool PayloadSize(const ReplayStream &p, size_t &size) {
 void Pointers(ReplayStream &p) {
     unsigned char *data = reinterpret_cast<unsigned char *>(&p) + sizeof(p);
     const size_t record = p.type == 0 ? sizeof(ReplayInputLane) : sizeof(ReplayStateLane);
-    p.pInputs = p.type == 0 ? data : nullptr;
-    p.pStates = p.type != 0 ? data : nullptr;
+    p.pInputs = p.type == 0 ? reinterpret_cast<ReplayInputLane *>(data) : nullptr;
+    p.pStates = p.type != 0 ? reinterpret_cast<ReplayStateLane *>(data) : nullptr;
     data += size_t(p.laneCapacity) * record;
     p.pSamples = p.type == 2 ? data : nullptr;
     p.pFrames = p.type != 2 ? data : nullptr;

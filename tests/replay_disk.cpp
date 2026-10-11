@@ -25,7 +25,7 @@ int main(){
         REQUIRE(p->steeringModeOption==flag && p->headingFrom==-123 && p->headingTo==456 && p->field_0x10c==8);
         REQUIRE((BYTE *)p->pLaneSamples==(BYTE *)p+sizeof(*p)+counts-0x110 && !memcmp(p->pLaneSamples,lengths,sizeof(lengths)));
         REQUIRE(!memcmp((BYTE *)p+sizeof(*p),input.data()+0x110,payload));
-        REQUIRE(type==0?p->pInputs==(BYTE *)p+sizeof(*p)&&!p->pStates:p->pStates==(BYTE *)p+sizeof(*p)&&!p->pInputs);
+        REQUIRE(type==0?(BYTE *)p->pInputs==(BYTE *)p+sizeof(*p)&&!p->pStates:(BYTE *)p->pStates==(BYTE *)p+sizeof(*p)&&!p->pInputs);
         std::vector<BYTE> output;REQUIRE(ReplayDisk_Write(p,output));REQUIRE(output.size()==input.size());
         for(int i=0;i<g_diskLayout_ReplayStream.pointerCount;i++){
             auto &field=g_diskLayout_ReplayStream.pointers[i];uint32_t value=0;memcpy(original.data()+field.disk,&value,4);

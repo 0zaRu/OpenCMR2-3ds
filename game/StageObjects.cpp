@@ -150,7 +150,7 @@ BYTE StageObject_GetCarRecordState(int index);
 int StageObject_UsesExtendedMode(void);
 void Replay_EncodeControlPacket(BYTE *pIn, BYTE *pOut, int active, int handbrake, int lightA, int lightB);
 int Replay_DecodeInputPacket(int *pState, BYTE *pIn, BYTE *pOut, BYTE *pCounter, Car *pCar);
-void Replay_CaptureCarSnapshot(BYTE *pDst, BYTE car);
+void Replay_CaptureCarSnapshot(ReplayInputLane *pDst, BYTE car);
 // Oriented box of a stage object (same layout as in Collision2D.cpp).
 
 // One firework rocket of the pool at g_unk0x00590af8 (0x938 bytes). Each
@@ -193,10 +193,10 @@ struct FireworkRocket {
 };
 CMR2_LAYOUT_CHECK(FireworkRocketSize, sizeof(FireworkRocket) == 0x938);
 
-void Replay_InitObjectListCarState(BYTE *pLane, BYTE param_2);
+void Replay_InitObjectListCarState(ReplayInputLane *pLane, BYTE param_2);
 void Replay_SaveCarTorqueAndRecordState(int *pState, BYTE car);
 void Replay_RestoreCarTorqueAndRecordState(int *pState, BYTE car);
-void Replay_InitMeshListCarState(BYTE *pLane, BYTE param_2);
+void Replay_InitMeshListCarState(ReplayStateLane *pLane, BYTE param_2);
 void Replay_EncodeCarControls(BYTE *pOut, BYTE car);
 int Replay_DecodeCarControls(int *pState, BYTE *pIn, BYTE car, BYTE *pCounter);
 void Replay_InitSlots(void);
@@ -346,7 +346,7 @@ unsigned int AI_SelectCarsWithinOvertakeWindow(int index, BYTE *pOut, int *pCoun
 int AI_UpdateAttractDrivingControls(int car, int preview);
 void StageObject_CreateRecordGlows(void);
 void StageObject_SpawnCarHeadlightGlow(BYTE car);
-void StageObject_TestHeadlightGlowsAgainstCarBox(Car *pCar, int *param_2);
+void StageObject_TestHeadlightGlowsAgainstCarBox(Car *pCar, CollisionBox *pBox);
 void CarDamage_UpdateFlyingDebris(void);
 void StageObject_InterpolateHeadlightGlows(int t);
 void StageObject_SetVehicleEffectColour(BYTE *pColour);
@@ -864,6 +864,8 @@ void StageObject_ResetObjectValuesToUnity(void)
 // Per-type animation tables (0x58e394..0x58e4a4; the loader also fills the tail bytes).
 // GLOBAL: CMR2 0x0058e394
 BYTE *g_unk0x0058e394[68];
+// Counts are bytes in the file, separate from native route pointers.
+static signed char g_aiRouteTableCounts[4];
 // GLOBAL: CMR2 0x0058e4a4
 BYTE *g_unk0x0058e4a4;
 
@@ -1631,13 +1633,13 @@ void RallyData_ResetRaceRecordAndRouteProbe(int index);
 
 // Snapshots a car's state into the 0x1100-byte record at pDst.
 // FUNCTION: CMR2 0x0046c240
-void Replay_CaptureCarSnapshot(BYTE *pDst, BYTE car)
+void Replay_CaptureCarSnapshot(ReplayInputLane *pDst, BYTE car)
 {
     Car *pCar = Car_Get(car);
 
-    Disk_Pack(pDst, StageTiming_GetCarReplayRecord(car), &g_diskLayout_CarPartSet);
-    Disk_Pack(pDst + g_diskLayout_CarPartSet.diskSize, pCar, &g_diskLayout_Car);
-    Replay_CopyBlock6((Block6 *)RallyData_GetCarRaceRecord(car), (Block6 *)(pDst + 0x10f4));
+    Disk_Pack(pDst->partState, StageTiming_GetCarReplayRecord(car), &g_diskLayout_CarPartSet);
+    Disk_Pack(pDst->carState, pCar, &g_diskLayout_Car);
+    Replay_CopyBlock6((Block6 *)RallyData_GetCarRaceRecord(car), (Block6 *)pDst->raceRecord);
     RallyData_ResetRaceRecordAndRouteProbe(car);
 }
 
@@ -7256,11 +7258,11 @@ void Replay_SetupPointers(ReplayStream *p, int unused)
     int extraSize;
 
     if (p->type == 0) {
-        p->pInputs = (BYTE *)p + sizeof(ReplayStream);
+        p->pInputs = (ReplayInputLane *)((BYTE *)p + sizeof(ReplayStream));
         p->pStates = NULL;
         recordSize = 0x114c;
     } else {
-        p->pStates = (BYTE *)p + sizeof(ReplayStream);
+        p->pStates = (ReplayStateLane *)((BYTE *)p + sizeof(ReplayStream));
         p->pInputs = NULL;
         recordSize = 0x5c;
     }
@@ -10191,7 +10193,7 @@ void Replay_AdvanceLiveRecordingStreams(void)
             else
                 value = (char)((CallbackStateMachine *)pInfo)->records[p->car].packedState;
             if (p->type == 0) {
-                pInput = (ReplayInputLane *)(p->pInputs + p->laneCount * 0x114c);
+                pInput = p->pInputs + p->laneCount;
                 if (value != pInput->events[pInput->eventCount - 1].value) {
                     pEvent = &pInput->events[pInput->eventCount];
                     pEvent->value = value;
@@ -10206,7 +10208,7 @@ void Replay_AdvanceLiveRecordingStreams(void)
                     }
                 }
             } else {
-                pState = (ReplayStateLane *)(p->pStates + p->laneCount * 0x5c);
+                pState = p->pStates + p->laneCount;
                 if (value != pState->events[pState->eventCount - 1].value) {
                     pEvent = &pState->events[pState->eventCount];
                     pEvent->value = value;
@@ -10229,9 +10231,9 @@ done:
             pFrame[2] &= 0xc0;
             p->field_0x18 = 1;
             if (p->type == 0)
-                p->pInputRecLane = p->pInputs + p->laneCount * 0x114c;
+                p->pInputRecLane = p->pInputs + p->laneCount;
             else
-                p->pStateRecLane = p->laneCount * 0x5c + p->pStates;
+                p->pStateRecLane = p->pStates + p->laneCount;
             p->recordStarted = 1;
         }
     }
@@ -10879,19 +10881,19 @@ int Replay_InitCarStreamState(ReplayStream *p, int unused, BYTE car)
         p->pFrames[2] &= 0xc0;
     if (p->type == 0) {
         pInfo = StageUI_GetRaceResultTable();
-        p->pInputs[0x1110] = (BYTE)((unsigned int)((CallbackStateMachine *)pInfo)->records[p->car].packedState >> 16);
-        *(short *)(p->pInputs + 0x110c) = 0;
-        *(short *)(p->pInputs + 0x110e) = 0;
-        p->pInputs[0x1148] = 1;
+        p->pInputs[0].events[0].value = (BYTE)((unsigned int)((CallbackStateMachine *)pInfo)->records[p->car].packedState >> 16);
+        p->pInputs[0].events[0].frame = 0;
+        p->pInputs[0].events[0].count = 0;
+        p->pInputs[0].eventCount = 1;
     } else {
         pInfo = StageUI_GetRaceResultTable();
         if (CGameInfo::GetGameModeOptionBit19())
-            p->pStates[0x20] = (BYTE)((unsigned int)((CallbackStateMachine *)pInfo)->records[0].packedState >> 16);
+            p->pStates[0].events[0].value = (BYTE)((unsigned int)((CallbackStateMachine *)pInfo)->records[0].packedState >> 16);
         else
-            p->pStates[0x20] = (BYTE)((unsigned int)((CallbackStateMachine *)pInfo)->records[p->car].packedState >> 16);
-        *(short *)(p->pStates + 0x1c) = 0;
-        *(short *)(p->pStates + 0x1e) = 0;
-        p->pStates[0x58] = 1;
+            p->pStates[0].events[0].value = (BYTE)((unsigned int)((CallbackStateMachine *)pInfo)->records[p->car].packedState >> 16);
+        p->pStates[0].events[0].frame = 0;
+        p->pStates[0].events[0].count = 0;
+        p->pStates[0].eventCount = 1;
     }
     if (p->type == 0)
         Replay_CaptureCarSnapshot(p->pInputs, car);
@@ -11845,19 +11847,19 @@ void StageObject_ResetCarObjectState(Car *pCar)
 // per-type block, copies it into the stage block, mirrors the road book entry
 // when the car has one, and refreshes the rally-data bookkeeping.
 // FUNCTION: CMR2 0x0046c2a0
-void Replay_InitObjectListCarState(BYTE *pLane, BYTE param_2)
+void Replay_InitObjectListCarState(ReplayInputLane *pLane, BYTE param_2)
 {
     Car *pCar;
     RaceRecord *pRecord;
 
     pCar = Car_Get((int)param_2);
     StageObject_ResetCarObjectState(pCar);
-    Replay_RestoreCarState((Block0x309 *)(pLane + 0x4d0), pCar);
+    Replay_RestoreCarState((Block0x309 *)pLane->carState, pCar);
     if (pCar->field_0xb50 != 0) {
-        Replay_RestoreAuxState((Block0x134 *)pLane, (Block0x134 *)StageTiming_GetCarReplayRecord((int)param_2));
+        Replay_RestoreAuxState((Block0x134 *)pLane->partState, (Block0x134 *)StageTiming_GetCarReplayRecord((int)param_2));
     }
     pRecord = RallyData_GetCarRaceRecord((int)param_2);
-    Replay_CopyBlock6((Block6 *)(pLane + 0x10f4), (Block6 *)pRecord);
+    Replay_CopyBlock6((Block6 *)pLane->raceRecord, (Block6 *)pRecord);
     RallyData_ResetRaceRecordAndRouteProbe((int)param_2);
     StageTiming_ResetScaledViewObjectStates();
     RallyData_MarkAllElementsReached();
@@ -11867,7 +11869,7 @@ void Replay_InitObjectListCarState(BYTE *pLane, BYTE param_2)
 // Initialises the stage-object state of one car (list type 2): same reset as
 // above but without the per-type block copy or the road book mirror.
 // FUNCTION: CMR2 0x0046c410
-void Replay_InitMeshListCarState(BYTE *pLane, BYTE param_2)
+void Replay_InitMeshListCarState(ReplayStateLane *pLane, BYTE param_2)
 {
     Car *pCar;
 
@@ -11901,17 +11903,17 @@ int Replay_SelectAndInitializeLane(ReplayStream *p, short lane, short start, BYT
         p->frame = -start;
     p->field_0x21 = 0;
     if (p->type == 0)
-        Replay_InitObjectListCarState(p->pInputs + lane * 0x114c, car);
+        Replay_InitObjectListCarState(p->pInputs + lane, car);
     else if (p->type == 1)
-        Replay_RestoreCarTorqueAndRecordState((int *)(lane * 0x5c + p->pStates), car);
+        Replay_RestoreCarTorqueAndRecordState((int *)(p->pStates + lane), car);
     else
-        Replay_InitMeshListCarState(lane * 0x5c + p->pStates, car);
+        Replay_InitMeshListCarState(p->pStates + lane, car);
     Events_Flush();
     p->field_0x14 = 0;
     if (p->type == 0)
-        p->field_0x10c = p->pInputs[lane * 0x114c + 0x1110];
+        p->field_0x10c = p->pInputs[lane].events[0].value;
     else
-        p->field_0x10c = p->pStates[lane * 0x5c + 0x20];
+        p->field_0x10c = p->pStates[lane].events[0].value;
     if (car == 0 && (RallyData_GetSelectionFlag26() || ((char)RallyData_GetSelectionFlag27() && !CGameInfo::GetGameModeOptionBit19()))) {
         RallyData_RestoreAllCarRaceRecords();
         StageTiming_PlaceEventStartingGrid(1);
@@ -12565,7 +12567,7 @@ void StageObject_UpdatePlayerControlIndicators(int player, int device)
 // torque of the car and applies the mode 2 collision deformation.
 // match 77%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x0047d850
-void StageObject_TestHeadlightGlowsAgainstCarBox(Car *pCar, int *param_2)
+void StageObject_TestHeadlightGlowsAgainstCarBox(Car *pCar, CollisionBox *pBox)
 {
     FixVector offset;
     FixVector dir;
@@ -12582,17 +12584,17 @@ void StageObject_TestHeadlightGlowsAgainstCarBox(Car *pCar, int *param_2)
     i = 100;
     do {
         if (GLOW_RECORD.active != 0 && GLOW_RECORD.car != pCar->index) {
-            pAnchor = (FixVector *)param_2[0x25];
+            pAnchor = pBox->pVertex;
             offset.x = GLOW_RECORD.position.x - pAnchor->x;
             offset.y = GLOW_RECORD.position.y - pAnchor->y;
             offset.z = GLOW_RECORD.position.z - pAnchor->z;
             if (FIX_ABS(offset.x) < 0x640000) {
                 if (FIX_ABS(offset.y) < 0x640000) {
-                    if (FIX_ABS(offset.z) < 0x640000 && GLOW_RECORD.position.y >= param_2[3] &&
-                        GLOW_RECORD.position.y <= param_2[2]) {
-                        dot1 = FixVecDot(&offset, (FixVector *)(param_2 + 4));
-                        dot2 = FixVecDot(&offset, (FixVector *)(param_2 + 7));
-                        if (FIX_ABS(dot1) <= param_2[0] && FIX_ABS(dot2) <= param_2[1]) {
+                    if (FIX_ABS(offset.z) < 0x640000 && GLOW_RECORD.position.y >= pBox->bottom &&
+                        GLOW_RECORD.position.y <= pBox->top) {
+                        dot1 = FixVecDot(&offset, &pBox->axisA);
+                        dot2 = FixVecDot(&offset, &pBox->axisB);
+                        if (FIX_ABS(dot1) <= pBox->halfWidth && FIX_ABS(dot2) <= pBox->halfLength) {
                             FixVecScale(&dir, &GLOW_RECORD.velocity, 0x20000);
                             FixVecScaleRecip(&dir, &dir, FixVecLength(&dir));
                             dir.y += 0x6666;
@@ -13918,7 +13920,6 @@ BYTE *AI_LoadStageRouteTables(void)
     BYTE *pEnd;
     BYTE level;
     BYTE *p;
-    BYTE *pEntry;
     int i;
     int k;
 
@@ -13962,60 +13963,56 @@ BYTE *AI_LoadStageRouteTables(void)
         g_unk0x0058e37c[i] = (int *)p;
         p += 4;
     }
-    ((char *)&g_unk0x0058e394[0x42])[1] = *p;
+    g_aiRouteTableCounts[1] = *p;
     p += 4;
-    for (i = 1; i <= ((char *)&g_unk0x0058e394[0x42])[1]; i++) {
+    for (i = 1; i <= g_aiRouteTableCounts[1]; i++) {
         g_unk0x0058e394[i] = p;
         p += 0x88;
     }
-    ((char *)&g_unk0x0058e394[0x42])[2] = *p;
+    g_aiRouteTableCounts[2] = *p;
     p += 4;
-    for (i = 1; i <= ((char *)&g_unk0x0058e394[0x42])[2]; i++) {
+    for (i = 1; i <= g_aiRouteTableCounts[2]; i++) {
         g_unk0x0058e394[6 + i] = p;
         p += 0x14;
     }
-    ((char *)&g_unk0x0058e394[0x42])[0] = *p;
+    g_aiRouteTableCounts[0] = *p;
     p += 4;
-    for (i = 1; i <= ((char *)&g_unk0x0058e394[0x42])[0]; i++) {
+    for (i = 1; i <= g_aiRouteTableCounts[0]; i++) {
         g_unk0x0058e394[0x38 + i] = p;
         p += 0x10;
     }
-    ((char *)&g_unk0x0058e394[0x42])[3] = *p;
+    g_aiRouteTableCounts[3] = *p;
     p += 4;
-    for (i = 1; i <= ((char *)&g_unk0x0058e394[0x42])[3]; i++) {
+    for (i = 1; i <= g_aiRouteTableCounts[3]; i++) {
         g_unk0x0058e394[0x2e + i] = p;
         p += 0x20;
     }
     // PORT: the network records hold 32-bit slots for the weight pointers set
     // below; copy them to native AINetworks, freed with the file data.
     {
-        int count = ((char *)&g_unk0x0058e394[0x42])[3];
+        int count = g_aiRouteTableCounts[3];
         AINetwork *pNative = (AINetwork *)CFileBuffer::AllocateLockedBuffer(count * sizeof(AINetwork) + 1);
 
-        for (i = 1; i <= count; i++) {
-            memcpy(&pNative[i - 1], g_unk0x0058e394[0x2e + i], offsetof(AINetwork, pWeights));
-            g_unk0x0058e394[0x2e + i] = (BYTE *)&pNative[i - 1];
+        for (i = 0; i < count; i++) {
+            AINetwork *network = &pNative[i];
+            memcpy(network, g_unk0x0058e394[0x2f + i], offsetof(AINetwork, pWeights));
+            for (k = 1; k < network->layerCount; k++) {
+                network->pWeights[k] = (int *)p;
+                p += (network->layerSizes[k - 1] + 1) * network->layerSizes[k] * 4;
+            }
+            g_unk0x0058e394[0x2f + i] = (BYTE *)network;
         }
         Disk_AttachToBuffer(pData, pNative);
     }
-    for (i = 1; i <= ((char *)&g_unk0x0058e394[0x42])[3]; i++) {
-        pEntry = g_unk0x0058e394[0x2e + i];
-        if (1 < ((AINetwork *)pEntry)->layerCount) {
-            for (k = 1; k < ((AINetwork *)pEntry)->layerCount; k++) {
-                ((AINetwork *)pEntry)->pWeights[k] = (int *)p;
-                p += (((AINetwork *)pEntry)->layerSizes[k - 1] + 1) * ((AINetwork *)pEntry)->layerSizes[k] * 4;
-            }
-        }
-    }
     g_unk0x0058e394[0x43] = p;
     g_unk0x0058e4a4 = p + 0x100;
-    StageTiming_RelocateCarRecordRoutePoints(g_unk0x0058e4a4 + 0x1720, &g_unk0x0058e394[0x38], ((char *)&g_unk0x0058e394[0x42])[0]);
+    StageTiming_RelocateCarRecordRoutePoints(g_unk0x0058e4a4 + 0x1720, &g_unk0x0058e394[0x38], g_aiRouteTableCounts[0]);
     return pEnd;
 }
 #undef AI_INT
 #undef AI_CHAR
 
-void Replay_InitObjectListCarState(BYTE *pLane, BYTE param_2);
+void Replay_InitObjectListCarState(ReplayInputLane *pLane, BYTE param_2);
 void Replay_RestoreCarTorqueAndRecordState(int *pState, BYTE car);
 int Replay_DecodeCarControls(int *pState, BYTE *pIn, BYTE car, BYTE *pCounter);
 struct ReplayStream;
@@ -14050,9 +14047,9 @@ void Replay_PlayStreamFrame(int *pState)
     if (p->playStarted != 0) {
         if (p->frame < 0) {
             if (p->type == 0)
-                Replay_InitObjectListCarState(p->pInputs + p->lane * 0x114c, p->car);
+                Replay_InitObjectListCarState(p->pInputs + p->lane, p->car);
             else
-                Replay_RestoreCarTorqueAndRecordState((int *)(p->lane * 0x5c + p->pStates), p->car);
+                Replay_RestoreCarTorqueAndRecordState((int *)(p->pStates + p->lane), p->car);
             if (p->frame != -1) {
                 for (k = 0; k < 4; k++)
                     pCar->wheelLoad[k] = 0;
@@ -14067,8 +14064,8 @@ void Replay_PlayStreamFrame(int *pState)
                 p->frame++;
             found = -1;
             if (p->type == 0) {
-                count = ((ReplayInputLane *)p->pInputs)[p->lane].eventCount;
-                pEvents = ((ReplayInputLane *)p->pInputs)[p->lane].events;
+                count = p->pInputs[p->lane].eventCount;
+                pEvents = p->pInputs[p->lane].events;
                 for (k = 0; k < count; k++) {
                     pEvent = &pEvents[k];
                     if (p->frame < pEvent->frame ||
@@ -14078,8 +14075,8 @@ void Replay_PlayStreamFrame(int *pState)
                     }
                 }
             } else {
-                count = ((ReplayStateLane *)p->pStates)[p->lane].eventCount;
-                pEvents = ((ReplayStateLane *)p->pStates)[p->lane].events;
+                count = p->pStates[p->lane].eventCount;
+                pEvents = p->pStates[p->lane].events;
                 for (k = 0; k < count; k++) {
                     pEvent2 = &pEvents[k];
                     if (p->frame < pEvent2->frame ||
@@ -14090,9 +14087,10 @@ void Replay_PlayStreamFrame(int *pState)
                 }
             }
             if (found == -1) {
-                found = ((ReplayStateLane *)p->pStates)[p->lane].eventCount;
                 if (p->type == 0)
-                    found = ((ReplayInputLane *)p->pInputs)[p->lane].eventCount;
+                    found = p->pInputs[p->lane].eventCount;
+                else
+                    found = p->pStates[p->lane].eventCount;
             }
             // Both formats index the event table from its base. In the original
             // assembly the final load follows two pops, so its stack offset
@@ -14113,10 +14111,10 @@ void Replay_PlayStreamFrame(int *pState)
         p->field_0x14 = 1;
         if (p->type == 0) {
             p->playStarted = 1;
-            p->pInputLane = p->pInputs + p->lane * 0x114c;
+            p->pInputLane = p->pInputs + p->lane;
         } else {
             p->playStarted = 1;
-            p->pStateLane = p->lane * 0x5c + p->pStates;
+            p->pStateLane = p->pStates + p->lane;
         }
     }
 }
