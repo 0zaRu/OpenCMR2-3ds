@@ -819,8 +819,16 @@ void ForceFeedback_UpdateSlot(BYTE *pCar, FixVector *pIn, int nonzero)
     FixVector v;
     int x;
 
+    // PORT: the slots belong to the two local players, but collisions call
+    // this for every car; the original indexes past the array with AI cars
+    // (index >= 2) and overwrites the globals that follow, g_unk0x00539278
+    // among them. Those updates go to a scratch slot instead.
+    static Unk0x00539278 s_otherCarSlot;
     g_unk0x0053937c = pCar;
-    g_unk0x00539278 = &g_forceFeedbackSlots[((Car *)pCar)->index];
+    if (((Car *)pCar)->index >= 0 && ((Car *)pCar)->index < 2)
+        g_unk0x00539278 = &g_forceFeedbackSlots[((Car *)pCar)->index];
+    else
+        g_unk0x00539278 = &s_otherCarSlot;
     FixMatrix_InverseRotateVector(&v, pIn, ((Car *)pCar)->pWorld);
     if (nonzero != 0) {
         x = v.z;

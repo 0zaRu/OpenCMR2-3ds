@@ -2,6 +2,7 @@
 // both, MSVC calls RallyDataState first.
 short Car_GetOrderCount(void);
 #include "SoundCurve.h"
+#include "port/disk.h"
 #include "AINetwork.h"
 #include "FinRecord.h"
 #include "StageObjectCount.h"
@@ -14089,6 +14090,18 @@ BYTE *AI_LoadStageRouteTables(void)
     for (i = 1; i <= ((char *)&g_unk0x0058e394[0x42])[3]; i++) {
         g_unk0x0058e394[0x2e + i] = p;
         p += 0x20;
+    }
+    // PORT: the network records hold 32-bit slots for the weight pointers set
+    // below; copy them to native AINetworks, freed with the file data.
+    {
+        int count = ((char *)&g_unk0x0058e394[0x42])[3];
+        AINetwork *pNative = (AINetwork *)CFileBuffer::AllocateLockedBuffer(count * sizeof(AINetwork) + 1);
+
+        for (i = 1; i <= count; i++) {
+            memcpy(&pNative[i - 1], g_unk0x0058e394[0x2e + i], offsetof(AINetwork, pWeights));
+            g_unk0x0058e394[0x2e + i] = (BYTE *)&pNative[i - 1];
+        }
+        Disk_AttachToBuffer(pData, pNative);
     }
     for (i = 1; i <= ((char *)&g_unk0x0058e394[0x42])[3]; i++) {
         pEntry = g_unk0x0058e394[0x2e + i];
