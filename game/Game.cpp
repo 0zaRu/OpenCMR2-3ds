@@ -2824,11 +2824,11 @@ void Game_UpdateType3ObjectState(Unk004238e0 *param1, void *param2)
 
 
 // GLOBAL: CMR2 0x005a0068
-BYTE g_unk0x005a0068[0x50];
+NetSessionDesc g_networkSession;
 
 // The current session description and the list of enumerated sessions
-#define SESSION (*(NetSessionDesc *)g_unk0x005a0068)
-#define SESSIONS ((NetSessionDesc *)CGameInfo::m_unk0x0059fa20)
+#define SESSION g_networkSession
+#define SESSIONS CGameInfo::m_enumeratedSessions
 
 // Reads the description of the joined session into SESSION (the session
 // name is copied to m_unk0x005a00b8).
@@ -2870,7 +2870,7 @@ int Network_HostNamedSession(char *pSessionName, char *pPassword, DWORD user1, D
 {
     HRESULT hr;
 
-    memset(g_unk0x005a0068, 0, sizeof(g_unk0x005a0068));
+    memset(&g_networkSession, 0, sizeof(g_networkSession));
     SESSION.dwSize = sizeof(NetSessionDesc);
     SESSION.dwFlags = 0x2064;
     memcpy(&SESSION.guidApplication, g_unk0x00511cd8, sizeof(NetGuid));
@@ -2914,7 +2914,7 @@ int Network_JoinEnumeratedSession(BYTE index, char *pPassword, BYTE *pInvalidPas
 
     *pInvalidPassword = 0;
     if (index < CGameInfo::m_unk0x005a01bc) {
-        memset(g_unk0x005a0068, 0, sizeof(g_unk0x005a0068));
+        memset(&g_networkSession, 0, sizeof(g_networkSession));
         SESSION.dwSize = sizeof(NetSessionDesc);
         SESSION.guidInstance = SESSIONS[index].guidInstance;
         SESSION.lpszSessionNameA = (LPSTR)&CGameInfo::m_unk0x005a00b8;
@@ -2994,13 +2994,13 @@ char *Network_GetEnumeratedSessionName(BYTE index)
 // FUNCTION: CMR2 0x004a14c0
 LPVOID *Network_GetSessionNamePointer(void)
 {
-    return g_sessionNamePtr;
+    return (LPVOID *)g_networkSession.lpszSessionNameA;
 }
 
 // FUNCTION: CMR2 0x004a14d0
 LPVOID *Network_GetSessionPasswordPointer(void)
 {
-    return g_sessionPasswordPtr;
+    return (LPVOID *)g_networkSession.lpszPasswordA;
 }
 
 // FUNCTION: CMR2 0x004a15b0
@@ -3026,19 +3026,19 @@ void Session_SetUserValue(BYTE index, int value)
     Network_ReadJoinedSessionDescription();
     switch (index) {
     case 0:
-        *(int *)(g_unk0x005a0068 + 0x40) = value;
+        g_networkSession.dwUser1 = value;
         Network_TestLocalPlayerStatus();
         return;
     case 1:
-        *(int *)(g_unk0x005a0068 + 0x44) = value;
+        g_networkSession.dwUser2 = value;
         Network_TestLocalPlayerStatus();
         return;
     case 2:
-        *(int *)(g_unk0x005a0068 + 0x48) = value;
+        g_networkSession.dwUser3 = value;
         Network_TestLocalPlayerStatus();
         return;
     }
-    *(int *)(g_unk0x005a0068 + 0x4c) = value;
+    g_networkSession.dwUser4 = value;
     Network_TestLocalPlayerStatus();
 }
 
@@ -3060,8 +3060,8 @@ DWORD Network_GetSessionMaxPlayers(BYTE index)
 void Network_SetSessionDescription(NetSessionDesc *pDesc)
 {
     SESSION = *pDesc;
-    g_sessionNamePtr = (LPVOID *)&CGameInfo::m_unk0x005a00b8;
-    g_sessionPasswordPtr = (LPVOID *)&CGameInfo::m_unk0x005a02c0;
+    g_networkSession.lpszSessionNameA = (LPSTR)&CGameInfo::m_unk0x005a00b8;
+    g_networkSession.lpszPasswordA = (LPSTR)&CGameInfo::m_unk0x005a02c0;
 }
 
 // FUNCTION: CMR2 0x004a1790
@@ -3344,7 +3344,7 @@ bool Network_TestLocalPlayerStatus(void);
 void Session_SetName(LPVOID pName)
 {
     Network_ReadJoinedSessionDescription();
-    g_sessionNamePtr = (LPVOID *)pName;
+    g_networkSession.lpszSessionNameA = (LPSTR)pName;
     Network_TestLocalPlayerStatus();
 }
 
@@ -3352,7 +3352,7 @@ void Session_SetName(LPVOID pName)
 void Session_SetPassword(LPVOID pPassword)
 {
     Network_ReadJoinedSessionDescription();
-    g_sessionPasswordPtr = (LPVOID *)pPassword;
+    g_networkSession.lpszPasswordA = (LPSTR)pPassword;
     Network_TestLocalPlayerStatus();
 }
 
@@ -3360,7 +3360,7 @@ void Session_SetPassword(LPVOID pPassword)
 char Session_SetMaxPlayers(int count)
 {
     Network_ReadJoinedSessionDescription();
-    *(int *)(g_unk0x005a0068 + 0x28) = count;
+    g_networkSession.dwMaxPlayers = count;
     return Network_TestLocalPlayerStatus();
 }
 
@@ -3384,11 +3384,11 @@ void Session_SetOpen(char open)
 {
     Network_ReadJoinedSessionDescription();
     if (open != 0) {
-        *(DWORD *)(g_unk0x005a0068 + 4) &= 0xffffffdf;
+        g_networkSession.dwFlags &= 0xffffffdf;
         Network_TestLocalPlayerStatus();
         return;
     }
-    *(DWORD *)(g_unk0x005a0068 + 4) |= 0x20;
+    g_networkSession.dwFlags |= 0x20;
     Network_TestLocalPlayerStatus();
 }
 
@@ -3399,11 +3399,11 @@ int Session_GetUserValue(BYTE index)
     Network_ReadJoinedSessionDescription();
     switch (index) {
     case 0:
-        return *(int *)(g_unk0x005a0068 + 0x40);
+        return g_networkSession.dwUser1;
     case 1:
-        return *(int *)(g_unk0x005a0068 + 0x44);
+        return g_networkSession.dwUser2;
     case 2:
-        return *(int *)(g_unk0x005a0068 + 0x48);
+        return g_networkSession.dwUser3;
     }
-    return *(int *)(g_unk0x005a0068 + 0x4c);
+    return g_networkSession.dwUser4;
 }

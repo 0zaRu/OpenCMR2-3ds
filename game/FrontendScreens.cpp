@@ -1975,7 +1975,7 @@ void FrontendMenu_UpdateNetworkSessionBrowser(Menu *pMenu)
         return;
     // PORT: the original showed the cursor and the desktop for the DirectPlay
     // dialogs around this call; the network layer shows none.
-    status = CGameInfo::EnumerateNetworkSessionsWithUserData((int)(intptr_t)&g_unk0x00818ef8);
+    status = CGameInfo::EnumerateNetworkSessionsWithUserData(g_unk0x00818ef8);
     if (status == 1) {
         g_unk0x00818d04 = 1;
         g_unk0x00819018 = Network_GetEnumeratedSessionCount();

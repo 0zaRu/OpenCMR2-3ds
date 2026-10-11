@@ -72,7 +72,7 @@ char CGameInfo::m_sessionNames[20][0x104];
 BOOL CGameInfo::m_unk0x005a0060;
 HRESULT CGameInfo::m_unk0x005a1814;
 BYTE CGameInfo::m_unk0x005a01bc;
-BOOL CGameInfo::m_unk0x0059fa20[400];
+NetSessionDesc CGameInfo::m_enumeratedSessions[20];
 
 // FUNCTION: CMR2 0x004057f0
 unsigned char CGameInfo::GetGameLanguage(void)
@@ -1248,10 +1248,10 @@ bool CGameInfo::ReleaseFrontendSessionBuffer(void) {
 
 // FUNCTION: CMR2 0x004a0c60
 void CGameInfo::ResetNetworkSessionState(void) {
-    g_sessionNamePtr = (LPVOID *)m_unk0x005a00b8;
-    g_sessionPasswordPtr = (LPVOID *)m_unk0x005a02c0;
+    g_networkSession.lpszSessionNameA = (LPSTR)m_unk0x005a00b8;
+    g_networkSession.lpszPasswordA = (LPSTR)m_unk0x005a02c0;
     m_unk0x005a0060 = FALSE;
-    memset(m_unk0x0059fa20, 0, sizeof(m_unk0x0059fa20));
+    memset(m_enumeratedSessions, 0, sizeof(m_enumeratedSessions));
     m_unk0x005a1814 = FALSE;
     m_unk0x005a01bc = false;
 }
@@ -3475,9 +3475,9 @@ void Session_AddToList(NetSessionDesc *pDesc)
     if (strcmp(CMain::m_logFileBlankLine, pDesc->lpszSessionNameA) == 0)
         return;
     n = CGameInfo::m_unk0x005a01bc;
-    ((NetSessionDesc *)CGameInfo::m_unk0x0059fa20)[n] = *pDesc;
+    CGameInfo::m_enumeratedSessions[n] = *pDesc;
     strcpy(CGameInfo::m_sessionNames[n], pDesc->lpszSessionNameA);
-    ((NetSessionDesc *)CGameInfo::m_unk0x0059fa20)[n].lpszSessionNameA = CGameInfo::m_sessionNames[n];
+    CGameInfo::m_enumeratedSessions[n].lpszSessionNameA = CGameInfo::m_sessionNames[n];
     CGameInfo::m_unk0x005a01bc++;
 }
 
@@ -3501,17 +3501,17 @@ int CGameInfo::EnumerateNetworkSessions(void)
     if (m_unk0x005a1814 != 0)
         return 0;
     ResetNetworkSessionState();
-    memset(g_unk0x005a0068, 0, 0x50);
-    *(int *)(g_unk0x005a0068 + 0x18) = g_unk0x00511cd8[0];
-    *(char **)(g_unk0x005a0068 + 0x30) = (char *)&m_unk0x005a00b8;
-    *(int *)(g_unk0x005a0068) = 0x50;
-    *(int *)(g_unk0x005a0068 + 0x1c) = g_unk0x00511cd8[1];
-    *(int *)(g_unk0x005a0068 + 0x20) = g_unk0x00511cd8[2];
-    *(int *)(g_unk0x005a0068 + 0x24) = g_unk0x00511cd8[3];
+    memset(&g_networkSession, 0, sizeof(g_networkSession));
+    ((int *)&g_networkSession.guidApplication)[0] = g_unk0x00511cd8[0];
+    g_networkSession.lpszSessionNameA = (char *)&m_unk0x005a00b8;
+    g_networkSession.dwSize = sizeof(g_networkSession);
+    ((int *)&g_networkSession.guidApplication)[1] = g_unk0x00511cd8[1];
+    ((int *)&g_networkSession.guidApplication)[2] = g_unk0x00511cd8[2];
+    ((int *)&g_networkSession.guidApplication)[3] = g_unk0x00511cd8[3];
     if (CGame::GetDirectPlay() == NULL)
         return 0;
     // PORT: synchronous enumeration with the session callback.
-    memcpy(&application, g_unk0x005a0068 + 0x18, sizeof(application));
+    memcpy(&application, &g_networkSession.guidApplication, sizeof(application));
     switch (Net_EnumSessions(&application, 1000, Session_EnumCallback, NULL)) {
     case NET_OK:
         return 1;
@@ -3531,28 +3531,28 @@ int CGameInfo::EnumerateNetworkSessions(void)
     return 0;
 }
 
-// Same as EnumerateNetworkSessions, but also stores param1 in the descriptor (0x5a009c)
+// Same as EnumerateNetworkSessions, but also supplies the session password
 // and enumerates with flags 0x51.
 // FUNCTION: CMR2 0x004a12d0
-int CGameInfo::EnumerateNetworkSessionsWithUserData(int param1)
+int CGameInfo::EnumerateNetworkSessionsWithUserData(char *pPassword)
 {
     NetGuid application;
 
     if (m_unk0x005a1814 != 0)
         return 0;
     ResetNetworkSessionState();
-    memset(g_unk0x005a0068, 0, 0x50);
-    *(int *)(g_unk0x005a0068 + 0x34) = param1;
-    *(int *)(g_unk0x005a0068 + 0x18) = g_unk0x00511cd8[0];
-    *(char **)(g_unk0x005a0068 + 0x30) = (char *)&m_unk0x005a00b8;
-    *(int *)(g_unk0x005a0068) = 0x50;
-    *(int *)(g_unk0x005a0068 + 0x1c) = g_unk0x00511cd8[1];
-    *(int *)(g_unk0x005a0068 + 0x20) = g_unk0x00511cd8[2];
-    *(int *)(g_unk0x005a0068 + 0x24) = g_unk0x00511cd8[3];
+    memset(&g_networkSession, 0, sizeof(g_networkSession));
+    g_networkSession.lpszPasswordA = pPassword;
+    ((int *)&g_networkSession.guidApplication)[0] = g_unk0x00511cd8[0];
+    g_networkSession.lpszSessionNameA = (char *)&m_unk0x005a00b8;
+    g_networkSession.dwSize = sizeof(g_networkSession);
+    ((int *)&g_networkSession.guidApplication)[1] = g_unk0x00511cd8[1];
+    ((int *)&g_networkSession.guidApplication)[2] = g_unk0x00511cd8[2];
+    ((int *)&g_networkSession.guidApplication)[3] = g_unk0x00511cd8[3];
     if (CGame::GetDirectPlay() == NULL)
         return 0;
     // PORT: synchronous enumeration with the session callback.
-    memcpy(&application, g_unk0x005a0068 + 0x18, sizeof(application));
+    memcpy(&application, &g_networkSession.guidApplication, sizeof(application));
     switch (Net_EnumSessions(&application, 1000, Session_EnumCallback, NULL)) {
     case NET_OK:
         return 1;

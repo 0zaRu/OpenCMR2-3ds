@@ -58,6 +58,10 @@ if(OPENCMR2_BINK_TEST_DATA_DIR)
         add_test(NAME physics_original_parity COMMAND ${Python3_EXECUTABLE}
             ${CMAKE_CURRENT_SOURCE_DIR}/physics_parity.py --probe $<TARGET_FILE:stage_probe>
             --data ${OPENCMR2_BINK_TEST_DATA_DIR})
+        add_test(NAME runtime_scenarios COMMAND ${Python3_EXECUTABLE}
+            ${CMAKE_CURRENT_SOURCE_DIR}/runtime_scenarios.py --probe $<TARGET_FILE:stage_probe>
+            --data ${OPENCMR2_BINK_TEST_DATA_DIR})
+        set_tests_properties(runtime_scenarios PROPERTIES TIMEOUT 180)
     endif()
     file(GLOB_RECURSE BINK_TEST_FILES "${OPENCMR2_BINK_TEST_DATA_DIR}/*.bik" "${OPENCMR2_BINK_TEST_DATA_DIR}/*.BIK")
     foreach(movie IN LISTS BINK_TEST_FILES)
@@ -65,3 +69,7 @@ if(OPENCMR2_BINK_TEST_DATA_DIR)
         add_test(NAME "bink_file_${name}" COMMAND bink_decode "${movie}")
     endforeach()
 endif()
+
+add_executable(replay_disk_test replay_disk.cpp)
+target_link_libraries(replay_disk_test PRIVATE opencmr2_platform)
+add_test(NAME replay_disk COMMAND replay_disk_test)

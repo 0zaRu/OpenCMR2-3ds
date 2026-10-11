@@ -11,6 +11,7 @@
 #include "MeshCollisionRecord.h"
 #include "Car.h"
 #include "CarParts.h"
+#include "ReplayStream.h"
 
 // SceneNode: 0x18c bytes in files, 0x1a0 on 64-bit targets.
 #if UINTPTR_MAX > 0xffffffffu
@@ -412,5 +413,50 @@ static const DiskPointer g_diskPointers_CarPartSet[] = {
 static_assert(sizeof(CarPartSet) == 0x4d0, "run tools/gen_disk_layouts.py");
 #endif
 static const DiskLayout g_diskLayout_CarPartSet = {0x4d0, sizeof(CarPartSet), g_diskRuns_CarPartSet, sizeof(g_diskRuns_CarPartSet) / sizeof(DiskRun), g_diskPointers_CarPartSet, sizeof(g_diskPointers_CarPartSet) / sizeof(DiskPointer)};
+
+// ReplayStream: 0x110 bytes in files, 0x138 on 64-bit targets.
+#if UINTPTR_MAX > 0xffffffffu
+static const DiskRun g_diskRuns_ReplayStream[] = {
+    {0x0, 0x0, 0x24},
+    {0x44, 0x68, 0xc0},
+    {0x108, 0x130, 0x8},
+};
+static const DiskPointer g_diskPointers_ReplayStream[] = {
+    {0x24, 0x28}, // pInputs
+    {0x28, 0x30}, // pInputLane
+    {0x2c, 0x38}, // pInputRecLane
+    {0x30, 0x40}, // pStates
+    {0x34, 0x48}, // pStateLane
+    {0x38, 0x50}, // pStateRecLane
+    {0x3c, 0x58}, // pFrames
+    {0x40, 0x60}, // pSamples
+    {0x104, 0x128}, // pLaneSamples
+};
+static_assert(sizeof(ReplayStream) == 0x138, "run tools/gen_disk_layouts.py");
+#else
+static const DiskRun g_diskRuns_ReplayStream[] = {{0, 0, 0x110}};
+static const DiskPointer g_diskPointers_ReplayStream[] = {
+    {0x24, 0x24}, // pInputs
+    {0x28, 0x28}, // pInputLane
+    {0x2c, 0x2c}, // pInputRecLane
+    {0x30, 0x30}, // pStates
+    {0x34, 0x34}, // pStateLane
+    {0x38, 0x38}, // pStateRecLane
+    {0x3c, 0x3c}, // pFrames
+    {0x40, 0x40}, // pSamples
+    {0x104, 0x104}, // pLaneSamples
+};
+static_assert(sizeof(ReplayStream) == 0x110, "run tools/gen_disk_layouts.py");
+#endif
+static const DiskLayout g_diskLayout_ReplayStream = {0x110, sizeof(ReplayStream), g_diskRuns_ReplayStream, sizeof(g_diskRuns_ReplayStream) / sizeof(DiskRun), g_diskPointers_ReplayStream, sizeof(g_diskPointers_ReplayStream) / sizeof(DiskPointer)};
+#define DISK_ReplayStream_pInputs 0x24
+#define DISK_ReplayStream_pInputLane 0x28
+#define DISK_ReplayStream_pInputRecLane 0x2c
+#define DISK_ReplayStream_pStates 0x30
+#define DISK_ReplayStream_pStateLane 0x34
+#define DISK_ReplayStream_pStateRecLane 0x38
+#define DISK_ReplayStream_pFrames 0x3c
+#define DISK_ReplayStream_pSamples 0x40
+#define DISK_ReplayStream_pLaneSamples 0x104
 
 #endif

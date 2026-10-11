@@ -17,6 +17,7 @@
 #include "Menu.h"
 #include "Car.h"
 #include "CarParts.h"
+#include "ReplayStream.h"
 #include "CarPhysics.h"
 #include "RallyData.h"
 #define SDL_MAIN_HANDLED
@@ -46,6 +47,10 @@ extern CarContact *g_carContacts;
 extern unsigned char g_unk0x00542e78[];
 extern unsigned char g_carStageTiming[];
 extern int g_unk0x0053d1b0;
+extern char g_unk0x00818ebc[20];
+extern BYTE *Race_GetPlayerRecordPointer(int);
+extern int Replay_StopRecording(BYTE *);
+extern void Race_StartPlayerAndOpponentReplays(int);
 
 static DWORD virtualTime = 1000;
 static DWORD Ticks() { return virtualTime; }
@@ -107,7 +112,11 @@ struct Probe : Diagnostics::TimingObserver {
         state = value;
         if (tick == 0) {
             fprintf(stderr, "probe: country=%u stage=%u mode=%u cars=%d model=%d\n", RallyDataCountryIndex(), RallyDataStageIndex(), CGameInfo::GetConfiguredGameMode(), g_carOrderCount, Car_Get(0)->type);
-            scenarioCorrect = RallyDataCountryIndex() == 0 && RallyDataStageIndex() == 0 && g_carOrderCount == 1;
+            const char *expectedCars = getenv("OPENCMR2_PROBE_EXPECT_CARS");
+            const char *expectedMode = getenv("OPENCMR2_PROBE_EXPECT_MODE");
+            scenarioCorrect = RallyDataCountryIndex() == 0 && RallyDataStageIndex() == 0 &&
+                g_carOrderCount == (expectedCars ? atoi(expectedCars) : 1) &&
+                (!expectedMode || CGameInfo::GetConfiguredGameMode() == atoi(expectedMode));
         }
     }
     void CaptureMemory() {
@@ -190,6 +199,19 @@ struct Probe : Diagnostics::TimingObserver {
     void EndTick() override {
         TimingObserver::EndTick();
         if (tick >= target) return;
+        if (const char *replayAt = getenv("OPENCMR2_PROBE_REPLAY_AT_TICK")) {
+            if (tick + 1 == unsigned(atoi(replayAt))) {
+                for (int car = 0; car < g_carOrderCount; ++car)
+                    Replay_StopRecording(Race_GetPlayerRecordPointer(car));
+                Race_StartPlayerAndOpponentReplays(0);
+                fprintf(stderr, "probe: recorded replay started at tick %u\n", tick + 1);
+            }
+            auto *stream = (ReplayStream *)Race_GetPlayerRecordPointer(0);
+            if (stream && tick % 25 == 0)
+                fprintf(stderr, "probe: replay tick=%u playing=%d lane=%d frame=%d length=%d\n",
+                    tick, stream->playing, stream->lane, stream->frame,
+                    stream->lane < stream->laneCount ? stream->pLaneSamples[stream->lane] : 0);
+        }
         CaptureMemory();
         fprintf(trace, "{\"tick\":%u,\"state\":%u,\"driving_tick\":%u,\"rng\":%u,\"input\":{\"digital\":[%d,%d,%d,%d],\"handbrake\":%d,\"steering\":%d,\"pedal\":%d,\"shift\":[%d,%d,%d,%d]},\"cars\":[",
                 tick, state, drivingTick, Crt_GetRandState(), input.digital[0], input.digital[1], input.digital[2], input.digital[3], input.handbrake, input.steering, input.pedal,
@@ -246,6 +268,9 @@ static int ForcedCursor(int id) {
 
 static void ConfigureMenu(Menu *menu) {
     if (!menu) return;
+    if (menu == FrontendMenu_GetNetworkSessionDetails())
+        if (const char *name = getenv("OPENCMR2_PROBE_SESSION_NAME"))
+            snprintf(g_unk0x00818ebc, sizeof(g_unk0x00818ebc), "%s", name);
     int forced = ForcedCursor(menu->field_0x4);
     if (forced >= 0) { menu->cursor = (char)forced; return; }
     if (menu == FrontendMenu_GetMain()) menu->cursor = 1;
