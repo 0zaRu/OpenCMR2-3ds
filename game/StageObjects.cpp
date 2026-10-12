@@ -13991,21 +13991,18 @@ BYTE *AI_LoadStageRouteTables(void)
     }
     g_unk0x0058e394.counts[3] = *p;
     p += 4;
-    for (i = 1; i <= g_unk0x0058e394.counts[3]; i++) {
-        g_unk0x0058e394.networks[i] = (AINetwork *)p;
-        p += 0x20;
-    }
     // PORT: the network records hold 32-bit slots for the weight pointers set
-    // below; copy them to native AINetworks, freed with the file data.
+    // below; they are copied to native AINetworks, freed with the file data.
     {
-        int count = g_unk0x0058e394.counts[3];
-        AINetwork *pNative = (AINetwork *)CFileBuffer::AllocateLockedBuffer(count * sizeof(AINetwork) + 1);
+        AINetwork *pNative = (AINetwork *)CFileBuffer::AllocateLockedBuffer(
+            g_unk0x0058e394.counts[3] * sizeof(AINetwork) + 1);
 
-        for (i = 1; i <= count; i++) {
+        for (i = 1; i <= g_unk0x0058e394.counts[3]; i++) {
             pEntry = &pNative[i - 1];
             memset(pEntry, 0, sizeof(*pEntry));
-            memcpy(pEntry, g_unk0x0058e394.networks[i], offsetof(AINetwork, pWeights));
+            memcpy(pEntry, p, offsetof(AINetwork, pWeights));
             g_unk0x0058e394.networks[i] = pEntry;
+            p += 0x20;
         }
         Disk_AttachToBuffer(pData, pNative);
     }

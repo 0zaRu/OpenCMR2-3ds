@@ -7,8 +7,8 @@ original meant) and the x86_64 layout (what the port touches).
 | Verdict | Accesses |
 | --- | --- |
 | bug | 0 |
-| unresolved | 618 |
-| safe | 6685 |
+| unresolved | 388 |
+| safe | 6943 |
 
 `safe` means the layout checks passed or the access was individually reviewed below. It is not
 a proof of bounds, lifetime, control flow or physics equivalence. `bug` is an automatic finding
@@ -21,8 +21,8 @@ guards for the source and headers. A source change or new automatic evidence inv
 report generation until it is checked again. The JSON report retains automatic verdicts and
 reasons. Use `--without-reviews` to inspect all automatic findings.
 
-- `StageObjects.cpp:7261:22:flow:assign` (Replay_SetupPointers): `(ReplayInputLane *)((BYTE *)p + sizeof(ReplayStream))` — This forms a ReplayInputLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x114c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayInputLane has the same pointer-free 0x114c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions.
-- `StageObjects.cpp:7265:22:flow:assign` (Replay_SetupPointers): `(ReplayStateLane *)((BYTE *)p + sizeof(ReplayStream))` — This forms a ReplayStateLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x5c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayStateLane has the same pointer-free 0x5c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions.
+- `StageObjects.cpp:7270:22:flow:assign` (Replay_SetupPointers): `(ReplayInputLane *)((BYTE *)p + sizeof(ReplayStream))` — This forms a ReplayInputLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x114c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayInputLane has the same pointer-free 0x114c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions.
+- `StageObjects.cpp:7274:22:flow:assign` (Replay_SetupPointers): `(ReplayStateLane *)((BYTE *)p + sizeof(ReplayStream))` — This forms a ReplayStateLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x5c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayStateLane has the same pointer-free 0x5c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions.
 
 ## Bugs
 
@@ -30,75 +30,49 @@ reasons. Use `--without-reviews` to inspect all automatic findings.
 
 Fixing or typing one root usually settles every access listed under it.
 
-- 65 × root var:BuildLocalizedTextStringTable:p:534: `Font.cpp:201`, `Font.cpp:201`, `Font.cpp:201`, `Font.cpp:201`, `Font.cpp:207`, `Font.cpp:208`, `Font.cpp:220`, `Font.cpp:224:26` ...
 - 30 × root var:FrontendNetwork_DrainMessageQueue:pData:1914: `FrontendScreens.cpp:1719`, `FrontendScreens.cpp:1720`, `FrontendScreens.cpp:1721`, `FrontendScreens.cpp:1722`, `FrontendScreens.cpp:1723`, `FrontendScreens.cpp:1724`, `FrontendScreens.cpp:1725`, `FrontendScreens.cpp:1726` ...
-- 30 × root var:g_unk0x00541f8c: `StageObjects.cpp:10673`, `StageObjects.cpp:10674`, `StageObjects.cpp:10675`, `StageObjects.cpp:10699`, `StageObjects.cpp:10711`, `StageObjects.cpp:10712`, `StageObjects.cpp:10713`, `StageObjects.cpp:10736` ...
-- 30 × index INTERIOR_NODES: stride 0x1 matches no array: `StageObjects.cpp:9035`, `StageObjects.cpp:9038`, `StageObjects.cpp:9039`, `StageObjects.cpp:9040`, `StageObjects.cpp:9045`, `StageObjects.cpp:9046`, `StageObjects.cpp:9047`, `StageObjects.cpp:9048` ...
-- 28 × index (p->samplesPerLane * p->laneCount + *pIndex): stride 0x4 matches no array: `StageObjects.cpp:10175:33`, `StageObjects.cpp:10186:37`, `StageObjects.cpp:10187`, `StageObjects.cpp:10201`, `StageObjects.cpp:10216`, `StageObjects.cpp:10231`, `StageObjects.cpp:7962`, `StageObjects.cpp:7964` ...
+- 30 × index INTERIOR_NODES: stride 0x1 matches no array: `StageObjects.cpp:9044`, `StageObjects.cpp:9047`, `StageObjects.cpp:9048`, `StageObjects.cpp:9049`, `StageObjects.cpp:9054`, `StageObjects.cpp:9055`, `StageObjects.cpp:9056`, `StageObjects.cpp:9057` ...
+- 28 × index (p->samplesPerLane * p->laneCount + *pIndex): stride 0x4 matches no array: `StageObjects.cpp:10182:33`, `StageObjects.cpp:10193:37`, `StageObjects.cpp:10194`, `StageObjects.cpp:10208`, `StageObjects.cpp:10223`, `StageObjects.cpp:10238`, `StageObjects.cpp:7971`, `StageObjects.cpp:7973` ...
 - 25 × root field:GfxLockedRect::pixels: `Graphics.cpp:1119:25`, `Graphics.cpp:1706:12`, `Graphics.cpp:1707:14`, `Graphics.cpp:2546:16`, `Graphics.cpp:2551:16`, `Graphics.cpp:2553:20`, `Graphics.cpp:3842`, `Graphics.cpp:3858` ...
 - 17 × root param:deflateSetDictionary#1: `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36` ...
-- 16 × root var:NetRace_DrainPendingMessages:pData:206: `NetRace.cpp:1024:36`, `NetRace.cpp:1026:33`, `NetRace.cpp:138`, `NetRace.cpp:141:47`, `NetRace.cpp:149`, `NetRace.cpp:149`, `NetRace.cpp:152`, `NetRace.cpp:152` ...
-- 16 × root var:g_unk0x00538238: `Race.cpp:4428`, `Race.cpp:769:29`, `StageObjects.cpp:6156`, `StageObjects.cpp:6157`, `StageObjects.cpp:6160`, `StageObjects.cpp:6161`, `StageObjects.cpp:6165`, `StageObjects.cpp:6322` ...
-- 16 × root param:StageObject_QueueViewLensFlare#0: `StageObjects.cpp:10000`, `StageObjects.cpp:10002:28`, `StageObjects.cpp:10008:30`, `StageObjects.cpp:10008:55`, `StageObjects.cpp:10021:30`, `StageObjects.cpp:10022:30`, `StageObjects.cpp:10036`, `StageObjects.cpp:10037` ...
-- 15 × root var:StageTiming_LoadSelectedTeamArchive:dest:5644: `StageTiming.cpp:1262`, `StageTiming.cpp:1263`, `StageTiming.cpp:1264`, `StageTiming.cpp:1265`, `StageTiming.cpp:1266`, `StageTiming.cpp:1267`, `StageTiming.cpp:4488`, `StageTiming.cpp:4489` ...
-- 14 × root var:ApplyStageOptionUnlockFlags:piVar4:893: `GameInfo.cpp:905`, `GameInfo.cpp:906`, `GameInfo.cpp:906`, `GameInfo.cpp:914`, `GameInfo.cpp:915`, `GameInfo.cpp:915`, `GameInfo.cpp:923`, `GameInfo.cpp:924` ...
-- 14 × root var:StageTiming_IndexSerializedStageTables:p:1713: `StageTiming.cpp:1720`, `StageTiming.cpp:1725:44`, `StageTiming.cpp:1728:32`, `StageTiming.cpp:1730:23`, `StageTiming.cpp:1732:11`, `StageTiming.cpp:1733:34`, `StageTiming.cpp:1735:24`, `StageTiming.cpp:1737:11` ...
-- 13 × root var:GameInfo_ProcessNetworkMessages:pMessage:1594: `GameInfo.cpp:1531:36`, `GameInfo.cpp:1533:33`, `GameInfo.cpp:1553`, `GameInfo.cpp:1555:43`, `GameInfo.cpp:1561`, `GameInfo.cpp:1561`, `GameInfo.cpp:1565`, `GameInfo.cpp:1565` ...
-- 13 × index PREVIEW_SCENE_AT_OFFSET(off): stride 0x1 matches no array: `GameInfo.cpp:7239`, `GameInfo.cpp:7241`, `GameInfo.cpp:7242`, `GameInfo.cpp:7242`, `GameInfo.cpp:7246`, `GameInfo.cpp:7248`, `GameInfo.cpp:7249`, `GameInfo.cpp:7249` ...
-- 12 × index (p->samplesPerLane * p->lane + p->frame): stride 0x4 matches no array: `StageObjects.cpp:14062:61`, `StageObjects.cpp:1492`, `StageObjects.cpp:1494`, `StageObjects.cpp:1501`, `StageObjects.cpp:1502`, `StageObjects.cpp:1503`, `StageObjects.cpp:1504`, `StageObjects.cpp:1505` ...
-- 11 × root var:g_unk0x00538234: `Race.cpp:4428`, `Race.cpp:769:72`, `StageObjects.cpp:6328`, `StageObjects.cpp:6330`, `StageObjects.cpp:6335`, `StageObjects.cpp:6335`, `StageObjects.cpp:6336`, `StageObjects.cpp:6341` ...
+- 16 × root var:NetRace_DrainPendingMessages:pData:205: `NetRace.cpp:1023:36`, `NetRace.cpp:1025:33`, `NetRace.cpp:137`, `NetRace.cpp:140:47`, `NetRace.cpp:148`, `NetRace.cpp:148`, `NetRace.cpp:151`, `NetRace.cpp:151` ...
+- 16 × root var:g_unk0x00538238: `Race.cpp:4427`, `Race.cpp:769:29`, `StageObjects.cpp:6165`, `StageObjects.cpp:6166`, `StageObjects.cpp:6169`, `StageObjects.cpp:6170`, `StageObjects.cpp:6174`, `StageObjects.cpp:6331` ...
+- 15 × root load:var:Scene_ProjectCasterIntoLightZone:pTri:1767: `SceneNode.cpp:1929`, `SceneNode.cpp:1930`, `SceneNode.cpp:1931`, `SceneNode.cpp:1932`, `SceneNode.cpp:1933`, `SceneNode.cpp:1934`, `SceneNode.cpp:1935`, `SceneNode.cpp:1936` ...
+- 13 × root var:GameInfo_ProcessNetworkMessages:pMessage:1596: `GameInfo.cpp:1533:36`, `GameInfo.cpp:1535:33`, `GameInfo.cpp:1555`, `GameInfo.cpp:1557:43`, `GameInfo.cpp:1563`, `GameInfo.cpp:1563`, `GameInfo.cpp:1567`, `GameInfo.cpp:1567` ...
+- 13 × index PREVIEW_SCENE_AT_OFFSET(off): stride 0x1 matches no array: `GameInfo.cpp:7241`, `GameInfo.cpp:7243`, `GameInfo.cpp:7244`, `GameInfo.cpp:7244`, `GameInfo.cpp:7248`, `GameInfo.cpp:7250`, `GameInfo.cpp:7251`, `GameInfo.cpp:7251` ...
+- 12 × index (p->samplesPerLane * p->lane + p->frame): stride 0x4 matches no array: `StageObjects.cpp:14073:61`, `StageObjects.cpp:1501`, `StageObjects.cpp:1503`, `StageObjects.cpp:1510`, `StageObjects.cpp:1511`, `StageObjects.cpp:1512`, `StageObjects.cpp:1513`, `StageObjects.cpp:1514` ...
+- 11 × root var:g_unk0x00538234: `Race.cpp:4427`, `Race.cpp:769:72`, `StageObjects.cpp:6337`, `StageObjects.cpp:6339`, `StageObjects.cpp:6344`, `StageObjects.cpp:6344`, `StageObjects.cpp:6345`, `StageObjects.cpp:6350` ...
 - 9 × index i: stride 0x1 matches no array: `Car.cpp:2895`, `Car.cpp:2895`, `Car.cpp:5288`, `Collision2D.cpp:754`, `Collision2D.cpp:755`, `Collision2D.cpp:756`, `Collision2D.cpp:775`, `Collision2D.cpp:776` ...
-- 9 × root var:FrontendMenu_DrawGraphicsOptions:pColour:11085: `FrontendScreens.cpp:11163:91`, `FrontendScreens.cpp:11168:91`, `FrontendScreens.cpp:11178:99`, `FrontendScreens.cpp:11189:91`, `FrontendScreens.cpp:11196:91`, `FrontendScreens.cpp:11201:91`, `FrontendScreens.cpp:11217:99`, `FrontendScreens.cpp:11227:91` ...
-- 9 × root field:SceneNode::pObject: `GameInfo.cpp:11193`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8982`, `StageObjects.cpp:922`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
-- 8 × root var:FrontendRecords_BuildScrambledBestTimeTables:local_18:11259: `FrontendScreens.cpp:8110`, `FrontendScreens.cpp:8116`, `FrontendScreens.cpp:8120`, `GameInfo.cpp:11334:88`, `GameInfo.cpp:11335:47`, `GameInfo.cpp:3124`, `GameInfo.cpp:3126`, `GameInfo.cpp:3130`
+- 9 × root field:SceneNode::pObject: `GameInfo.cpp:11197`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8991`, `StageObjects.cpp:931`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
 - 7 × index off: stride 0x1 matches no array: `Car.cpp:2936:33`, `Car.cpp:2946`, `Car.cpp:2952:33`, `Car.cpp:2957`, `Car.cpp:2958`, `Car.cpp:2959`, `Car.cpp:3069:32`
-- 7 × root expr:g_unk0x0058e44c[v]: `StageObjects.cpp:9399`, `StageObjects.cpp:9432`, `StageObjects.cpp:9457:54`, `StageObjects.cpp:9464`, `StageTiming.cpp:3647`, `StageTiming.cpp:3650`, `StageTiming.cpp:3696`
-- 6 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4948`, `StageObjects.cpp:14001`
-- 6 × root var:FrontendRecords_BuildScrambledBestTimeTables:puVar7:11232: `GameInfo.cpp:11288`, `GameInfo.cpp:11289:34`, `GameInfo.cpp:11330`, `GameInfo.cpp:11331:30`, `GameInfo.cpp:11443`, `GameInfo.cpp:11444:26`
-- 6 × root load:var:Race_UpdateDriverPreRaceScene:p:2516: `Race.cpp:2625:43`, `Race.cpp:2635:48`, `Race.cpp:2636:52`, `Race.cpp:2638:47`, `StageObjects.cpp:11929:66`, `StageObjects.cpp:11931:62`
-- 5 × root var:FrontendRecords_BuildScrambledBestTimeTables:puVar10:11230: `GameInfo.cpp:11352`, `GameInfo.cpp:11364`, `GameInfo.cpp:11365:27`, `GameInfo.cpp:11403`, `GameInfo.cpp:11404:31`
-- 5 × root field:BestTimeCursor::bytes: `GameInfo.cpp:11390:23`, `GameInfo.cpp:11407:88`, `GameInfo.cpp:11408:47`, `GameInfo.cpp:11447:84`, `GameInfo.cpp:11448:43`
-- 5 × root load:var:g_replaySlots: `StageObjects.cpp:10162:13`, `StageObjects.cpp:10183:46`, `StageObjects.cpp:14440:13`, `StageObjects.cpp:14452:38`, `StageObjects.cpp:7854:19`
-- 5 × index p->laneCapacity * recordSize: stride 0x1 matches no array: `StageObjects.cpp:10881`, `StageObjects.cpp:11930:53`, `StageObjects.cpp:11932:77`, `StageObjects.cpp:7270:64`, `StageObjects.cpp:7274:63`
+- 6 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4948`, `StageObjects.cpp:14014`
+- 5 × index p->laneCapacity * recordSize: stride 0x1 matches no array: `StageObjects.cpp:10888`, `StageObjects.cpp:11937:53`, `StageObjects.cpp:11939:77`, `StageObjects.cpp:7279:64`, `StageObjects.cpp:7283:63`
 - 4 × root opaque (): `FrontendScreens.cpp:11497:93`, `FrontendScreens.cpp:11515:97`, `FrontendScreens.cpp:11524:93`, `FrontendScreens.cpp:11529:93`
-- 4 × root var:OptionMenu_DrawStageSummaryPanel:table:10199: `GameInfo.cpp:10290`, `GameInfo.cpp:10291`, `GameInfo.cpp:10302`, `GameInfo.cpp:10303`
-- 4 × root param:Graphics_LoadTextureRecordList#0: `Graphics.cpp:3619`, `Graphics.cpp:3620:26`, `Graphics.cpp:3641`, `Graphics.cpp:3643:36`
-- 4 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4363 +0x0: touches var:Race_ResolveStageTexturesAndPalettes:handles:4363[0] part+0:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4363[0] part+0:1/4/ptr: `StageObjects.cpp:8411`, `StageObjects.cpp:8411`, `StageObjects.cpp:8419`, `StageObjects.cpp:8419`
-- 4 × index INTERIOR_PROFILE: stride 0x1 matches no array: `StageObjects.cpp:9037`, `StageObjects.cpp:9058`, `StageObjects.cpp:9059`, `StageObjects.cpp:9063`
+- 4 × root var:OptionMenu_DrawStageSummaryPanel:table:10203: `GameInfo.cpp:10294`, `GameInfo.cpp:10295`, `GameInfo.cpp:10306`, `GameInfo.cpp:10307`
+- 4 × index INTERIOR_PROFILE: stride 0x1 matches no array: `StageObjects.cpp:9046`, `StageObjects.cpp:9067`, `StageObjects.cpp:9068`, `StageObjects.cpp:9072`
 - 4 × root expr:s->outbuf = Z_NULL: `ZlibDeflate.cpp:408:13`, `ZlibGzio.cpp:387:11`, `ZlibInfutil.cpp:51:11`, `ZlibInfutil.cpp:77:13`
-- 3 × root ret:strchr: `GameInfo.cpp:2796:32`, `GameInfo.cpp:2803:26`, `GameInfo.cpp:2803:36`
-- 3 × root var:RallyData_FormatResultDriverName:entry:5823: `RallyData.cpp:5842:89`, `RallyData.cpp:5853:94`, `RallyData.cpp:5855:75`
-- 3 × root field:MeshTriangle::textureIndex: `SceneNode.cpp:1852`, `SceneNode.cpp:1862`, `SceneNode.cpp:2386`
-- 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1874:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3490:24`
+- 3 × root ret:strchr: `GameInfo.cpp:2798:32`, `GameInfo.cpp:2805:26`, `GameInfo.cpp:2805:36`
+- 3 × root var:RallyData_FormatResultDriverName:entry:5825: `RallyData.cpp:5844:89`, `RallyData.cpp:5855:94`, `RallyData.cpp:5857:75`
+- 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1874:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3497:24`
 - 3 × root var:Sound_RewindAndFillMusicBuffer:pAudio1:552: `Sound.cpp:521:21`, `Sound.cpp:535:53`, `Sound.cpp:563:59`
 - 3 × root var:Sound_BuildSlotLoopBuffer:p1:832: `Sound.cpp:814:24`, `Sound.cpp:816:24`, `Sound.cpp:841:53`
-- 3 × root param:Knockout_UpdateRaceStateAndFades#0: `StageObjects.cpp:2263:55`, `StageUI.cpp:929:43`, `StageUI.cpp:946:47`
-- 3 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4363 +0x0: touches var:Race_ResolveStageTexturesAndPalettes:handles:4363[0] part+0:4/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4363[0]: `StageObjects.cpp:8417`, `StageObjects.cpp:8417`, `StageObjects.cpp:8417`
+- 3 × root param:Knockout_UpdateRaceStateAndFades#0: `StageObjects.cpp:2272:55`, `StageUI.cpp:929:43`, `StageUI.cpp:946:47`
 - 3 × root expr:s->inbuf = Z_NULL: `ZlibDeflate.cpp:655:18`, `ZlibGzio.cpp:387:31`, `ZlibInfblock.cpp:203:18`
 - 3 × root param:gzgets#1: `ZlibGzio.cpp:368:20`, `ZlibGzio.cpp:376:16`, `ZlibGzio.cpp:377:26`
 - 2 × root var:FrontendMenu_DrawRallySummary:table:10811: `FrontendScreens.cpp:10874`, `FrontendScreens.cpp:10875`
 - 2 × root var:FrontendMenu_DrawRallyReport:table:10963: `FrontendScreens.cpp:11005`, `FrontendScreens.cpp:11006`
-- 2 × root load:var:RallyData_FindCheatNameIndex:p:1519: `FrontendScreens.cpp:6177:40`, `FrontendScreens.cpp:6178:16`
-- 2 × root param:OptionMenu_RestartEmptyItemRecords#0: `GameInfo.cpp:6347:27`, `GameInfo.cpp:6348`
-- 2 × root param:OptionMenu_DispatchRecordEditState#0: `GameInfo.cpp:9665`, `GameInfo.cpp:9666:54`
-- 2 × root param:OptionMenu_DrawValueSelectionRows#0: `GameInfo.cpp:9684`, `GameInfo.cpp:9702`
-- 2 × root load:var:Race_TeardownStage:pp:3226: `Race.cpp:3272:40`, `Race.cpp:3284:40`
-- 2 × root load:var:Race_HandleStageReplayViewTransitions:pp:3317: `Race.cpp:3606:40`, `Race.cpp:3614:40`
-- 2 × root var:g_activeReplayStream: `StageObjects.cpp:1354:32`, `StageObjects.cpp:3767:15`
-- 2 × root site:StageObjects.cpp:14131:36:deref: `StageObjects.cpp:14041:9`, `StageObjects.cpp:1515`
-- 2 × root expr:pBox2 = pText = g_barTextColour: `StageObjects.cpp:5750`, `StageObjects.cpp:5757`
-- 2 × root expr:pText = g_barTextColour: `StageObjects.cpp:5778`, `StageObjects.cpp:5785`
-- 2 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4363 +0x1: touches var:Race_ResolveStageTexturesAndPalettes:handles:4363[0] part+1:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4363[0] part+1:1/4/ptr: `StageObjects.cpp:8412`, `StageObjects.cpp:8412`
-- 2 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4363 +0x2: touches var:Race_ResolveStageTexturesAndPalettes:handles:4363[0] part+2:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4363[0] part+2:1/4/ptr: `StageObjects.cpp:8413`, `StageObjects.cpp:8413`
-- 2 × bug through 1 of 2 possible origins: object array via var:Race_ResolveStageTexturesAndPalettes:handles:4363 +0x3: touches var:Race_ResolveStageTexturesAndPalettes:handles:4363[0] part+3:1/8/ptr on x86_64, meant var:Race_ResolveStageTexturesAndPalettes:handles:4363[0] part+3:1/4/ptr: `StageObjects.cpp:8414`, `StageObjects.cpp:8414`
-- 2 × root field:FixVector::x: `StageObjects.cpp:8703:21`, `StageObjects.cpp:8704:21`
-- 2 × root expr:g_unk0x0058e3ac[param_1]: `StageObjects.cpp:9450`, `StageObjects.cpp:9463`
+- 2 × root load:var:RallyData_FindCheatNameIndex:p:1521: `FrontendScreens.cpp:6177:40`, `FrontendScreens.cpp:6178:16`
+- 2 × root param:OptionMenu_RestartEmptyItemRecords#0: `GameInfo.cpp:6349:27`, `GameInfo.cpp:6350`
+- 2 × root param:OptionMenu_DispatchRecordEditState#0: `GameInfo.cpp:9669`, `GameInfo.cpp:9670:54`
+- 2 × root param:OptionMenu_DrawValueSelectionRows#0: `GameInfo.cpp:9688`, `GameInfo.cpp:9706`
+- 2 × root site:StageObjects.cpp:14142:36:deref: `StageObjects.cpp:14052:9`, `StageObjects.cpp:1524`
+- 2 × root expr:pBox2 = pText = g_barTextColour: `StageObjects.cpp:5759`, `StageObjects.cpp:5766`
+- 2 × root expr:pText = g_barTextColour: `StageObjects.cpp:5787`, `StageObjects.cpp:5794`
 - 2 × index ((BYTE *)pSlot - (BYTE *)pRecord->geometry.meshes) * (sizeof(Mesh *) - sizeof(int)) / sizeof(Mesh *): stride 0x-1 matches no array: `StageTiming.cpp:2315`, `StageTiming.cpp:2435`
 - 2 × root param:FindLoadTexture#3: `Texture.cpp:35:68`, `Texture.cpp:38:72`
 - 2 × index vertexOffset: stride 0x1 matches no array: `VehiclePhysics.cpp:271:31`, `VehiclePhysics.cpp:304:41`
 - 2 × root param:gzputs#1: `ZlibGzio.cpp:495:25`, `ZlibGzio.cpp:512:28`
 - 2 × root param:gztell#0: `ZlibGzio.cpp:655:20`, `ZlibGzio.cpp:733:20`
-- 2 × root field:inflate_blocks_state::write: `ZlibInfcodes.cpp:200:13`, `ZlibInffast.cpp:97:21`
 - 2 × root expr:s->write = s->window: `ZlibInfutil.cpp:51:14`, `ZlibInfutil.cpp:77:16`
 - 1 × index local_c: stride 0x2 matches no array: `Car.cpp:6108:34`
 - 1 × root var:g_pCurrentCar: `Car.cpp:6406:25`
@@ -121,13 +95,12 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × root param:FrontendMenus_DrawLabel#0: `FrontendMenus.cpp:1411:33`
 - 1 × root field:NetMsgCreatePlayer::lpData: `FrontendScreens.cpp:1791:62`
 - 1 × root field:NetMsgSetPlayerData::lpData: `FrontendScreens.cpp:1837:62`
-- 1 × root var:g_dmdFiles: `FrontendScreens.cpp:304:16`
 - 1 × root param:Game_CompareDeferredDrawDepth#0: `Game.cpp:2178`
 - 1 × root param:Game_CompareDeferredDrawDepth#1: `Game.cpp:2179`
 - 1 × root param:Game_CompareTransparentDrawEntries#0: `Game.cpp:2246`
 - 1 × root param:Game_CompareTransparentDrawEntries#1: `Game.cpp:2247`
-- 1 × root param:OptionMenu_SelectItemAndRefresh#0: `GameInfo.cpp:6314`
-- 1 × root var:g_previewOriginalNodeTypes: `GameInfo.cpp:7992`
+- 1 × root param:OptionMenu_SelectItemAndRefresh#0: `GameInfo.cpp:6316`
+- 1 × root var:g_previewOriginalNodeTypes: `GameInfo.cpp:7996`
 - 1 × root param:NetPlayers_ComparePlayerIDs#0: `NetPlayers.cpp:1022`
 - 1 × root param:NetPlayers_ComparePlayerIDs#1: `NetPlayers.cpp:1022`
 - 1 × root param:NetPlayers_CompareResultRecords#0: `NetPlayers.cpp:516:21`
@@ -136,31 +109,24 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × root param:NetPlayers_CompareStandingRecords#1: `NetPlayers.cpp:649:23`
 - 1 × root param:NetPlayers_CompareClassificationRecords#0: `NetPlayers.cpp:835:29`
 - 1 × root param:NetPlayers_CompareClassificationRecords#1: `NetPlayers.cpp:836:29`
-- 1 × root param:NetworkLeaderboard_CompareEntries#0: `NetworkLeaderboards.cpp:98:41`
-- 1 × root param:NetworkLeaderboard_CompareEntries#1: `NetworkLeaderboards.cpp:99:41`
-- 1 × absolute address 0xff00008a: `RallyData.cpp:6881`
-- 1 × absolute address 0xff00008b: `RallyData.cpp:6882`
-- 1 × absolute address 0xff00008c: `RallyData.cpp:6883`
-- 1 × absolute address 0xff00008d: `RallyData.cpp:6884`
-- 1 × index scratchOffset: stride 0x1 matches no array: `RallyData.cpp:7504:32`
+- 1 × root param:NetworkLeaderboard_CompareEntries#0: `NetworkLeaderboards.cpp:105:41`
+- 1 × root param:NetworkLeaderboard_CompareEntries#1: `NetworkLeaderboards.cpp:106:41`
+- 1 × index scratchOffset: stride 0x1 matches no array: `RallyData.cpp:7506:32`
 - 1 × index itemOff: stride 0x1 matches no array: `SceneNode.cpp:2118:41`
 - 1 × root var:Sound_RefillMusicBufferRegions:pAudio1:625: `Sound.cpp:636:71`
 - 1 × root var:Sound_RefillMusicBufferRegions:pAudio2:626: `Sound.cpp:640:71`
 - 1 × root var:Sound_CopyBufferData:p1:807: `Sound.cpp:814:20`
 - 1 × root var:Sound_CopyBufferData:p2:809: `Sound.cpp:816:20`
-- 1 × index p->laneCount * p->samplesPerLane: stride 0x4 matches no array: `StageObjects.cpp:10229:33`
-- 1 × index p->samplesPerLane * p->lane: stride 0x10 matches no array: `StageObjects.cpp:12183:84`
-- 1 × index p->samplesPerLane * p->laneCount: stride 0x10 matches no array: `StageObjects.cpp:14449:107`
-- 1 × index r.native: stride 0x1 matches no array: `StageObjects.cpp:1562:20`
-- 1 × index (p->samplesPerLane * extraSize + recordSize) * p->laneCapacity: stride 0x1 matches no array: `StageObjects.cpp:7278:23`
-- 1 × root param:Replay_SaveCarTorqueAndRecordState#0: `StageObjects.cpp:9833:66`
-- 1 × root var:StageUI_DrawStageGrid:pCell:892: `StageUI.cpp:907:27`
+- 1 × index p->laneCount * p->samplesPerLane: stride 0x4 matches no array: `StageObjects.cpp:10236:33`
+- 1 × index p->samplesPerLane * p->lane: stride 0x10 matches no array: `StageObjects.cpp:12190:84`
+- 1 × index p->samplesPerLane * p->laneCount: stride 0x10 matches no array: `StageObjects.cpp:14460:107`
+- 1 × index r.native: stride 0x1 matches no array: `StageObjects.cpp:1571:20`
+- 1 × index (p->samplesPerLane * extraSize + recordSize) * p->laneCapacity: stride 0x1 matches no array: `StageObjects.cpp:7287:23`
 - 1 × root param:deflateInit_#2: `ZlibDeflate.cpp:216`
 - 1 × root param:gzsetparams#0: `ZlibGzio.cpp:221:20`
 - 1 × root param:gzprintf#0: `ZlibGzio.cpp:491:20`
 - 1 × root param:gzflush#0: `ZlibGzio.cpp:636:20`
 - 1 × root param:gzeof#0: `ZlibGzio.cpp:768:20`
 - 1 × root param:gzerror#0: `ZlibGzio.cpp:838:20`
-- 1 × root var:inflate_blocks:q:127: `ZlibInfblock.cpp:203:15`
 - 1 × root param:inflateSetDictionary#1: `ZlibInfblock.cpp:378:22`
 - 1 × root param:inflateInit_#1: `ZlibInflate.cpp:86`

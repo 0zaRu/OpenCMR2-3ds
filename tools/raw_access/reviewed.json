@@ -4,8 +4,8 @@
     "x86_64"
   ],
   "guards": {
-    "game/StageObjects.cpp": "d50909fa8a2eea06d150a53b0b0ab0dfce6e5fe3e3923e7883f23d391e05ee0f",
-    "game/ReplayStream.h": "e89389fbf879a5d9c3fb21d524ac95c46cdefb5555168473f56a6d3315119b22",
+    "game/StageObjects.cpp": "75b4bd329039cf9c1f3e50ff6d2760267c5c4ac1969613457d8a6d6cfc734459",
+    "game/ReplayStream.h": "73572a5d932cc2bd8906dc0333ef922e7121a7377ce0896d11cf476517aff27b",
     "game/FixedPoint.h": "4742a0cbb0f9d301f4cd8101a7009ee02aec54b568a0a2fee86793028b20fee5",
     "game/FileBuffer.cpp": "de696af61b34e3acf85abf4427020cdcd9e0f0c0f247f1d87069823a7e9b2fca",
     "src/port/types.h": "89d6d811b93c80dbb12c04a89f148cd990f6d76eea085362e707aee611414ebe",
@@ -14,7 +14,7 @@
   },
   "accesses": [
     {
-      "key": "StageObjects.cpp:7261:22:flow:assign",
+      "key": "StageObjects.cpp:7270:22:flow:assign",
       "fn": "Replay_SetupPointers",
       "text": "(ReplayInputLane *)((BYTE *)p + sizeof(ReplayStream))",
       "automatic_verdict": "bug",
@@ -24,7 +24,7 @@
       "reason": "This forms a ReplayInputLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x114c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayInputLane has the same pointer-free 0x114c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions."
     },
     {
-      "key": "StageObjects.cpp:7265:22:flow:assign",
+      "key": "StageObjects.cpp:7274:22:flow:assign",
       "fn": "Replay_SetupPointers",
       "text": "(ReplayStateLane *)((BYTE *)p + sizeof(ReplayStream))",
       "automatic_verdict": "bug",
