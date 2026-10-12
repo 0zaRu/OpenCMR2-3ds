@@ -29,12 +29,27 @@ jobs:
       - run: cmake --preset linux-x86 -DOPENCMR2_VENDORED_SDL=ON
       - run: cmake --build --preset linux-x86
       - run: ctest --preset linux-x86
+      - name: Package
+        run: |
+          python3 tools/package_release.py --binary build/linux-x86/src/opencmr2 \
+            --library build/linux-x86/src/libSDL3.so.0 \
+            --license build/linux-x86/_deps/sdl3-src/LICENSE.txt \
+            --output dist/OpenCMR2-Linux-i686.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenCMR2-Linux-i686
+          path: dist/*
+          if-no-files-found: error
 
   linux:
     strategy:
       fail-fast: false
       matrix:
-        runner: [ubuntu-24.04, ubuntu-24.04-arm]
+        include:
+          - runner: ubuntu-24.04
+            arch: x86_64
+          - runner: ubuntu-24.04-arm
+            arch: arm64
     runs-on: ${{ matrix.runner }}
     steps:
       - run: |
@@ -44,19 +59,41 @@ jobs:
             libwayland-dev wayland-protocols libegl1-mesa-dev libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
       - uses: actions/checkout@v4
       # Ubuntu 24.04 has no SDL3 package: the build fetches it.
-      - run: cmake --preset linux
+      - run: cmake --preset linux -DOPENCMR2_VENDORED_SDL=ON
       - run: cmake --build --preset linux
       - run: ctest --preset linux
+      - name: Package
+        run: |
+          python3 tools/package_release.py --binary build/linux/src/opencmr2 \
+            --library build/linux/src/libSDL3.so.0 \
+            --license build/linux/_deps/sdl3-src/LICENSE.txt \
+            --output dist/OpenCMR2-Linux-${{ matrix.arch }}.tar.gz
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenCMR2-Linux-${{ matrix.arch }}
+          path: dist/*
+          if-no-files-found: error
 
   macos:
     runs-on: macos-14
     steps:
-      - run: brew install ninja glslang sdl3
+      - run: brew install ninja glslang
       - uses: actions/checkout@v4
-      # Builds spirv-cross for the Metal shaders.
-      - run: cmake --preset macos
+      # Builds SDL3, shipped in the release, and spirv-cross for the Metal shaders.
+      - run: cmake --preset macos -DOPENCMR2_VENDORED_SDL=ON
       - run: cmake --build --preset macos
       - run: ctest --preset macos
+      - name: Package
+        run: |
+          python3 tools/package_release.py --binary build/macos/src/opencmr2 \
+            --library build/macos/src/libSDL3.0.dylib \
+            --license build/macos/_deps/sdl3-src/LICENSE.txt \
+            --output dist/OpenCMR2-macOS-arm64.zip
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenCMR2-macOS-arm64
+          path: dist/*
+          if-no-files-found: error
 
   windows:
     runs-on: windows-2022
@@ -78,20 +115,18 @@ jobs:
       - run: cmake --preset windows-x64 -DOPENCMR2_VENDORED_SDL=ON
       - run: cmake --build --preset windows-x64
       - run: ctest --preset windows-x64
-      - name: Package Windows x64 (without original game data)
+      - name: Package
         shell: pwsh
         run: |
           python -m pip install pefile==2024.8.26
           $crt = Join-Path $env:VCToolsRedistDir "x64/Microsoft.VC143.CRT"
-          python tools/package_windows.py --binary build/windows-x64/src/opencmr2.exe `
+          python tools/package_release.py --binary build/windows-x64/src/opencmr2.exe `
             --dll-dir $crt --license build/windows-x64/_deps/sdl3-src/LICENSE.txt `
-            --output dist/OpenCMR2-Windows-x64 --zip dist/OpenCMR2-Windows-x64.zip
+            --output dist/OpenCMR2-Windows-x64.zip
       - uses: actions/upload-artifact@v4
         with:
           name: OpenCMR2-Windows-x64
-          path: |
-            dist/OpenCMR2-Windows-x64.zip
-            dist/OpenCMR2-Windows-x64.zip.sha256
+          path: dist/*
           if-no-files-found: error
 
   release:
@@ -103,8 +138,9 @@ jobs:
     steps:
       - uses: actions/download-artifact@v4
         with:
-          name: OpenCMR2-Windows-x64
+          pattern: OpenCMR2-*
           path: dist
+          merge-multiple: true
       - name: Publish tagged release
         env:
           GH_TOKEN: ${{ github.token }}

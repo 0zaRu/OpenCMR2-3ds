@@ -55,6 +55,16 @@ if(WIN32)
     add_custom_command(TARGET opencmr2 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:opencmr2> $<TARGET_FILE_DIR:opencmr2>
         COMMAND_EXPAND_LISTS)
+elseif(OPENCMR2_BUILT_SDL)
+    # The SDL3 built here goes next to the executable, which looks for it
+    # there, so the release archives run without SDL3 installed.
+    if(APPLE)
+        set_property(TARGET opencmr2 APPEND PROPERTY BUILD_RPATH "@executable_path")
+    else()
+        set_property(TARGET opencmr2 APPEND PROPERTY BUILD_RPATH "$ORIGIN")
+    endif()
+    add_custom_command(TARGET opencmr2 POST_BUILD
+        COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_SONAME_FILE:SDL3::SDL3> $<TARGET_FILE_DIR:opencmr2>)
 endif()
 
 # ---- shaders (GLSL -> SPIR-V, plus MSL for Metal; embedded) ----------------------
