@@ -23,7 +23,7 @@ jobs:
             libx11-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 \
             libxi-dev:i386 libxss-dev:i386 libxkbcommon-dev:i386 \
             libwayland-dev:i386 wayland-protocols libegl1-mesa-dev:i386 \
-            libasound2-dev:i386 libpulse-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
+            libasound2-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
       - uses: actions/checkout@v4
       # Ubuntu 24.04 has no SDL3 package: compile it for i386 too.
       - run: cmake --preset linux-x86 -DOPENCMR2_VENDORED_SDL=ON

@@ -58,7 +58,7 @@ Ubuntu 24.04 LTS (the CI environment):
         libx11-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 \
         libxi-dev:i386 libxss-dev:i386 libxkbcommon-dev:i386 \
         libwayland-dev:i386 wayland-protocols libegl1-mesa-dev:i386 \
-        libasound2-dev:i386 libpulse-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
+        libasound2-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
     export PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
 
 SDL3 is built from source when it is not installed.
