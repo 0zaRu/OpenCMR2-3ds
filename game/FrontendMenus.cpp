@@ -2015,15 +2015,19 @@ char GameInfo_AreOptionsAvailable(void);
 
 // Language menu: five languages, or three in region 1.
 // FUNCTION: CMR2 0x004f5580
+// PORT: the entry is the language number (English, French, Spanish, Italian,
+// German: text files, speech, credits and flag). The original labelled
+// entries 2 and 4 with texts 8 "deutsch" and 10 "español", swapped: choosing
+// "deutsch" showed the Spanish flag and loaded Spanish. Fixed here.
 void FrontendMenu_BuildLanguage(void)
 {
     Menu_Init(&g_menu0x008221d8, 0, 1, 0, NULL, NULL, 1, 0, 0);
     if (CGameInfo::GetGameRegion() == 0) {
         Menu_AddItemType2(&g_menu0x008221d8, 0, 6, &g_menu0x0081d6d8, 0, 0);
         Menu_AddItemType2(&g_menu0x008221d8, 0, 7, &g_menu0x0081d6d8, 0, 1);
-        Menu_AddItemType2(&g_menu0x008221d8, 0, 8, &g_menu0x0081d6d8, 0, 2);
+        Menu_AddItemType2(&g_menu0x008221d8, 0, 10, &g_menu0x0081d6d8, 0, 2);
         Menu_AddItemType2(&g_menu0x008221d8, 0, 9, &g_menu0x0081d6d8, 0, 3);
-        Menu_AddItemType2(&g_menu0x008221d8, 0, 10, &g_menu0x0081d6d8, 0, 4);
+        Menu_AddItemType2(&g_menu0x008221d8, 0, 8, &g_menu0x0081d6d8, 0, 4);
     } else {
         Menu_AddItemType2(&g_menu0x008221d8, 0, 6, &g_menu0x0081d6d8, 0, 0);
         Menu_AddItemType2(&g_menu0x008221d8, 0, 7, &g_menu0x0081d6d8, 0, 1);
