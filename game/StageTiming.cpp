@@ -1974,14 +1974,14 @@ void StageObject_InitCarSceneTables(void)
 {
     BYTE *pTiming;
     int *pState;
-    CarInteriorDashTextures *pTexture;
-    CarInteriorNodes *pPosition;
+    int *pTexture;
+    int *pPosition;
     int *p;
 
 #define DRIVER_STATE (*(CarDriverPoseState *)(pTiming - (offsetof(CarDriverPoseState, rotation) + offsetof(FixAngles, y))))
 #define WIPER_STATE (*(CarWiperState *)((BYTE *)pState - offsetof(CarWiperState, sweepingForward)))
-#define DASH_TEXTURES (*pTexture)
-#define INTERIOR_NODES (*pPosition)
+#define DASH_TEXTURES (*(CarInteriorDashTextures *)((BYTE *)pTexture - offsetof(CarInteriorDashTextures, digit)))
+#define INTERIOR_NODES (*(CarInteriorNodes *)((BYTE *)pPosition - offsetof(CarInteriorNodes, steeringWheelNode)))
 #define INTERIOR_ARCHIVE (*(GenericFile *)((BYTE *)p - offsetof(GenericFile, fileSize)))
 
     g_carInteriorLoaded[0] = 0;
@@ -2001,8 +2001,8 @@ void StageObject_InitCarSceneTables(void)
     *(short *)g_carSteeringBlendFrames = 0x303;
     pTiming = (BYTE *)&g_carDriverPoseStates[0].rotation.y;
     pState = &g_carWiperStates[0].sweepingForward;
-    pTexture = g_carInteriorDashTextures;
-    pPosition = g_carInteriorNodeRows;
+    pTexture = (int *)&g_carInteriorDashTextures[0].digit;
+    pPosition = (int *)&g_carInteriorNodeRows[0].steeringWheelNode;
     do {
         DRIVER_STATE.rotation.x = 0;
         INTERIOR_NODES.driverPoseNode = 0;
@@ -2020,11 +2020,11 @@ void StageObject_InitCarSceneTables(void)
         DASH_TEXTURES.digit = 0;
         WIPER_STATE.mode = 0;
         DRIVER_STATE.mountOffset.z = 0;
-        ++pPosition;
-        ++pTexture;
+        pPosition += sizeof(CarInteriorNodes) / sizeof(*pPosition);
+        pTexture += sizeof(CarInteriorDashTextures) / sizeof(*pTexture);
         pState += sizeof(CarWiperState) / sizeof(*pState);
         pTiming += sizeof(CarDriverPoseState);
-    } while (pPosition < g_carInteriorNodeRows + 2);
+    } while ((INT_PTR)pPosition < (INT_PTR)&g_carInteriorNodeRows[2].steeringWheelNode);
     p = (int *)&g_carInteriorArchives[0].fileSize;
     do {
         INTERIOR_ARCHIVE.buffer = NULL;
@@ -2561,11 +2561,18 @@ BYTE g_unk0x005429e8[0xc8];
 // FUNCTION: CMR2 0x00456bb0
 void StageTiming_InitStageFileTable(void)
 {
-    for (unsigned i = 0; i < sizeof(g_carModelArchives) / sizeof(g_carModelArchives[0]); ++i) {
-        g_carModelArchives[i].buffer = NULL;
-        g_carModelArchives[i].fileSize = 0;
-        g_carModelArchives[i].didFileLoad = FALSE;
-    }
+    void **p = (void **)&g_carModelArchives[0].fileSize;
+    int count;
+    do {
+        count = 2;
+        do {
+            // Keep the original cursor biased at fileSize, with typed fields.
+            ((GenericFile *)((BYTE *)p - sizeof(g_carModelArchives[0].buffer)))->buffer = NULL;
+            ((GenericFile *)((BYTE *)p - sizeof(g_carModelArchives[0].buffer)))->fileSize = 0;
+            ((GenericFile *)((BYTE *)p - sizeof(g_carModelArchives[0].buffer)))->didFileLoad = FALSE;
+            p += sizeof(GenericFile) / sizeof(*p);
+        } while (--count);
+    } while ((INT_PTR)p < (INT_PTR)&g_stageArchiveTables.secondaryCount);
     CGame::RegisterCallback(StageTiming_ReleaseStartArchiveBuffers, 0);
 }
 

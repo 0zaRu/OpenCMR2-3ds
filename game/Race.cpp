@@ -3319,7 +3319,7 @@ void Race_HandleStageReplayViewTransitions(CallbackStateMachine *param1, unsigne
 
     count = pPlayers->count;
     if (count >= 1) {
-        p = (BYTE *)pPlayers->records;
+        p = (BYTE *)(pPlayers)->records;
         for (i = 0; i < count; i++) {
             if (*p != 11)
                 return;
@@ -3423,10 +3423,9 @@ void Race_HandleStageReplayViewTransitions(CallbackStateMachine *param1, unsigne
         if ((char)RallyData_GetSelectionFlag26() != 0)
             CSound::CloseMusicStreamAndClearPath(0);
         if (CGameInfo::GetGameInfoSessionFlag() == 0) {
-            unsigned int *elapsed;
-            CGameInfo::GetRecordFlagsWord(&elapsed);
+            CGameInfo::GetRecordFlagsWord((unsigned int **)&param1);
             n = CMain::GetFrameDelta();
-            *elapsed += n - g_unk0x00537ffc;
+            *(int *)param1 += n - g_unk0x00537ffc;
             g_unk0x00537ffc = CMain::GetFrameDelta();
         }
         for (i = 0; i < (BYTE)RallyDataState(); i++)
