@@ -7,8 +7,8 @@ original meant) and the x86_64 layout (what the port touches).
 | Verdict | Accesses |
 | --- | --- |
 | bug | 0 |
-| unresolved | 85 |
-| safe | 7233 |
+| unresolved | 70 |
+| safe | 7230 |
 
 `safe` means the layout checks passed or the access was individually reviewed below. It is not
 a proof of bounds, lifetime, control flow or physics equivalence. `bug` is an automatic finding
@@ -28,15 +28,14 @@ reasons. Use `--without-reviews` to inspect all automatic findings.
 
 Fixing or typing one root usually settles every access listed under it.
 
-- 15 × root load:var:Scene_ProjectCasterIntoLightZone:pTri:1767: `SceneNode.cpp:1929`, `SceneNode.cpp:1930`, `SceneNode.cpp:1931`, `SceneNode.cpp:1932`, `SceneNode.cpp:1933`, `SceneNode.cpp:1934`, `SceneNode.cpp:1935`, `SceneNode.cpp:1936` ...
 - 9 × index i: stride 0x1 matches no array: `Car.cpp:2895`, `Car.cpp:2895`, `Car.cpp:5288`, `Collision2D.cpp:754`, `Collision2D.cpp:755`, `Collision2D.cpp:756`, `Collision2D.cpp:775`, `Collision2D.cpp:776` ...
-- 9 × root field:SceneNode::pObject: `GameInfo.cpp:11196`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8991`, `StageObjects.cpp:931`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
+- 9 × root field:SceneNode::pObject: `GameInfo.cpp:11200`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8991`, `StageObjects.cpp:931`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
 - 7 × index off: stride 0x1 matches no array: `Car.cpp:2936:33`, `Car.cpp:2946`, `Car.cpp:2952:33`, `Car.cpp:2957`, `Car.cpp:2958`, `Car.cpp:2959`, `Car.cpp:3069:32`
 - 6 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4948`, `StageObjects.cpp:14014`
 - 4 × root opaque (): `FrontendScreens.cpp:11497:93`, `FrontendScreens.cpp:11515:97`, `FrontendScreens.cpp:11524:93`, `FrontendScreens.cpp:11529:93`
 - 3 × root ret:strchr: `GameInfo.cpp:2798:32`, `GameInfo.cpp:2805:26`, `GameInfo.cpp:2805:36`
 - 3 × root var:RallyData_FormatResultDriverName:entry:5825: `RallyData.cpp:5844:89`, `RallyData.cpp:5855:94`, `RallyData.cpp:5857:75`
-- 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1874:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3497:24`
+- 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1867:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3497:24`
 - 3 × root param:Knockout_UpdateRaceStateAndFades#0: `StageObjects.cpp:2272:55`, `StageUI.cpp:929:43`, `StageUI.cpp:946:47`
 - 2 × root load:var:RallyData_FindCheatNameIndex:p:1521: `FrontendScreens.cpp:6177:40`, `FrontendScreens.cpp:6178:16`
 - 2 × root site:StageObjects.cpp:14142:36:deref: `StageObjects.cpp:14052:9`, `StageObjects.cpp:1524`
@@ -54,5 +53,5 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × root field:NetMsgCreatePlayer::lpData: `FrontendScreens.cpp:1791:62`
 - 1 × root field:NetMsgSetPlayerData::lpData: `FrontendScreens.cpp:1837:62`
 - 1 × index scratchOffset: stride 0x1 matches no array: `RallyData.cpp:7506:32`
-- 1 × index itemOff: stride 0x1 matches no array: `SceneNode.cpp:2118:41`
+- 1 × index itemOff: stride 0x1 matches no array: `SceneNode.cpp:2108:41`
 - 1 × index r.native: stride 0x1 matches no array: `StageObjects.cpp:1571:20`
