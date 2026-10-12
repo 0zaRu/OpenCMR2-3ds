@@ -143,6 +143,18 @@ std::string ExecArgument(const std::string &path)
     return out + '"';
 }
 
+// A string value: only backslashes need escaping in a path.
+std::string StringValue(const std::string &text)
+{
+    std::string out;
+    for (char c : text) {
+        if (c == '\\')
+            out += '\\';
+        out += c;
+    }
+    return out;
+}
+
 // Writes the file unless it already holds these bytes.
 bool WriteIfChanged(const fs::path &file, const void *data, size_t size)
 {
@@ -203,7 +215,9 @@ bool Shortcut_Update(bool present)
                               "GenericName=Rally game\n"
                               "Comment=Colin McRae Rally 2.0 (needs the original game files)\n"
                               "Exec=" + ExecArgument(exe) + "\n"
-                              "Icon=" + s_appId + "\n"
+                              // By path: a theme name would depend on the user's
+                              // icon cache, which GTK does not refresh for a new file.
+                              "Icon=" + StringValue(icon.u8string()) + "\n"
                               "Terminal=false\n"
                               "Categories=Game;SportsGame;\n"
                               "StartupWMClass=" + s_appId + "\n";

@@ -241,6 +241,7 @@ int main()
     const std::string exe = fs::read_symlink("/proc/self/exe").u8string();
     const size_t asked = messages.size();
     Check(fs::exists(icon) && Read(desktop).find("\nExec=\"" + exe + "\"\n") != std::string::npos &&
+          Read(desktop).find("\nIcon=" + icon.u8string() + "\n") != std::string::npos &&
           Read(xdg / "OpenCMR2/opencmr2.ini").find("menu_shortcut = 1") != std::string::npos,
           "add the menu entry when accepted");
     Check(Platform_Init(1, args), "start again with the menu entry");
