@@ -17,8 +17,15 @@ void CNetworkLeaderboards::Reset() {
     m_leaderboardId = -1;
     m_totalLeaderboards = 0;
 
-    for (NetworkLeaderboard &board : m_leaderboards)
-        board.isLoaded = 0;
+    // The original compares the cursor signed (jl), so it is an integer
+    // address, not a NetworkLeaderboard pointer.
+    INT_PTR addr = (INT_PTR)m_leaderboards;
+    INT_PTR endAddr = addr + sizeof(m_leaderboards);
+
+    while (addr < endAddr) {
+        ((NetworkLeaderboard *)addr)->isLoaded = 0;
+        addr += sizeof(NetworkLeaderboard);
+    }
 }
 
 // FUNCTION: CMR2 0x0040e3f0

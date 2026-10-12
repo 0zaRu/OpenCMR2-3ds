@@ -50,7 +50,6 @@ int g_unk0x0053a0cc[8];
 int g_unk0x0053a0ec[8];
 // GLOBAL: CMR2 0x0053a20c
 int g_unk0x0053a20c[8];
-// PORT: the records at 0x5394bc are g_unk0x005393d8[1..7] (StageTiming.cpp).
 extern CarNetRecord g_unk0x005393d8[8];
 
 // Font picked for the screen size (0x28 normal, 0x29 small).
@@ -80,7 +79,7 @@ void NetRace_SelectHUDFont(int width, int height, int players)
 // FUNCTION: CMR2 0x00427620
 int NetRace_GetPlayerStatisticsValue(int index)
 {
-    return *(int *)&g_unk0x005393d8[index + 1];
+    return g_unk0x005393d8[index].field_0xe4;
 }
 
 // FUNCTION: CMR2 0x00427640
@@ -194,7 +193,7 @@ void NetRace_DispatchRacePacket(DWORD *pId, BYTE *pPacket)
 }
 
 int Network_PollReceivedMessageBuffer(DWORD *param1, void **param2);
-void NetRace_HandleDeviceNotification(int param_1, int *param_2);
+void NetRace_HandleDeviceNotification(DWORD *pFrom, int *param_2);
 void NetRace_DispatchRacePacket(DWORD *pId, BYTE *pPacket);
 
 // Drains the pending network messages of a race: system messages (from id 0)
@@ -207,7 +206,7 @@ void NetRace_DrainPendingMessages(void)
 
     while (Network_PollReceivedMessageBuffer(&from, &pData)) {
         if (from == 0)
-            NetRace_HandleDeviceNotification(0, (int *)pData);
+            NetRace_HandleDeviceNotification(&from, (int *)pData);
         else
             NetRace_DispatchRacePacket(&from, (BYTE *)pData);
     }
@@ -1011,7 +1010,7 @@ void NetPlayers_RemovePlayerByID(int *pId);
 // Network-device notification: id 5 refreshes the player list of the entry,
 // id 0x101 re-initialises the in-race menu and the HUD.
 // FUNCTION: CMR2 0x00427680
-void NetRace_HandleDeviceNotification(int param_1, int *param_2)
+void NetRace_HandleDeviceNotification(DWORD *pFrom, int *param_2)
 {
     if (*param_2 != NET_SYS_DESTROYPLAYER) {
         if (*param_2 == NET_SYS_HOST) {
@@ -1288,7 +1287,6 @@ extern void NetPlayers_RebuildStageResults(int param1, int param2, int param3);
 extern void NetRace_PollPlayerStatisticsPackets(Car *pCars);
 extern void Car_RestorePhysicsFromRecord(Car *pDst, CarNetRecord *pSrc);
 
-extern CarNetRecord g_unk0x005393d8[8];
 
 // Text of the network frame statistics trace.
 // GLOBAL: CMR2 0x00519988

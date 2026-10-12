@@ -2230,7 +2230,7 @@ unsigned int NetPlayers_GetStandingTime(int index, int total);
 unsigned int RallyData_GetSelectionBits10To11(void);
 unsigned int RallyData_GetSelectionBits12To13(void);
 void GameMenu_DrawInGameBreadcrumb(Menu *pMenu);
-void GameMenus_FormatModeName(int unused, int mode);
+void GameMenus_FormatModeName(char *unused, int mode);
 Texture *InRaceMenu_GetUpArrowTexture(void);
 Texture *InRaceMenu_GetDownArrowTexture(void);
 BYTE StageUI_GetRaceEndEventCount(void);
@@ -2592,7 +2592,7 @@ void GameMenu_DrawInGameBreadcrumb(Menu *pMenu)
                   (int *)g_menuFrameColour, 0x11);
     if (flag) {
         GAMEMENUS_HEADER_MARKER(CFrontend::m_stringDest)
-        GameMenus_FormatModeName(0,
+        GameMenus_FormatModeName(CFrontend::m_stringDest,
                                  (BYTE)RallyData_GetSelectionBits10To11() * 3 + (BYTE)RallyData_GetSelectionBits12To13());
         CGenericFileLoader::StrLowerPolish(CFrontend::m_stringDest);
         Font_DrawText(2, CFrontend::m_stringDest, x, (int)(g_pGraphics->resY * 0x43) / 0x1e0,
@@ -3694,7 +3694,7 @@ char g_plusTimeFormat[] = "+ %s";
 
 // Formats the name of one of the eight game modes into the shared string.
 // FUNCTION: CMR2 0x00451ce0
-void GameMenus_FormatModeName(int unused, int mode)
+void GameMenus_FormatModeName(char *unused, int mode)
 {
     switch (mode) {
     case 0:

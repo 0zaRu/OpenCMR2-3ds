@@ -13,8 +13,8 @@
 #include <thread>
 
 extern void FrontendNetwork_HandleJoinerMessage(NetPlayerID *, unsigned int *);
-extern void OptionMenu_HandleItemNotification(int, int *);
-extern void NetRace_HandleDeviceNotification(int, int *);
+extern void OptionMenu_HandleItemNotification(unsigned int *, int *);
+extern void NetRace_HandleDeviceNotification(DWORD *, int *);
 extern NetSessionDesc g_networkSession;
 extern void GameInfo_SetConfiguredGameMode(BYTE);
 extern int GameInfo_GetSessionField398C();
@@ -125,10 +125,15 @@ int main()
     auto *destroy = (NetMsgDestroyPlayer *)Receive(host, NET_SYS_DESTROYPLAYER);
     FrontendNetwork_HandleJoinerMessage(nullptr, (unsigned int *)destroy);
     Check(!Find(guestId), "lobby removes guest");
-    for (auto handler : {OptionMenu_HandleItemNotification, NetRace_HandleDeviceNotification}) {
+    for (int handler = 0; handler < 2; handler++) {
+        DWORD from = 0;
+
         g_netPlayers[0].id = int(guestId);
         g_netPlayers[0].flags = 0x80;
-        handler(0, (int *)destroy);
+        if (handler == 0)
+            OptionMenu_HandleItemNotification((unsigned int *)&from, (int *)destroy);
+        else
+            NetRace_HandleDeviceNotification(&from, (int *)destroy);
         Check(!Find(guestId), "in-race/results handler removes guest");
     }
     // A player can initially have no custom data. Its later description
