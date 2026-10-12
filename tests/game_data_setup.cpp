@@ -224,8 +224,9 @@ int main()
     const fs::path xdg = root / "xdg";
     Write(xdg / "OpenCMR2/OpenCMR2/opencmr2.ini", "[paths]\ndata = " + nestedGame.u8string() + "\n");
     Write(xdg / "OpenCMR2/OpenCMR2/Configuration/GameInfo.rcf", "old save");
+    // In the process environment: SDL_Quit drops SDL's copy between launches.
     setenv("XDG_DATA_HOME", xdg.u8string().c_str(), 1);
-    Check(SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SDL_VIDEODRIVER", "dummy", true), "dummy video");
+    setenv("SDL_VIDEODRIVER", "dummy", 1);
     char name[] = "game_data_setup";
     char *args[] = {name};
     Check(Platform_Init(1, args), "start from the default user directory");
