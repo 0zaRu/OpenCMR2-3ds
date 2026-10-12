@@ -2223,9 +2223,9 @@ int Mesh_GetCornerLight(Mesh *pMesh, MeshTriangle *pTri, FixVector *pDir, int co
 
 #define CORNER_NORMAL(i) \
     ((float *)((BYTE *)pMesh->pVertexData + pTri->vertexIndex[corner] * 0x30))[3 + (i)]
-    normal.x = (int)llrint(CORNER_NORMAL(0) * CGraphics::m_65536);
-    normal.y = (int)llrint(CORNER_NORMAL(1) * CGraphics::m_65536);
-    normal.z = (int)llrint(CORNER_NORMAL(2) * CGraphics::m_65536);
+    normal.x = (int)FTOI(__int64, CORNER_NORMAL(0) * CGraphics::m_65536);
+    normal.y = (int)FTOI(__int64, CORNER_NORMAL(1) * CGraphics::m_65536);
+    normal.z = (int)FTOI(__int64, CORNER_NORMAL(2) * CGraphics::m_65536);
 #undef CORNER_NORMAL
     level = FixMul(FixVecDot(pDir, &normal), 0x40000);
     if (level < 0)
@@ -2621,8 +2621,6 @@ extern const double g_unk0x00511380;
 // other compilers normally truncate it. All loops fill their complete tables
 // (4096 entries, except the 512-entry arctangent table). See the numeric audit
 // in docs/audits/2026-10-10/numeric-semantics.md.
-// PORT: llrint rounds to nearest even like FISTP, keeping the 64-bit value
-// before narrowing (the original's low word on overflow).
 // match 68%: below the 90% bar; kept as FUNCTION on purpose so reccmp measures it (see CONVENCIONES)
 // FUNCTION: CMR2 0x004b7b20
 void Scene_InitFixedMathTables(void)
@@ -2632,8 +2630,8 @@ void Scene_InitFixedMathTables(void)
     int value;
 
     for (i = 0; i < 4096; i++) {
-        g_sinTable[i] = (int)llrint(sin((double)i * g_unk0x00511d08) * CGraphics::m_65536);
-        g_tanTable[i] = (int)llrint(tan((double)i * g_unk0x00511d08) * CGraphics::m_65536);
+        g_sinTable[i] = (int)FTOI(__int64, sin((double)i * g_unk0x00511d08) * CGraphics::m_65536);
+        g_tanTable[i] = (int)FTOI(__int64, tan((double)i * g_unk0x00511d08) * CGraphics::m_65536);
     }
     i = 8;
     // tan(90°) and tan(270°) would overflow: the original clamps them
@@ -2641,16 +2639,16 @@ void Scene_InitFixedMathTables(void)
     g_tanTable[1024] = 0x7fffffff;
 
     for (n = 0; n < 4096; n++, i += 16)
-        g_sqrtTable[n] = (unsigned short)(int)llrint(sqrt((double)i * CGraphics::m_oneOver65536) * CGraphics::m_65536);
+        g_sqrtTable[n] = (unsigned short)(int)FTOI(__int64, sqrt((double)i * CGraphics::m_oneOver65536) * CGraphics::m_65536);
 
     for (i = 0; i < 4096; i++) {
-        value = (int)llrint(asin((double)i * g_unk0x00511d00) * CGraphics::m_65536);
-        g_acosTable[i] = (short)llrint((double)value * g_unk0x00511380);
+        value = (int)FTOI(__int64, asin((double)i * g_unk0x00511d00) * CGraphics::m_65536);
+        g_acosTable[i] = (short)FTOI(__int64, (double)value * g_unk0x00511380);
     }
 
     for (i = 0; i < 512; i++) {
-        value = (int)llrint(atan((double)i * g_unk0x00511cf8) * CGraphics::m_65536);
-        g_atanTable[i] = (unsigned short)llrint((double)value * g_unk0x00511380);
+        value = (int)FTOI(__int64, atan((double)i * g_unk0x00511cf8) * CGraphics::m_65536);
+        g_atanTable[i] = (unsigned short)FTOI(__int64, (double)value * g_unk0x00511380);
     }
 }
 

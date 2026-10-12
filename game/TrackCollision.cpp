@@ -629,7 +629,7 @@ void Stage_InitLightMeshes(void)
         maximum = 0;
         minimum = 0;
         for (i = g_stageMesh0Count - 1; i >= 0; i--) {
-            value = (int)llrint(((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[1] * CGraphics::m_65536);
+            value = (int)FTOI(__int64, ((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[1] * CGraphics::m_65536);
             if (i == g_stageMesh0Count - 1) {
                 minimum = value;
                 maximum = value;
@@ -641,8 +641,8 @@ void Stage_InitLightMeshes(void)
             }
             if (i == 0x68) {
                 g_lightMeshReferencePoint.y = value;
-                g_lightMeshReferencePoint.x = (int)llrint(((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[0] * CGraphics::m_65536);
-                g_lightMeshReferencePoint.z = (int)llrint(((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[2] * CGraphics::m_65536);
+                g_lightMeshReferencePoint.x = (int)FTOI(__int64, ((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[0] * CGraphics::m_65536);
+                g_lightMeshReferencePoint.z = (int)FTOI(__int64, ((DeformFloatVertex *)g_stageMesh0Copy->pVertexData)[i].pos[2] * CGraphics::m_65536);
             }
             g_stageHeightSamples[i] = value;
         }
@@ -652,13 +652,13 @@ void Stage_InitLightMeshes(void)
         }
     }
     if (g_stageMesh1Count != 0) {
-        g_stageRangeOrigin.x = (int)llrint(((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[0x32].pos[0] * CGraphics::m_65536);
-        g_stageRangeOrigin.y = (int)llrint(((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[0x32].pos[1] * CGraphics::m_65536);
-        g_stageRangeOrigin.z = (int)llrint(((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[0x32].pos[2] * CGraphics::m_65536);
-        minimum = (int)llrint(((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[0].pos[1] * CGraphics::m_65536);
+        g_stageRangeOrigin.x = (int)FTOI(__int64, ((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[0x32].pos[0] * CGraphics::m_65536);
+        g_stageRangeOrigin.y = (int)FTOI(__int64, ((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[0x32].pos[1] * CGraphics::m_65536);
+        g_stageRangeOrigin.z = (int)FTOI(__int64, ((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[0x32].pos[2] * CGraphics::m_65536);
+        minimum = (int)FTOI(__int64, ((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[0].pos[1] * CGraphics::m_65536);
         maximum = minimum;
         for (i = g_stageMesh1Count - 1; i >= 0; i--) {
-            value = (int)llrint(((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[i].pos[1] * CGraphics::m_65536);
+            value = (int)FTOI(__int64, ((DeformFloatVertex *)g_stageMesh1Copy->pVertexData)[i].pos[1] * CGraphics::m_65536);
             if (value > maximum)
                 maximum = value;
             if (value < minimum)
@@ -727,12 +727,12 @@ void Stage_SetHeightColours(BYTE *pLow, BYTE *pHigh, BYTE *pReference, int refer
     for (i = g_stageMesh0Count - 1; i >= 0; i--) {
         float *vertex = (float *)((BYTE *)g_stageMesh0Copy->pVertexData + i * 0x30);
         float vy = vertex[1];
-        height = (int)llrint((double)vy * CGraphics::m_65536);
+        height = (int)FTOI(__int64, (double)vy * CGraphics::m_65536);
         float vx = vertex[0];
         float vz = vertex[2];
         if (height == g_lightMeshReferencePoint.y &&
-            g_lightMeshReferencePoint.x == (int)llrint((double)vx * CGraphics::m_65536) &&
-            g_lightMeshReferencePoint.z == (int)llrint((double)vz * CGraphics::m_65536)) {
+            g_lightMeshReferencePoint.x == (int)FTOI(__int64, (double)vx * CGraphics::m_65536) &&
+            g_lightMeshReferencePoint.z == (int)FTOI(__int64, (double)vz * CGraphics::m_65536)) {
             ((MeshVertexF *)g_stageMesh0Copy->pVertexData)[i].diffuseColour = ((0xffffff00 | refColour[0]) << 8 | refColour[1]) << 8 | refColour[2];
             ((MeshVertexF *)g_stageMesh0Copy->pVertexData)[i].specularColour = (DWORD)*pAlpha << 24;
         } else {
@@ -868,7 +868,7 @@ void AutoGear_UpdateSecondarySwing(void)
             g_pAutoGearCar->handbrakeForce = g_pAutoGearCar->maxHandbrakeForce;
             return;
         }
-        angle = (unsigned short)llrint(FixMul(g_pAutoGearCar->handbrakePhase, 0x5a0000) * g_fixedDegreesToAngle12);
+        angle = (unsigned short)FTOI(__int64, FixMul(g_pAutoGearCar->handbrakePhase, 0x5a0000) * g_fixedDegreesToAngle12);
         g_pAutoGearCar->handbrakeForce = FixMul(g_pAutoGearCar->maxHandbrakeForce, g_sinTable[angle & 0xfff]);
     } else {
         g_pAutoGearCar->handbrakePhase = 0;
@@ -933,7 +933,7 @@ void AutoGear_UpdateRollingFollowRate(void)
             g_pAutoGearCar->throttlePhase = 0;
             g_pAutoGearCar->throttleTorque = 0;
         } else {
-            angle = (unsigned short)llrint(FixMul(g_pAutoGearCar->throttlePhase, 0x5a0000) *
+            angle = (unsigned short)FTOI(__int64, FixMul(g_pAutoGearCar->throttlePhase, 0x5a0000) *
                                               g_fixedDegreesToAngle12);
             g_pAutoGearCar->throttleTorque = FixMul(g_pAutoGearCar->maxThrottleTorque, g_sinTable[angle & 0xfff]);
         }
@@ -948,7 +948,7 @@ void AutoGear_UpdateRollingFollowRate(void)
             g_pAutoGearCar->throttleTorque = g_pAutoGearCar->maxThrottleTorque;
             return;
         }
-        angle = (unsigned short)llrint(FixMul(g_pAutoGearCar->throttlePhase, 0x5a0000) *
+        angle = (unsigned short)FTOI(__int64, FixMul(g_pAutoGearCar->throttlePhase, 0x5a0000) *
                                           g_fixedDegreesToAngle12);
         g_pAutoGearCar->throttleTorque = FixMul(g_pAutoGearCar->maxThrottleTorque, g_sinTable[angle & 0xfff]);
     }
@@ -968,7 +968,7 @@ void AutoGear_UpdateSteeringSwing(void)
             g_pAutoGearCar->brakeInput = g_pAutoGearCar->maxBrakeForce;
             return;
         }
-        angle = (unsigned short)llrint(FixMul(g_pAutoGearCar->brakePhase, 0x5a0000) * g_fixedDegreesToAngle12);
+        angle = (unsigned short)FTOI(__int64, FixMul(g_pAutoGearCar->brakePhase, 0x5a0000) * g_fixedDegreesToAngle12);
         g_pAutoGearCar->brakeInput = FixMul(g_pAutoGearCar->maxBrakeForce, g_sinTable[angle & 0xfff]);
         return;
     }
@@ -1085,9 +1085,9 @@ void Track_ShiftMeshAndAmbientHeights(int oldHeight, int newHeight, int mode)
             float vx = vertex[0];
             float vy = vertex[1];
             float vz = vertex[2];
-            if (g_lightMeshReferencePoint.x != (int)llrint((double)vx * CGraphics::m_65536) ||
-                g_lightMeshReferencePoint.y != (int)llrint((double)vy * CGraphics::m_65536) ||
-                g_lightMeshReferencePoint.z != (int)llrint((double)vz * CGraphics::m_65536))
+            if (g_lightMeshReferencePoint.x != (int)FTOI(__int64, (double)vx * CGraphics::m_65536) ||
+                g_lightMeshReferencePoint.y != (int)FTOI(__int64, (double)vy * CGraphics::m_65536) ||
+                g_lightMeshReferencePoint.z != (int)FTOI(__int64, (double)vz * CGraphics::m_65536))
                 vertex[1] = (float)((double)height * CGraphics::m_oneOver65536);
         }
     }
@@ -1197,7 +1197,7 @@ void CarPhysics_DampSurfaceSteeringAngle(void)
     if (value == 0)
         target = 0;
     else
-        target = (short)llrint((double)FixMul(g_unk0x00592160, value) * g_fixedDegreesToAngle12);
+        target = (short)FTOI(__int64, (double)FixMul(g_unk0x00592160, value) * g_fixedDegreesToAngle12);
 
     if (g_pAutoGearCar->steeringInputMode == 2) {
         *(short *)&g_pAutoGearCar->wheelSteeringAngle = target;
@@ -1211,17 +1211,17 @@ void CarPhysics_DampSurfaceSteeringAngle(void)
         delta = 0x1000 - delta;
     if (delta >= 0x20 || delta <= -0x20) {
         if (current == 0)
-            delta = (short)llrint((double)FixMul(delta * 0x1680, scaleRight) * g_fixedDegreesToAngle12);
+            delta = (short)FTOI(__int64, (double)FixMul(delta * 0x1680, scaleRight) * g_fixedDegreesToAngle12);
         else if (current > 0) {
             if (delta < 0)
-                delta = (short)llrint((double)FixMul(delta * 0x1680, scaleRight) * g_fixedDegreesToAngle12);
+                delta = (short)FTOI(__int64, (double)FixMul(delta * 0x1680, scaleRight) * g_fixedDegreesToAngle12);
             else
-                delta = (short)llrint((double)FixMul(delta * 0x1680, scaleLeft) * g_fixedDegreesToAngle12);
+                delta = (short)FTOI(__int64, (double)FixMul(delta * 0x1680, scaleLeft) * g_fixedDegreesToAngle12);
         } else {
             if (delta > 0)
-                delta = (short)llrint((double)FixMul(delta * 0x1680, scaleRight) * g_fixedDegreesToAngle12);
+                delta = (short)FTOI(__int64, (double)FixMul(delta * 0x1680, scaleRight) * g_fixedDegreesToAngle12);
             else
-                delta = (short)llrint((double)FixMul(delta * 0x1680, scaleLeft) * g_fixedDegreesToAngle12);
+                delta = (short)FTOI(__int64, (double)FixMul(delta * 0x1680, scaleLeft) * g_fixedDegreesToAngle12);
         }
     }
     *(short *)&g_pAutoGearCar->wheelSteeringAngle -= delta;
@@ -1297,7 +1297,7 @@ void AutoGear_IntegrateSteeringAccumulator(void)
             g_pAutoGearCar->steeringAccumulator = deadZone;
     }
 convert:
-    target = (short)llrint((double)FixMul(g_unk0x00592160,
+    target = (short)FTOI(__int64, (double)FixMul(g_unk0x00592160,
                                              g_pAutoGearCar->steeringAccumulator) *
                               g_unk0x00511308);
     g_pAutoGearCar->targetSteeringAngle = target;
@@ -1422,5 +1422,5 @@ void AutoGear_UpdateCarGearState(Car *pCar)
         else
             t = -g_unk0x00592160;
     }
-    g_pAutoGearCar->renderSteeringAngle = (short)llrint((double)t * g_fixedDegreesToAngle12);
+    g_pAutoGearCar->renderSteeringAngle = (short)FTOI(__int64, (double)t * g_fixedDegreesToAngle12);
 }
