@@ -96,7 +96,7 @@ def main():
         shutil.copy2(path, licenses / f"{index + 1}-{path.name}")
     launcher = '@echo off\nsetlocal\ncd /d "%~dp0"\n' \
         'if not exist "UserData" mkdir "UserData"\n' \
-        'opencmr2.exe --data "%~dp0Data" --user-dir "%~dp0UserData" ' \
+        'opencmr2.exe --user-dir "%~dp0UserData" ' \
         '> "UserData\\console.log" 2>&1\n' \
         'if errorlevel 1 (\n' \
         '  echo OpenCMR2 no pudo iniciarse. Mira UserData\\console.log y opencmr2.log.\n' \
@@ -106,7 +106,9 @@ def main():
         "OpenCMR2 - Windows x64 portable\n\n"
         "Copia esta carpeta completa al USB y ejecuta Jugar.cmd.\n"
         "Windows 10/11 de 64 bits y un controlador grafico con Vulkan.\n"
-        "Si Data esta vacia, copia dentro los archivos de tu juego original\n"
+        "Al iniciar, selecciona la carpeta de tu juego original para PC.\n"
+        "OpenCMR2 recuerda la ruta y usa los archivos sin copiarlos.\n"
+        "Para llevar tambien los datos en el USB, copialos dentro de Data\n"
         "(GAME, FRONTEND, sonidos y demas carpetas). No se distribuyen con las releases.\n"
         "Partidas, ajustes y registros se guardan en UserData junto al ejecutable.\n"
         "Puedes mover la carpeta o cambiar la letra de la unidad.\n\n"

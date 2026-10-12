@@ -1,0 +1,168 @@
+// Exercise the actual startup flow with synthetic data and desktop dialogs.
+// No original assets, display server or interaction are needed in CI.
+#include "platform/platform.h"
+#include "platform/testing.h"
+
+#include <cstdio>
+#include <cstdlib>
+#include <filesystem>
+#include <string>
+#include <thread>
+#include <vector>
+
+namespace fs = std::filesystem;
+static std::vector<std::string> folders, messages;
+static std::vector<std::thread> callbacks;
+static int dialogs;
+static bool exitSetup, dialogError, exitOnWarning;
+
+static void Check(bool condition, const char *message)
+{
+    if (!condition) {
+        fprintf(stderr, "game data setup: %s (%s)\n", message, SDL_GetError());
+        exit(1);
+    }
+}
+
+static std::string Read(const fs::path &path)
+{
+    size_t length = 0;
+    char *data = (char *)SDL_LoadFile(path.u8string().c_str(), &length);
+    Check(data != nullptr, "read fixture");
+    std::string result(data, length);
+    SDL_free(data);
+    return result;
+}
+
+static void Write(const fs::path &path, const std::string &data)
+{
+    fs::create_directories(path.parent_path());
+    Check(SDL_SaveFile(path.u8string().c_str(), data.data(), data.size()), "write fixture");
+}
+
+static bool MessageBox(const SDL_MessageBoxData *box, int *button)
+{
+    messages.emplace_back(box->message);
+    Check(box->numbuttons == 2, "setup has select and exit buttons");
+    *button = exitSetup || (exitOnWarning && box->flags == SDL_MESSAGEBOX_WARNING) ? 0 : 1;
+    return true;
+}
+
+static void OpenFolder(SDL_DialogFileCallback callback, void *userdata)
+{
+    ++dialogs;
+    Check(!folders.empty() || dialogError, "unexpected folder selector");
+    std::string path;
+    if (!folders.empty()) {
+        path = folders.front();
+        folders.erase(folders.begin());
+    }
+    // Real SDL callbacks can arrive from a worker thread; their path storage
+    // expires on return. Delaying also makes startup pump events while waiting.
+    callbacks.emplace_back([=] {
+        SDL_Delay(20);
+        if (dialogError) {
+            SDL_SetError("No desktop folder selector available");
+            callback(userdata, nullptr, -1);
+            return;
+        }
+        const char *files[] = {path.empty() ? nullptr : path.c_str(), nullptr};
+        callback(userdata, files, -1);
+    });
+}
+
+static bool Start(const fs::path &user, const std::string &explicitData = "")
+{
+    // SDL_Quit discards its environment snapshot between startup attempts.
+    Check(SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SDL_VIDEODRIVER", "dummy", true), "dummy video");
+    SDL_UnsetEnvironmentVariable(SDL_GetEnvironment(), "OPENCMR2_DATA");
+    std::string userPath = user.u8string(), data = explicitData;
+    char name[] = "game_data_setup", userFlag[] = "--user-dir", dataFlag[] = "--data";
+    char *args[] = {name, userFlag, userPath.data(), dataFlag, data.data()};
+    bool started = Platform_Init(explicitData.empty() ? 3 : 5, args);
+    for (auto &thread : callbacks)
+        thread.join();
+    callbacks.clear();
+    return started;
+}
+
+int main()
+{
+    const fs::path previous = fs::current_path();
+    const fs::path root = fs::temp_directory_path() /
+        ("opencmr2-setup-" + std::to_string(SDL_GetPerformanceCounter()));
+    fs::create_directories(root);
+    fs::current_path(root);
+    const fs::path user = root / fs::u8path(u8"ajustes ñ"), game = root / fs::u8path(u8"juego é con espacios");
+    const fs::path ini = user / "opencmr2.ini";
+    Write(game / "GAME/Bigfiles/COMMON.BFL", "synthetic main archive");
+    Write(game / "frontend/Common.bfl", "synthetic frontend archive");
+    Write(game / "Sounds/surface.bfl", "synthetic sound archive");
+    Write(root / "incomplete/Game/Bigfiles/common.bfl", "synthetic");
+    Write(root / "incomplete/FrontEnd/common.bfl", "");
+    fs::create_directories(root / "incomplete/Sounds/surface.bfl");
+    // Mixed-case sections, duplicate old values, CRLF, comments and unrelated
+    // settings must survive replacing the remembered folder.
+    Write(ini, "; keep this comment\r\n[PATHS]\r\ndata = missing\r\n"
+               "[video]\r\nfov = 91\r\n[paths]\r\ndata = also-missing\r\n");
+    const PlatformTestDialogs mock{OpenFolder, MessageBox};
+    Platform_SetTestDialogs(&mock);
+    folders = {(root / "incomplete").u8string(), game.u8string()};
+    Check(Start(user), "select valid folder after incomplete folder");
+    Check(dialogs == 2 && messages.size() == 2, "retry incomplete installation");
+    Check(messages.back().find("FrontEnd/common.bfl") != std::string::npos &&
+          messages.back().find("Sounds/surface.bfl") != std::string::npos, "list missing archives");
+    Check(std::string(Platform_GetDataDir()) == game.u8string() + "/", "copy UTF-8 callback path");
+    Check(Platform_GetSettingInt("video.fov", 0) == 91, "preserve unrelated settings");
+    const std::string saved = Read(ini);
+    Check(saved.find("; keep this comment") != std::string::npos &&
+          saved.find("data = " + game.u8string()) != std::string::npos &&
+          saved.find("also-missing") == std::string::npos, "persist path without stale overrides");
+    Platform_Shutdown();
+
+    Check(Start(user), "load remembered folder on next launch");
+    Check(dialogs == 2 && Read(ini) == saved, "next launch opens no dialogs or rewrites");
+    Check(Platform_GetSettingInt("video.fov", 0) == 91, "reload preserved configuration");
+    Platform_Shutdown();
+
+    Check(Start(root / "explicit-user", game.u8string()), "explicit --data skips GUI");
+    Check(dialogs == 2, "explicit data needs no selector");
+    Platform_Shutdown();
+    Check(!Start(root / "invalid-user", (root / "incomplete").u8string()), "invalid explicit data fails");
+    Check(!Platform_WasSetupCanceled(), "invalid explicit data is an error");
+    Check(dialogs == 2, "invalid --data does not wait for interaction");
+
+    fs::rename(game, root / "moved-game");
+    folders = {""};
+    Check(!Start(user), "cancel when remembered folder has moved");
+    Check(Platform_WasSetupCanceled(), "cancel is a clean exit");
+    Check(Read(ini) == saved, "cancel leaves saved settings intact");
+    fs::rename(root / "moved-game", root / "Data");
+    Check(Start(root / "portable-user"), "automatically find portable Data folder");
+    Check(dialogs == 3, "portable data needs no selector");
+    Check(!Platform_WasSetupCanceled(), "new launch resets cancellation state");
+    Platform_Shutdown();
+
+    fs::rename(root / "Data", root / "moved-game");
+    dialogError = exitOnWarning = true;
+    Check(!Start(root / "dialog-error-user"), "folder selector failure returns to setup");
+    Check(messages.back().find("No desktop folder selector available") != std::string::npos,
+          "capture error from callback thread");
+    dialogError = false;
+    const fs::path blockedUser = root / "blocked-user";
+    Write(blockedUser / "opencmr2.ini", "[video]\nfov = 85\n");
+    fs::create_directory(blockedUser / "opencmr2.ini.tmp");
+    folders = {(root / "moved-game").u8string()};
+    Check(!Start(blockedUser), "settings write failure returns to setup");
+    Check(messages.back().find("could not be saved") != std::string::npos &&
+          Read(blockedUser / "opencmr2.ini") == "[video]\nfov = 85\n", "failed save preserves original INI");
+    exitOnWarning = false;
+    exitSetup = true;
+    Check(!Start(root / "exit-user"), "exit from welcome dialog");
+    Check(dialogs == 5, "exit does not open folder selector");
+    Check(Platform_WasSetupCanceled(), "welcome exit is a clean exit");
+    Platform_SetTestDialogs(nullptr);
+    fs::current_path(previous);
+    fs::remove_all(root);
+    puts("game data setup: retry, UTF-8 paths, persistence, explicit data, cancel and portable discovery passed");
+}

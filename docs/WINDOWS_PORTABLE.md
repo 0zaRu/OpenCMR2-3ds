@@ -7,7 +7,14 @@ a GitHub release only after all those jobs pass.
 
 Releases contain `opencmr2.exe`, SDL3 and all recursively resolved non-system
 DLLs, licenses, `Jugar.cmd`, `LEEME.txt` and a SHA-256 file manifest. Original
-game assets are excluded from CI packages. Add your own files inside `Data`.
+game assets are excluded from CI packages. On first launch, choose the folder
+of your original PC game installation in the native folder selector. OpenCMR2
+checks the main data archives and remembers the path in `UserData/opencmr2.ini`;
+the original files stay in place. Canceling closes the application.
+
+For a self-contained USB folder, copy your game files inside `Data` instead.
+This folder is detected automatically; selecting an external installation
+means that installation must remain accessible from the machine running the port.
 
 Copy the complete folder to a USB drive and run `Jugar.cmd` on Windows 10/11
 x64 with a Vulkan graphics driver. The launcher uses paths relative to itself

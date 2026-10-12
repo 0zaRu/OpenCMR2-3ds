@@ -10,7 +10,9 @@
 #include <string.h>
 #include <time.h>
 
+#include <atomic>
 #include <map>
+#include <sstream>
 #include <string>
 #include <vector>
 
@@ -23,6 +25,8 @@ std::string s_commandLine;
 std::map<std::string, std::string> s_settings;  // "section.key" -> value
 FILE *s_logFile;
 const PlatformTestClock *s_testClock;
+const PlatformTestDialogs *s_testDialogs;
+bool s_setupCanceled;
 
 // ---- paths -----------------------------------------------------------------
 
@@ -151,12 +155,14 @@ bool MatchPattern(const std::string &name, const std::string &pattern)
 
 void LoadSettings(const std::string &file)
 {
-    FILE *f = fopen(file.c_str(), "r");
-    if (f == NULL)
+    char *contents = (char *)SDL_LoadFile(file.c_str(), NULL);
+    if (contents == NULL)
         return;
-    char line[512];
+    std::istringstream input(contents);
+    SDL_free(contents);
+    std::string line;
     std::string section;
-    while (fgets(line, sizeof(line), f)) {
+    while (std::getline(input, line)) {
         std::string s = line;
         while (!s.empty() && (s.back() == '\n' || s.back() == '\r' || s.back() == ' '))
             s.pop_back();
@@ -177,7 +183,55 @@ void LoadSettings(const std::string &file)
         value.erase(0, value.find_first_not_of(' '));
         s_settings[section + "." + Lower(key)] = value;
     }
-    fclose(f);
+}
+
+// Keep unrelated settings and comments, using SDL's UTF-8 paths on Windows too.
+bool SaveDataSetting(const std::string &file, const std::string &dir)
+{
+    if (dir.find_first_of("\r\n") != std::string::npos)
+        return SDL_SetError("The folder name contains a line break");
+    char *contents = (char *)SDL_LoadFile(file.c_str(), NULL);
+    if (!contents)
+        return false;
+    std::istringstream input(contents);
+    SDL_free(contents);
+    std::string output, line, section;
+    bool inserted = false;
+    while (std::getline(input, line)) {
+        if (!line.empty() && line.back() == '\r')
+            line.pop_back();
+        size_t start = line.find_first_not_of(" \t");
+        std::string text = start == std::string::npos ? "" : line.substr(start);
+        if (!text.empty() && text[0] == '[') {
+            section = Lower(text.substr(1, text.find(']') - 1));
+            output += line + '\n';
+            if (section == "paths" && !inserted) {
+                output += "data = " + dir + '\n';
+                inserted = true;
+            }
+            continue;
+        }
+        size_t eq = text.find('=');
+        if (section == "paths" && eq != std::string::npos) {
+            std::string key = text.substr(0, eq);
+            size_t end = key.find_last_not_of(" \t");
+            if (end != std::string::npos && Lower(key.substr(0, end + 1)) == "data")
+                continue;
+        }
+        output += line + '\n';
+    }
+    if (!inserted)
+        output += "\n[paths]\ndata = " + dir + '\n';
+    const std::string temporary = file + ".tmp";
+    if (!SDL_SaveFile(temporary.c_str(), output.data(), output.size()))
+        return false;
+    if (!SDL_RenamePath(temporary.c_str(), file.c_str())) {
+        std::string error = SDL_GetError();
+        SDL_RemovePath(temporary.c_str());
+        return SDL_SetError("%s", error.c_str());
+    }
+    s_settings["paths.data"] = dir;
+    return true;
 }
 
 const char s_defaultSettings[] =
@@ -212,9 +266,19 @@ const char s_defaultSettings[] =
     "; Look on the local network.\n"
     "; broadcast = 1\n";
 
-bool LooksLikeGameData(const std::string &dir)
+std::string MissingGameData(const std::string &dir)
 {
-    return !FindUnder(dir, SplitGamePath("Game")).empty() && !FindUnder(dir, SplitGamePath("FrontEnd")).empty();
+    std::string missing;
+    // These archives are common to the PC editions; folder names alone also
+    // match empty directories and unextracted installer media.
+    for (const char *file : {"Game/Bigfiles/common.bfl", "FrontEnd/common.bfl", "Sounds/surface.bfl"}) {
+        std::string path = FindUnder(dir, SplitGamePath(file));
+        SDL_PathInfo info{};
+        if (path.empty() || !SDL_GetPathInfo(path.c_str(), &info) ||
+            info.type != SDL_PATHTYPE_FILE || info.size == 0)
+            missing += std::string("\n- ") + file;
+    }
+    return missing;
 }
 
 std::string WithSlash(std::string dir)
@@ -224,12 +288,106 @@ std::string WithSlash(std::string dir)
     return dir;
 }
 
+bool AskForGameFolder(const std::string &message, bool warning = false)
+{
+    const SDL_MessageBoxButtonData buttons[] = {
+        {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "Exit"},
+        {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Select folder"}
+    };
+    SDL_MessageBoxData box{};
+    box.flags = warning ? SDL_MESSAGEBOX_WARNING : SDL_MESSAGEBOX_INFORMATION;
+    box.title = "OpenCMR2 - Game setup";
+    box.message = message.c_str();
+    box.numbuttons = 2;
+    box.buttons = buttons;
+    int choice = 0;
+    bool shown = s_testDialogs ? s_testDialogs->messageBox(&box, &choice) : SDL_ShowMessageBox(&box, &choice);
+    if (shown && choice != 1)
+        s_setupCanceled = true;
+    return shown && choice == 1;
+}
+
+struct FolderSelection {
+    std::atomic<bool> done{false};
+    std::string path, error;
+};
+
+void SDLCALL FolderSelected(void *userdata, const char *const *files, int)
+{
+    auto &selection = *(FolderSelection *)userdata;
+    if (!files) {
+        selection.error = SDL_GetError();
+        if (selection.error.empty())
+            selection.error = "The folder selector is unavailable.";
+    } else if (*files)
+        selection.path = *files; // SDL frees the list after this callback.
+    selection.done.store(true, std::memory_order_release);
+}
+
+bool SelectGameData(const std::string &settingsFile)
+{
+    std::string message = "Welcome to OpenCMR2\n\n"
+                          "Choose the folder of your Colin McRae Rally 2.0 copy for PC.\n"
+                          "It should contain Game, FrontEnd and Sounds.\n\n"
+                          "Your files stay in place. You only need to choose this folder once.";
+    bool warning = false;
+    while (AskForGameFolder(message, warning)) {
+        FolderSelection selection;
+        if (s_testDialogs)
+            s_testDialogs->openFolder(FolderSelected, &selection);
+        else
+            SDL_ShowOpenFolderDialog(FolderSelected, &selection, NULL, NULL, false);
+        // Linux portals need events even though the game window is not open yet.
+        // The callback can run on another thread; publish its strings atomically.
+        while (!selection.done.load(std::memory_order_acquire)) {
+            SDL_PumpEvents();
+            SDL_Delay(10);
+        }
+        if (!selection.error.empty()) {
+            message = "The folder selector could not be opened.\n\n" + selection.error +
+                      "\n\nYou can also set data = <folder> under [paths] in:\n" + settingsFile;
+            Sys_Log("%s", message.c_str());
+            warning = true;
+            continue;
+        }
+        if (selection.path.empty()) {
+            s_setupCanceled = true;
+            return false; // Cancel is a normal exit, with no extra error box.
+        }
+        std::string dir = WithSlash(selection.path);
+        s_dirCache.clear(); // Allow retry after the user copies missing files.
+        std::string missing = MissingGameData(dir);
+        if (!missing.empty()) {
+            message = "This folder is missing required game files:" + missing +
+                      "\n\nSelect the folder of a complete PC installation.\n"
+                      "Files on a CD or ISO may need to be installed or extracted first.";
+            warning = true;
+            continue;
+        }
+        if (!SaveDataSetting(settingsFile, dir)) {
+            message = "The game folder is valid, but its location could not be saved.\n\n" +
+                      std::string(SDL_GetError()) + "\n\nCheck that this settings file is writable:\n" + settingsFile;
+            Sys_Log("%s", message.c_str());
+            warning = true;
+            continue;
+        }
+        s_dataDir = dir;
+        return true;
+    }
+    return false;
+}
+
 } // namespace
 
 // ---- platform lifecycle ------------------------------------------------------
 
 bool Platform_Init(int argc, char **argv)
 {
+    s_dataDir.clear();
+    s_commandLine.clear();
+    s_settings.clear();
+    s_dirCache.clear();
+    s_setupCanceled = false;
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return false;
@@ -255,10 +413,7 @@ bool Platform_Init(int argc, char **argv)
 
     std::string settingsFile = s_userDir + "opencmr2.ini";
     if (!SDL_GetPathInfo(settingsFile.c_str(), NULL)) {
-        if (FILE *f = fopen(settingsFile.c_str(), "w")) {
-            fputs(s_defaultSettings, f);
-            fclose(f);
-        }
+        SDL_SaveFile(settingsFile.c_str(), s_defaultSettings, sizeof(s_defaultSettings) - 1);
     }
     LoadSettings(settingsFile);
 
@@ -276,10 +431,24 @@ bool Platform_Init(int argc, char **argv)
     }
 
     std::vector<std::string> candidates;
-    if (!dataDir.empty())
+    if (!dataDir.empty()) {
+        const std::string missing = MissingGameData(WithSlash(dataDir));
+        if (!missing.empty()) {
+            const std::string message = "Missing required game files in " + dataDir + ":" + missing;
+            fprintf(stderr, "%s\n", message.c_str());
+            Sys_Log("%s", message.c_str());
+            Platform_Shutdown();
+            return false;
+        }
         candidates.push_back(dataDir);
+    }
     if (const char *env = SDL_getenv("OPENCMR2_DATA"))
         candidates.push_back(env);
+    // A portable Data folder stays usable if the package moves to another PC,
+    // even when its settings remember an external installation on the old PC.
+    candidates.push_back("./Data");
+    if (const char *base = SDL_GetBasePath())
+        candidates.push_back(std::string(base) + "Data");
     if (const char *setting = Platform_GetSetting("paths.data", NULL))
         candidates.push_back(setting);
     candidates.push_back(".");
@@ -287,18 +456,16 @@ bool Platform_Init(int argc, char **argv)
         candidates.push_back(base);
 
     for (const std::string &candidate : candidates) {
+        if (candidate.empty())
+            continue;
         std::string dir = WithSlash(candidate);
-        if (LooksLikeGameData(dir)) {
+        if (MissingGameData(dir).empty()) {
             s_dataDir = dir;
             break;
         }
     }
-    if (s_dataDir.empty()) {
-        std::string message = "The Colin McRae Rally 2.0 game data was not found.\n\n"
-                              "Pass its directory with --data <dir>, set OPENCMR2_DATA, or set\n"
-                              "data = <dir> under [paths] in\n" + settingsFile;
-        SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OpenCMR2", message.c_str(), NULL);
-        Sys_Log("%s", message.c_str());
+    if (s_dataDir.empty() && !SelectGameData(settingsFile)) {
+        Platform_Shutdown();
         return false;
     }
     Sys_Log("game data: %s", s_dataDir.c_str());
@@ -320,6 +487,8 @@ SDL_Window *Platform_GetWindow(void)
 {
     return s_window;
 }
+
+bool Platform_WasSetupCanceled(void) { return s_setupCanceled; }
 
 const char *Platform_GetDataDir(void)
 {
@@ -358,6 +527,7 @@ extern "C" unsigned int Sys_GetUnixTime(void)
 }
 
 void Platform_SetTestClock(const PlatformTestClock *clock) { s_testClock = clock; }
+void Platform_SetTestDialogs(const PlatformTestDialogs *dialogs) { s_testDialogs = dialogs; }
 
 extern "C" void Sys_Sleep(DWORD ms)
 {

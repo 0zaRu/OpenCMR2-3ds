@@ -13,7 +13,7 @@ int main(int argc, char **argv)
 {
     SDL_SetMainReady();
     if (!Platform_Init(argc, argv))
-        return 1;
+        return Platform_WasSetupCanceled() ? 0 : 1;
     Diagnostics::StartProfileFromEnvironment();
     unsigned int code = CMain::Initialize(Sys_GetCommandLine());
     Diagnostics::StopProfile();

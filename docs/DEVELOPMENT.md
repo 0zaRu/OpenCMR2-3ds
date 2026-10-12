@@ -31,6 +31,11 @@ builds when game data is supplied; network tests require loopback UDP access.
 See [PHYSICS_PARITY.md](PHYSICS_PARITY.md) and [BASELINE.md](BASELINE.md) for
 the fixture scope and recording commands.
 
+The `game_data_setup` test uses synthetic archive placeholders and simulated
+desktop dialogs with SDL's dummy video driver. It covers first-run selection,
+missing files, UTF-8 paths, remembered settings, cancellation and portable data
+discovery on every CI platform, without original assets or a display server.
+
 ## Source sync and generated files
 
 `game/` follows CMR2Decomp; `UPSTREAM` records the imported commit.

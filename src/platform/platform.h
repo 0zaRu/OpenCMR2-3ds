@@ -5,8 +5,9 @@
 #include <SDL3/SDL.h>
 
 // Sets up SDL, the directories and settings. Returns false (after telling
-// the user) when the game data cannot be found.
+// the user) when setup is canceled or the game data cannot be found.
 bool Platform_Init(int argc, char **argv);
+bool Platform_WasSetupCanceled(void);
 void Platform_Shutdown(void);
 
 SDL_Window *Platform_GetWindow(void);
