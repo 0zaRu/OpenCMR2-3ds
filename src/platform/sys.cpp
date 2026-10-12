@@ -28,6 +28,22 @@ const PlatformTestClock *s_testClock;
 const PlatformTestDialogs *s_testDialogs;
 bool s_setupCanceled;
 
+FILE *OpenHostFile(const char *path, const char *mode)
+{
+#ifdef _WIN32
+    // SDL paths and folder dialog results are UTF-8. The Windows narrow CRT
+    // uses the system code page, so open them through its Unicode interface.
+    wchar_t *widePath = (wchar_t *)SDL_iconv_string("WCHAR_T", "UTF-8", path, strlen(path) + 1);
+    wchar_t *wideMode = (wchar_t *)SDL_iconv_string("WCHAR_T", "UTF-8", mode, strlen(mode) + 1);
+    FILE *file = widePath && wideMode ? _wfopen(widePath, wideMode) : NULL;
+    SDL_free(widePath);
+    SDL_free(wideMode);
+    return file;
+#else
+    return fopen(path, mode);
+#endif
+}
+
 // ---- paths -----------------------------------------------------------------
 
 std::string Lower(const std::string &s)
@@ -409,7 +425,7 @@ bool Platform_Init(int argc, char **argv)
         s_userDir = pref ? pref : "./";
         SDL_free(pref);
     }
-    s_logFile = fopen((s_userDir + "opencmr2.log").c_str(), "w");
+    s_logFile = OpenHostFile((s_userDir + "opencmr2.log").c_str(), "w");
 
     std::string settingsFile = s_userDir + "opencmr2.ini";
     if (!SDL_GetPathInfo(settingsFile.c_str(), NULL)) {
@@ -789,7 +805,7 @@ extern "C" SysFile *Sys_OpenFile(const char *path, int mode)
     char host[1024];
     if (!Sys_ResolvePath(path, mode == SYS_FILE_WRITE, host, sizeof(host)))
         return NULL;
-    FILE *f = fopen(host, mode == SYS_FILE_WRITE ? "wb" : "rb");
+    FILE *f = OpenHostFile(host, mode == SYS_FILE_WRITE ? "wb" : "rb");
     if (f == NULL)
         return NULL;
     SysFile *file = new SysFile;

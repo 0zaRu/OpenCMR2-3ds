@@ -2,6 +2,7 @@
 // No original assets, display server or interaction are needed in CI.
 #include "platform/platform.h"
 #include "platform/testing.h"
+#include "port/sys.h"
 
 #include <cstdio>
 #include <cstdlib>
@@ -114,6 +115,15 @@ int main()
           messages.back().find("Sounds/surface.bfl") != std::string::npos, "list missing archives");
     Check(std::string(Platform_GetDataDir()) == game.u8string() + "/", "copy UTF-8 callback path");
     Check(Platform_GetSettingInt("video.fov", 0) == 91, "preserve unrelated settings");
+    SysFile *archive = Sys_OpenFile("Game\\Bigfiles\\common.bfl", SYS_FILE_READ);
+    Check(archive != nullptr, "open game archive under selected UTF-8 path");
+    char archiveBytes[64]{};
+    Check(Sys_ReadFile(archive, archiveBytes, sizeof(archiveBytes)) == 22 &&
+          std::string(archiveBytes) == "synthetic main archive", "read selected game files");
+    Sys_CloseFile(archive);
+    SysFile *save = Sys_OpenFile("gamesave\\setup-test.dat", SYS_FILE_WRITE);
+    Check(save != nullptr && Sys_WriteFile(save, "test", 4) == 4, "write saves under UTF-8 user directory");
+    Sys_CloseFile(save);
     const std::string saved = Read(ini);
     Check(saved.find("; keep this comment") != std::string::npos &&
           saved.find("data = " + game.u8string()) != std::string::npos &&

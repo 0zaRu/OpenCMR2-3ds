@@ -33,7 +33,7 @@ the fixture scope and recording commands.
 
 The `game_data_setup` test uses synthetic archive placeholders and simulated
 desktop dialogs with SDL's dummy video driver. It covers first-run selection,
-missing files, UTF-8 paths, remembered settings, cancellation and portable data
+missing files, reading archives and writing saves under UTF-8 paths, remembered settings, cancellation and portable data
 discovery on every CI platform, without original assets or a display server.
 
 ## Source sync and generated files
