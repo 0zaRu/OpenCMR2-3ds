@@ -514,6 +514,46 @@ void MoveOldUserDir(const std::string &userDir)
     fs::remove(old, error);   // only when everything was moved
 }
 
+// [install] menu_shortcut: unset asks once, 1 keeps the menu entry pointing at
+// the copy that runs (it follows the game folder when that moves), 0 removes it.
+void UpdateMenuShortcut(const std::string &settingsFile)
+{
+    if (!Shortcut_IsSupported())
+        return;
+    const char *setting = Platform_GetSetting("install.menu_shortcut", NULL);
+    if (setting == NULL) {
+        const std::string message = std::string("Add OpenCMR2 to ") + Shortcut_MenuName() +
+            "?\n\nYou can then start the game from there like your other programs."
+            "\n\nTo remove it later, set menu_shortcut = 0 in:\n" + settingsFile;
+        const SDL_MessageBoxButtonData buttons[] = {
+            {SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT, 0, "No"},
+            {SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT, 1, "Add"}
+        };
+        SDL_MessageBoxData box{};
+        box.flags = SDL_MESSAGEBOX_INFORMATION;
+        box.title = "OpenCMR2";
+        box.message = message.c_str();
+        box.numbuttons = 2;
+        box.buttons = buttons;
+        int choice = 0;
+        // Without a dialog (no display), ask on a later launch.
+        if (!(s_testDialogs ? s_testDialogs->messageBox(&box, &choice) : SDL_ShowMessageBox(&box, &choice)))
+            return;
+        if (!SaveSetting(settingsFile, "install", "menu_shortcut", choice == 1 ? "1" : "0"))
+            Sys_Log("could not save install.menu_shortcut: %s", SDL_GetError());
+        s_settings["install.menu_shortcut"] = choice == 1 ? "1" : "0";
+        if (choice == 1 && !Shortcut_Update(true)) {
+            const std::string error = std::string("OpenCMR2 could not be added to ") + Shortcut_MenuName() +
+                                      ".\n\n" + SDL_GetError();
+            Sys_Log("%s", error.c_str());
+            SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_WARNING, "OpenCMR2", error.c_str(), NULL);
+        }
+        return;
+    }
+    if (!Shortcut_Update(Platform_GetSettingInt("install.menu_shortcut", 0) != 0))
+        Sys_Log("menu entry: %s", SDL_GetError());
+}
+
 } // namespace
 
 // ---- platform lifecycle ------------------------------------------------------
@@ -612,6 +652,10 @@ bool Platform_Init(int argc, char **argv)
     }
     Sys_Log("game data: %s", s_dataDir.c_str());
     Sys_Log("user directory: %s", s_userDir.c_str());
+    // Only for the player's own settings: tools and tests use --user-dir.
+    const char *headless = SDL_getenv("OPENCMR2_HEADLESS");
+    if (userDir.empty() && (headless == NULL || *headless == '0'))
+        UpdateMenuShortcut(settingsFile);
     return true;
 }
 

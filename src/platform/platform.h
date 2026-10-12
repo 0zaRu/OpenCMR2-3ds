@@ -24,6 +24,16 @@ SDL_Scancode Keys_ToScancode(int dik);
 // Name of a key for the controls screen (GetKeyNameText).
 const char *Keys_GetName(int dik);
 
+// Applications menu entry for this copy of the game (Linux .desktop file,
+// Windows Start menu shortcut). Not supported for Flatpak, distribution
+// packages or macOS, which provide their own.
+bool Shortcut_IsSupported(void);
+// "your applications menu", "the Start menu".
+const char *Shortcut_MenuName(void);
+// Creates or refreshes the entry so it starts this executable, or removes
+// it. On failure returns false with the SDL error set.
+bool Shortcut_Update(bool present);
+
 // Hides a held key from the game's keyboard state until it is released
 // (the key of a platform shortcut such as Alt+Enter).
 void Input_HoldBackKey(SDL_Scancode scancode);

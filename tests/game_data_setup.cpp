@@ -234,6 +234,21 @@ int main()
           Read(xdg / "OpenCMR2/Configuration/GameInfo.rcf") == "old save" &&
           !fs::exists(xdg / "OpenCMR2/OpenCMR2"), "move the old nested user directory");
     Platform_Shutdown();
+    // That launch asked once about the applications menu (the mock says Add).
+    const fs::path desktop = xdg / "applications/io.github.pablocpas.OpenCMR2.desktop";
+    const fs::path icon = xdg / "icons/hicolor/256x256/apps/io.github.pablocpas.OpenCMR2.png";
+    const std::string exe = fs::read_symlink("/proc/self/exe").u8string();
+    const size_t asked = messages.size();
+    Check(fs::exists(icon) && Read(desktop).find("\nExec=\"" + exe + "\"\n") != std::string::npos &&
+          Read(xdg / "OpenCMR2/opencmr2.ini").find("menu_shortcut = 1") != std::string::npos,
+          "add the menu entry when accepted");
+    Check(Platform_Init(1, args), "start again with the menu entry");
+    Check(messages.size() == asked, "ask about the menu entry only once");
+    Platform_Shutdown();
+    Write(xdg / "OpenCMR2/opencmr2.ini", "[paths]\ndata = " + nestedGame.u8string() + "\n[install]\nmenu_shortcut = 0\n");
+    Check(Platform_Init(1, args), "start with the menu entry turned off");
+    Check(!fs::exists(desktop) && !fs::exists(icon), "remove the menu entry");
+    Platform_Shutdown();
     unsetenv("XDG_DATA_HOME");
 #endif
     const int beforeExit = dialogs;

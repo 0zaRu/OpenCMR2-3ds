@@ -120,8 +120,9 @@ executable, which is found without asking.
 ## Configuration
 
 Settings are stored in `opencmr2.ini` in the user directory
-(`~/.local/share/OpenCMR2/OpenCMR2/` on Linux,
-`%APPDATA%\OpenCMR2\OpenCMR2\` on Windows).
+(`~/.local/share/OpenCMR2/` on Linux,
+`%APPDATA%\OpenCMR2\` on Windows; files from the older
+`OpenCMR2/OpenCMR2` folder are moved there).
 It is created with comments on first launch.
 
 | Setting | Default | Description |
@@ -131,6 +132,7 @@ It is created with comments on first launch.
 | `[video] run_in_background` | `0` | Keep running when the window loses focus |
 | `[install] language` | `English` | English, American, French, German, Italian, Spanish or Polish |
 | `[install] sku` | `EUROPE` | Game edition: `EUROPE`, `AMERICA`, `POLAND` or `JAPAN` |
+| `[install] menu_shortcut` | asked | Entry in the applications menu (Linux) or Start menu (Windows): `1` keeps it pointing at this copy, `0` removes it |
 | `[net] ...` | | Network play, see [NETWORK.md](docs/NETWORK.md) |
 
 ## Building

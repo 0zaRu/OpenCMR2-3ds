@@ -47,6 +47,7 @@ target_sources(opencmr2_platform PRIVATE diagnostics/observer.cpp diagnostics/ti
 target_include_directories(opencmr2_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} ${GAME_DIR} ${CMAKE_CURRENT_SOURCE_DIR}/port/compat)
 target_link_libraries(opencmr2_platform PUBLIC SDL3::SDL3)
 
+
 add_executable(opencmr2 platform/main.cpp)
 target_link_libraries(opencmr2 PRIVATE opencmr2_platform)
 if(WIN32)
@@ -132,14 +133,28 @@ add_custom_command(
 # res/opencmr2.png is the source; the derived icons are regenerated with:
 #   magick res/opencmr2.png -define icon:auto-resize=256,128,96,64,48,40,32,24,20,16 res/opencmr2.ico
 #   magick res/opencmr2.png -resize 128x128 -type TrueColor BMP3:res/opencmr2_icon.bmp
+#   magick res/opencmr2.png -resize 256x256 -strip PNG24:res/opencmr2_256.png
+# The BMP is the window icon; the PNG goes to the Linux icon theme with the
+# applications menu entry.
 set(ICON_BMP ${PROJECT_SOURCE_DIR}/res/opencmr2_icon.bmp)
+set(ICON_PNG ${PROJECT_SOURCE_DIR}/res/opencmr2_256.png)
 set(ICON_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/opencmr2_icon.h)
 add_custom_command(
     OUTPUT ${ICON_HEADER}
-    COMMAND ${CMAKE_COMMAND} -DOUTPUT=${ICON_HEADER} -DINPUTS=${ICON_BMP} -P ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
+    COMMAND ${CMAKE_COMMAND} -DOUTPUT=${ICON_HEADER} "-DINPUTS=${ICON_BMP}|${ICON_PNG}" -P ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
     VERBATIM
-    DEPENDS ${ICON_BMP} ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
+    DEPENDS ${ICON_BMP} ${ICON_PNG} ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
     COMMENT "Embedding the window icon")
+
+# Applications menu entry: on its own, as it includes the real <windows.h>
+# that port/compat replaces for the game.
+add_library(opencmr2_shortcut STATIC platform/menu_shortcut.cpp ${ICON_HEADER})
+target_include_directories(opencmr2_shortcut PRIVATE ${CMAKE_CURRENT_SOURCE_DIR} ${CMAKE_CURRENT_BINARY_DIR}/generated)
+target_link_libraries(opencmr2_shortcut PUBLIC SDL3::SDL3)
+if(WIN32)
+    target_link_libraries(opencmr2_shortcut PRIVATE ole32 uuid shell32)
+endif()
+target_link_libraries(opencmr2_platform PUBLIC opencmr2_shortcut)
 
 # ---- network (UDP with ENet, third_party/enet) -------------------------------------
 set(ENET_DIR ${PROJECT_SOURCE_DIR}/third_party/enet)
