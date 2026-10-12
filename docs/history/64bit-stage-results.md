@@ -1,5 +1,9 @@
 # Finland results and category best records
 
+> Historical validation at the commits named below. Counts and open issues
+> describe that snapshot; see [the roadmap](../PLAN.md) and
+> [the generated audit](../64bit-raw-access.md) for current status.
+
 Baseline: `80a16a0`. Validation uses an isolated matching checkout, excluding
 the existing weather-texture edit in RallyData.cpp. That edit stays outside
 this batch in both repositories.
@@ -11,7 +15,8 @@ steps and requests the standard finish/result transition at simulation tick
 500. Enter advances the actual result headers and Continue menu. Before the
 fix, GDB stops in `CGenericFileLoader::StrLowerPolish` with `str == 0x1e`.
 The caller is `GameMenus_DrawTextRow`, reached by `GameMenu_DrawSplitTimes`.
-The saved backtrace is in `64bit-stage-results-backtrace.txt`.
+The [saved backtrace](64bit-stage-results-backtrace.txt) and
+[validation manifest](64bit-stage-results-validation.json) preserve the evidence.
 
 The row function takes variadic text pointers but reads them by incrementing
 `&pText`, assuming the Win32 stack calling convention. Native x64 passes some

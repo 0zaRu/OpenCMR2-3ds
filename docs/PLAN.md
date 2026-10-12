@@ -15,36 +15,39 @@ adding passes. A working renderer does not by itself establish simulation parity
       (`tests/fixedpoint_equiv`); no inline assembly left in `game/`.
 - [ ] Platform API headers (`src/port/*.h`) and game headers free of
       DirectX/Win32 types.
-- [ ] Every platform-free TU compiles with Clang and GCC.
-- [ ] `/QIfist` TUs: float-to-int conversions made explicit (`lrintf`),
-      found with the Clang AST.
+- [x] Game translation units compile with Clang on the supported targets;
+      CMake requires Clang with GNU-style options.
+- [x] `/QIfist` TUs: float-to-int conversions made explicit (`FTOI`),
+      found with the Clang AST and checked against x87 FISTP.
 
 ## F1: Platform layer (SDL3)
 
-- [ ] `main()`, window, event loop, focus handling (replaces WinMain/WndProc).
-- [ ] Time, files (case-insensitive game data lookup, user directory for
+- [x] `main()`, window, event loop, focus handling (replaces WinMain/WndProc).
+- [x] Time, files (case-insensitive game data lookup, user directory for
       saves and settings), configuration (replaces the registry and the CD
       check), message boxes.
-- [ ] Input: keyboard (DIK codes), mouse, joysticks, force feedback, gamepads.
-- [ ] Audio: mixer with DirectSound semantics (3D voices, streaming music),
+- [x] Input backend: keyboard (DIK codes), mouse, joysticks and SDL haptic
+      effects. Hardware and force-feedback validation remains open.
+- [x] Audio: mixer with DirectSound semantics (3D voices, streaming music),
       WAV and MS-ADPCM decoding.
 
 ## F2: Renderer (SDL_GPU)
 
-- [ ] `gfx.h` API and the ~134 rendering functions ported to it.
+- [x] `gfx.h` API and game rendering calls ported to it.
 - [ ] Uber-shader reproducing the fixed-function pipeline (lighting, fog,
-      texture stages, bump env map, reflection texgen), HLSL compiled to
-      SPIR-V/DXIL/MSL.
-- [ ] Textures (BGRA8, BC1, BC3, bump), render targets, cube maps.
-- [ ] 2D path (sprites, triangles, lines, fonts).
+      texture stages, bump env map, reflection texgen): GLSL compiled to
+      SPIR-V and translated to MSL. Full visual parity remains open;
+      the Windows backend uses Vulkan and DXIL is not implemented.
+- [x] Textures (BGRA8, BC1, BC3, bump), render targets, cube maps.
+- [x] 2D path (sprites, triangles, lines, fonts).
 
 ## F3: Parity (0.1)
 
 - [ ] Menus, rallies, arcade, replays, split screen, saves.
 - [x] In-tree Bink 1 (`BIKi`) video and stereo audio decoder (no FFmpeg
       dependency); see [VIDEO.md](VIDEO.md) for scope and validation.
-- [ ] Headless build (null renderer and audio) and golden replay tests
-      against traces from the original executable.
+- [x] Headless stage probe and golden Finland fixture against original
+      executable traces at six render cadences. Full-stage coverage remains open.
 
 ## F4: 64-bit and other platforms
 
@@ -57,13 +60,14 @@ adding passes. A working renderer does not by itself establish simulation parity
 - [ ] Fixed sizes and strides (`AllocateLockedBuffer(0x130)`, `* 0x30`) as
       `sizeof`; `long` in on-disk structures as `DWORD`. Done in CMR2Decomp,
       MSVC6 bytes unchanged.
-- [ ] 64-bit builds load and play a stage; physics parity test on 64-bit.
+- [x] Linux x86-64 and Windows x64 under Wine load and play stages and pass
+      the original physics fixture. ARM64 gameplay validation remains open.
 
 ## F5: Modernisation (every item optional, "Original" preset)
 
 - [x] Initial M0: real-stage capture and recorded tick-input playback with a
       controlled clock; scheduler contract tests and optional CPU profiling.
-      See [BASELINE.md](BASELINE.md); full cadence/parity coverage remains open.
+      See [BASELINE.md](BASELINE.md); full-game parity coverage remains open.
 - [x] Record original + SilentPatch and latest standalone decompilation;
       separate vehicle-state and elapsed-time pacing comparisons across FPS.
       See [PHYSICS_PARITY.md](PHYSICS_PARITY.md).
@@ -92,5 +96,7 @@ adding passes. A working renderer does not by itself establish simulation parity
 
 ## F6: Distribution
 
-- [ ] Flatpak, AppImage, Windows and macOS packages; first-run setup that
-      locates and checks the original game data.
+- [x] Windows portable ZIP, runtime DLLs, licenses, launcher and checksums;
+      CI artifacts and tagged releases. See [WINDOWS_PORTABLE.md](WINDOWS_PORTABLE.md).
+- [ ] Flatpak, AppImage and macOS packages; first-run setup that locates
+      and checks the original game data.

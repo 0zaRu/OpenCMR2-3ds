@@ -9,12 +9,14 @@ so the game runs natively on Linux, Windows and macOS.
 OpenCMR2 contains no game data. You need your own copy of the original game.
 
 > [!NOTE]
-> Work in progress: the game code compiles and an initial SDL_GPU renderer is
-> implemented. Gameplay parity and simulation fidelity are still being verified.
+> Work in progress: Linux x86 and x86-64 play stages, and Windows x64 has
+> been checked under Wine. Full-game parity and visual fidelity remain open.
 > See [docs/PLAN.md](docs/PLAN.md) for the roadmap,
 > [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture and
 > [docs/MODERNIZATION.md](docs/MODERNIZATION.md) for the design of graphics
 > modernisation with the original simulation.
+> The [documentation index](docs/README.md) also links development instructions
+> and historical validation evidence.
 
 ## Goals
 

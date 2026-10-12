@@ -1,5 +1,9 @@
 /build*/
 /out/
 /dist/
+# Local CMake overrides and Python caches.
+/CMakeUserPresets.json
 *.swp
+*.swo
+*.py[cod]
 __pycache__/

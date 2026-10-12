@@ -1,5 +1,9 @@
 # Preliminary map and native draw distance
 
+> Historical validation at the commits named below. Counts and open issues
+> describe that snapshot; see [the roadmap](../PLAN.md) and
+> [the generated audit](../64bit-raw-access.md) for current status.
+
 Synced from CMR2Decomp `80a16a0` (matching baseline `096b134`).
 The MSVC6 differential harnesses and standalone sanitizer fixture referenced
 below live in CMR2Decomp; the real runtime scenarios and CTests live here.

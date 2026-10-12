@@ -1,5 +1,9 @@
 # Terrain bounds preserved in native culling
 
+> Historical validation at the commits named below. Counts and open issues
+> describe that snapshot; see [the roadmap](../PLAN.md) and
+> [the generated audit](../64bit-raw-access.md) for current status.
+
 Synced through CMR2Decomp 096b134. Sector culling's old stores at +0x7c,
 +0x80 and +0x84 overlapped the native bounding rectangle. Those writes now use
 viewDistanceSquared and two conservatively named integer state fields. The

@@ -15,7 +15,7 @@ verification required before changing the timing architecture.
 | Path | Contents |
 | --- | --- |
 | `game/` | The decompiled game, synced from CMR2Decomp (`tools/sync_upstream.py`, last commit in `UPSTREAM`). |
-| `src/port/` | The platform API the game calls: `types.h`, `sys.h`, `gfx.h`, `audio.h`, `input.h`, `movie.h`, `net.h`. Plain C-style functions and our own types; no Win32 or DirectX names. |
+| `src/port/` | The platform API the game calls: `types.h`, `sys.h`, `gfx.h`, `audio.h`, `input.h`, `movie.h`, `net.h`. Portable functions, compatibility types and disk-to-native layout conversion. |
 | `src/platform/` | `main()`, window and event loop, time, files, configuration (SDL3). |
 | `src/render/` | The SDL_GPU renderer behind `gfx.h`, and its shaders. |
 | `src/audio/` | Mixer behind `audio.h` (SDL3 audio streams), WAV and MS-ADPCM decoding. |
@@ -23,6 +23,10 @@ verification required before changing the timing architecture.
 | `src/video/` | Standalone Bink 1 (`BIKi`) video/audio decoder behind `movie.h`; queued sound uses the SDL3 mixer. No external codec library. See [VIDEO.md](VIDEO.md). |
 | `src/net/` | Network sessions behind `net.h` (replaces DirectPlay). |
 | `tests/` | Unit tests and the golden replay tests. |
+| `tests/reference/` | Frozen recordings, comparison reports and provenance used by regression tests. |
+| `tools/` | Source sync, layout generation, audits, captures and packaging. |
+| `docs/` | Maintained guides and the generated raw-access report; past validation batches live in `docs/history/`. |
+| `build/` | Ignored build outputs, local captures, logs, toolchains and package experiments. |
 
 ## How the game is ported
 
@@ -106,12 +110,13 @@ and the floating-point conversions used around the fixed-point core.
 `tests/` checks the fixed-point helpers against the original assembly and tests
 the existing scheduler's cadence, stored rates, cap, rebasing and wrap behaviour.
 The optional `stage_probe` runs Finland through the real load/update path with
-controlled clocks and recorded tick inputs. Its selected car/damage/checkpoint
-fields repeat exactly in the initial 500-tick experiment, including across
-render cadences, while the shared RNG differs across cadences. See
-[BASELINE.md](BASELINE.md) for scope and CPU profiling commands. Full simulation
-equivalence, graphics-setting independence and comparison with the original
-executable remain to be established; see [MODERNIZATION.md](MODERNIZATION.md).
+controlled clocks and recorded tick inputs. The corrected 500-update fixture
+matches original + SilentPatch at six render cadences on Linux x86 and x86-64
+and Windows x64 under Wine; see [PHYSICS_PARITY.md](PHYSICS_PARITY.md) for the
+fields and timing contract. Shared RNG and presentation state are outside that
+equivalence claim. [BASELINE.md](BASELINE.md) covers capture and CPU profiling;
+full-game equivalence and graphics-setting independence remain open in
+[MODERNIZATION.md](MODERNIZATION.md).
 
 The compiler flags encode what the decompiled code relies on:
 
@@ -128,5 +133,10 @@ The compiler flags encode what the decompiled code relies on:
 - `linux-x86` (CMake preset): 32-bit x86, the reference build. Data
   structures have the original layout.
 - `linux-x86-debug`: the same with AddressSanitizer and UBSan.
-- 64-bit builds (Linux, Windows, macOS ARM) follow once the game structures
-  are pointer-size clean.
+- `linux` and `linux-debug`: native Linux x86-64/ARM64, with optional sanitizers.
+- `windows-x64` and `macos`: Windows x64 and macOS Apple silicon.
+
+All target presets are built in CI. Linux x86-64 and Windows x64 under Wine
+have real-stage regression coverage; ARM64 and physical Windows gameplay
+still need validation. Remaining raw accesses are tracked in the
+[generated audit](64bit-raw-access.md).

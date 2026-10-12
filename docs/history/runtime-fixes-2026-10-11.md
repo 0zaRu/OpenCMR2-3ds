@@ -1,5 +1,9 @@
 # Runtime fixes and raw-access audit, 2026-10-11
 
+> Historical validation at the commits named below. Counts and open issues
+> describe that snapshot; see [the roadmap](../PLAN.md) and
+> [the generated audit](../64bit-raw-access.md) for current status.
+
 ## Corrected behaviour
 
 - Arcade country selection now reads `Menu::cursor`. The old callback read
@@ -34,7 +38,7 @@ tables, compressed-repeat boundaries and final-event selection.
 
 The physics fixture remains exact for its 2015 canonical values over 500
 updates at six render cadences. This establishes the Finland excerpt;
-it is not a claim of complete-game equivalence. See [PHYSICS_PARITY.md](PHYSICS_PARITY.md).
+it is not a claim of complete-game equivalence. See [PHYSICS_PARITY.md](../PHYSICS_PARITY.md).
 
 CMR2Decomp was rebuilt with MSVC6 and measured against the original. Its
 2925 byte-exact functions remain byte-exact; none regressed. All 135
@@ -48,7 +52,7 @@ The final audit reports 7194 accesses: 0 pending `bug`, 648 `unresolved`,
 reviewed false positives, with original automatic evidence retained and
 SHA-256 guards in `tools/raw_access/reviewed.json`. No general header
 exception is used. Changing guarded code or automatic evidence invalidates
-the reviews. The generated report is [64bit-raw-access.md](64bit-raw-access.md).
+the reviews. The generated report is [64bit-raw-access.md](../64bit-raw-access.md).
 
 The allocation inference now distinguishes homogeneous records from mixed
 arenas, retains allocation bounds and requires AST evidence for sizeof-based

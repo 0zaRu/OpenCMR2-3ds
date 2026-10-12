@@ -1,5 +1,9 @@
 # Native runtime crash fixes
 
+> Historical validation at the commits named below. Counts and open issues
+> describe that snapshot; see [the roadmap](../PLAN.md) and
+> [the generated audit](../64bit-raw-access.md) for current status.
+
 Synced through CMR2Decomp 9be32b5, retaining 2924 byte-exact MSVC6 functions.
 
 - Ghost alpha setup uses Mesh::flags; its old +0x30 store corrupted the
