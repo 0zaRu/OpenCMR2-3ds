@@ -68,6 +68,12 @@ DATA_FIELDS = {"field:GfxLockedRect::pixels": "bytes"}
 # messages (sender id 0) of the network layer, built in native layout.
 NATIVE_VIEWS = {"param:Network_PollReceivedMessageBuffer#1":
                 {"NetMsgCreatePlayer", "NetMsgDestroyPlayer", "NetMsgSetPlayerData", "NetMsgSetSessionDesc"}}
+# Records that head an allocation whose payload follows them directly, all
+# pointer-free: past sizeof(header) lies the payload, at the same distance on
+# every target, not another header.
+HEADER_RECORDS = {
+    "ReplayStream",  # lanes (0x114c or 0x5c bytes), frame words, samples, counts (Replay_SetupPointers)
+}
 MAX_DEPTH = 16
 MAX_ORIGINS = 24
 
@@ -688,6 +694,16 @@ def classify(key, sites, layouts, tracers, base, others):
     for i, a in enumerate(o0):
         if a.kind not in ("object", "pointee", "alloc"):
             continue
+        payload = header_payload(a, i, per_target, layouts, base, others)
+        if payload is not None:
+            view = s0.get("view") or {}
+            bugs = []
+            if "p" in view:
+                bugs.append(f"pointer-sized access in the payload after a {a.type['r']} header")
+            elif "r" in view and not layouts[base].identical(view, layouts[others[0]], sites[others[0]].get("view")):
+                bugs.append(f"payload after a {a.type['r']} header viewed as {view['r']}, whose layout differs")
+            verdicts.append((f"payload after {a.type['r']} +0x{payload:x} via {a.prov}", bugs, []))
+            continue
         bugs, doubts = [], []
         for target in others:
             o1 = per_target[target]
@@ -751,6 +767,24 @@ def classify(key, sites, layouts, tracers, base, others):
         reasons = sorted(set(unresolved), key=unresolved.index)
     result["reasons"] = reasons
     return result
+
+
+def header_payload(a, i, per_target, layouts, base, others):
+    """Offset into the payload when origin a lies past a HEADER_RECORDS header
+    by the same distance on every target (sizeof-based), else None."""
+    record = (a.type or {}).get("r")
+    if a.kind != "pointee" or record not in HEADER_RECORDS:
+        return None
+    past = set()
+    for target in [base] + others:
+        o = per_target[target][i] if target != base else a
+        if len(per_target[target]) <= i or (o.type or {}).get("r") != record:
+            return None
+        if [st for _, st in o.terms] != [st for _, st in a.terms]:
+            return None
+        past.add(o.offset - layouts[target].size({"r": record}))
+    distance = past.pop()
+    return distance if not past and distance >= 0 else None
 
 
 def widened_scalar_only(c0, c1):

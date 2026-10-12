@@ -7,8 +7,8 @@ original meant) and the x86_64 layout (what the port touches).
 | Verdict | Accesses |
 | --- | --- |
 | bug | 0 |
-| unresolved | 211 |
-| safe | 7120 |
+| unresolved | 162 |
+| safe | 7169 |
 
 `safe` means the layout checks passed or the access was individually reviewed below. It is not
 a proof of bounds, lifetime, control flow or physics equivalence. `bug` is an automatic finding
@@ -21,8 +21,6 @@ guards for the source and headers. A source change or new automatic evidence inv
 report generation until it is checked again. The JSON report retains automatic verdicts and
 reasons. Use `--without-reviews` to inspect all automatic findings.
 
-- `StageObjects.cpp:7270:22:flow:assign` (Replay_SetupPointers): `(ReplayInputLane *)((BYTE *)p + sizeof(ReplayStream))` — This forms a ReplayInputLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x114c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayInputLane has the same pointer-free 0x114c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions.
-- `StageObjects.cpp:7274:22:flow:assign` (Replay_SetupPointers): `(ReplayStateLane *)((BYTE *)p + sizeof(ReplayStream))` — This forms a ReplayStateLane view of the separately allocated payload, not an array of ReplayStream headers. Replay_AllocateStreamBuffer reserves sizeof(ReplayStream) plus laneCapacity * 0x5c, frame/sample storage and per-lane counts. The pointer advances by the native header size on each target; ReplayStateLane has the same pointer-free 0x5c-byte layout and 4-byte alignment on both. ReplayDisk_Read independently validates dimensions and total on-disk size, allocates a native header plus payload and rebuilds these pointers. The automatic finding incorrectly compares payload bytes as further ReplayStream records. replay_disk tests all three stream types, payload locations and byte-exact round trips on i386 and x86_64; runtime_scenarios also records and plays a stream. This review concerns the header-to-payload layout only, not arbitrary runtime indices or caller dimensions.
 
 ## Bugs
 
@@ -30,15 +28,12 @@ reasons. Use `--without-reviews` to inspect all automatic findings.
 
 Fixing or typing one root usually settles every access listed under it.
 
-- 28 × index (p->samplesPerLane * p->laneCount + *pIndex): stride 0x4 matches no array: `StageObjects.cpp:10182:33`, `StageObjects.cpp:10193:37`, `StageObjects.cpp:10194`, `StageObjects.cpp:10208`, `StageObjects.cpp:10223`, `StageObjects.cpp:10238`, `StageObjects.cpp:7971`, `StageObjects.cpp:7973` ...
 - 17 × root param:deflateSetDictionary#1: `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36` ...
 - 15 × root load:var:Scene_ProjectCasterIntoLightZone:pTri:1767: `SceneNode.cpp:1929`, `SceneNode.cpp:1930`, `SceneNode.cpp:1931`, `SceneNode.cpp:1932`, `SceneNode.cpp:1933`, `SceneNode.cpp:1934`, `SceneNode.cpp:1935`, `SceneNode.cpp:1936` ...
-- 12 × index (p->samplesPerLane * p->lane + p->frame): stride 0x4 matches no array: `StageObjects.cpp:14073:61`, `StageObjects.cpp:1501`, `StageObjects.cpp:1503`, `StageObjects.cpp:1510`, `StageObjects.cpp:1511`, `StageObjects.cpp:1512`, `StageObjects.cpp:1513`, `StageObjects.cpp:1514` ...
 - 9 × index i: stride 0x1 matches no array: `Car.cpp:2895`, `Car.cpp:2895`, `Car.cpp:5288`, `Collision2D.cpp:754`, `Collision2D.cpp:755`, `Collision2D.cpp:756`, `Collision2D.cpp:775`, `Collision2D.cpp:776` ...
 - 9 × root field:SceneNode::pObject: `GameInfo.cpp:11197`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8991`, `StageObjects.cpp:931`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
 - 7 × index off: stride 0x1 matches no array: `Car.cpp:2936:33`, `Car.cpp:2946`, `Car.cpp:2952:33`, `Car.cpp:2957`, `Car.cpp:2958`, `Car.cpp:2959`, `Car.cpp:3069:32`
 - 6 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4948`, `StageObjects.cpp:14014`
-- 5 × index p->laneCapacity * recordSize: stride 0x1 matches no array: `StageObjects.cpp:10888`, `StageObjects.cpp:11937:53`, `StageObjects.cpp:11939:77`, `StageObjects.cpp:7279:64`, `StageObjects.cpp:7283:63`
 - 4 × root opaque (): `FrontendScreens.cpp:11497:93`, `FrontendScreens.cpp:11515:97`, `FrontendScreens.cpp:11524:93`, `FrontendScreens.cpp:11529:93`
 - 4 × root expr:s->outbuf = Z_NULL: `ZlibDeflate.cpp:408:13`, `ZlibGzio.cpp:387:11`, `ZlibInfutil.cpp:51:11`, `ZlibInfutil.cpp:77:13`
 - 3 × root ret:strchr: `GameInfo.cpp:2798:32`, `GameInfo.cpp:2805:26`, `GameInfo.cpp:2805:36`
@@ -98,11 +93,7 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × root param:NetworkLeaderboard_CompareEntries#1: `NetworkLeaderboards.cpp:106:41`
 - 1 × index scratchOffset: stride 0x1 matches no array: `RallyData.cpp:7506:32`
 - 1 × index itemOff: stride 0x1 matches no array: `SceneNode.cpp:2118:41`
-- 1 × index p->laneCount * p->samplesPerLane: stride 0x4 matches no array: `StageObjects.cpp:10236:33`
-- 1 × index p->samplesPerLane * p->lane: stride 0x10 matches no array: `StageObjects.cpp:12190:84`
-- 1 × index p->samplesPerLane * p->laneCount: stride 0x10 matches no array: `StageObjects.cpp:14460:107`
 - 1 × index r.native: stride 0x1 matches no array: `StageObjects.cpp:1571:20`
-- 1 × index (p->samplesPerLane * extraSize + recordSize) * p->laneCapacity: stride 0x1 matches no array: `StageObjects.cpp:7287:23`
 - 1 × root param:deflateInit_#2: `ZlibDeflate.cpp:216`
 - 1 × root param:gzsetparams#0: `ZlibGzio.cpp:221:20`
 - 1 × root param:gzprintf#0: `ZlibGzio.cpp:491:20`

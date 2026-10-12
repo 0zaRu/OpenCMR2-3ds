@@ -69,6 +69,21 @@ class ClassificationTests(unittest.TestCase):
             lambda p: 2 * p + 4, lambda p: 4)
         self.assertEqual(result["verdict"], "bug", result)
 
+    def test_payload_after_a_listed_header_is_checked_as_data(self):
+        # Header records are followed by a pointer-free payload at the same
+        # distance past sizeof(Header) on every target.
+        root = lambda p: {"k": "pointee", "prov": "param:fixture#0", "type": {"r": "Header"}}
+        saved = audit.HEADER_RECORDS
+        audit.HEADER_RECORDS = {"Header"}
+        try:
+            result = self.classify(root, lambda p: 2 * p + 4, lambda p: 4)
+            self.assertEqual(result["verdict"], "safe", result)
+            pointer = self.classify(root, lambda p: 2 * p + 8, lambda p: p,
+                                    fields_for=lambda p: {"view": {"p": "void", "sz": p}})
+            self.assertEqual(pointer["verdict"], "bug", pointer)
+        finally:
+            audit.HEADER_RECORDS = saved
+
     def test_typed_cast_does_not_erase_allocation_bounds(self):
         allocation = {"k": "alloc", "prov": "alloc:fixture", "size": 8}
         result = self.classify(lambda p: allocation, lambda p: 0, lambda p: 2 * p,
