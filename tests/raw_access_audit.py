@@ -86,6 +86,48 @@ class ClassificationTests(unittest.TestCase):
         tracer = audit.Tracer(data, header_layout(4), {"Header"})
         self.assertNotIn("alloc:fixture", tracer.alloc_types())
 
+    def origins(self, root, flows):
+        tracer = audit.Tracer({"flows": flows, "sites": {}}, header_layout(8), {"Header"})
+        return tracer.origins(root, 0, [])
+
+    def test_loop_through_a_local_adds_no_origin(self):
+        # p = FindFile(...); while (...) p = next(p);
+        local = {"k": "untyped", "prov": "var:fixture:p:1"}
+        flows = {"var:fixture:p:1": [flow({"k": "untyped", "prov": "ret:FindFile"}),
+                                     flow({"k": "untyped", "prov": "ret:next"})],
+                 "ret:next": [flow({"k": "untyped", "prov": "param:next#0"})],
+                 "param:next#0": [flow(local)]}
+        origins = self.origins(local, flows)
+        self.assertEqual([o.kind for o in origins], ["disk"])
+
+    def test_loop_of_nothing_but_cycles_is_unresolved(self):
+        local = {"k": "untyped", "prov": "var:fixture:p:1"}
+        flows = {"var:fixture:p:1": [flow({"k": "untyped", "prov": "param:next#0"})],
+                 "param:next#0": [flow(local)]}
+        self.assertEqual([o.kind for o in self.origins(local, flows)], ["unresolved"])
+
+    def test_loop_through_a_field_the_platform_writes_stays_unresolved(self):
+        field = {"k": "untyped", "prov": "field:GfxLockedRect::pixels"}
+        flows = {"field:GfxLockedRect::pixels": [flow(field)]}
+        self.assertIn("unresolved", [o.kind for o in self.origins(field, flows)])
+
+    def test_pointer_loaded_through_a_pointer_variable_follows_its_stores(self):
+        # char *files[2]; files[i] = FindFile(...); f(files); ... p = pFiles[i];
+        files = {"k": "object", "prov": "var:g_fixtureFiles", "type": {"a": {"p": "byte", "sz": 8}, "n": 2, "sz": 16}}
+        flows = {"param:f#0": [flow(files)],
+                 "var:g_fixtureFiles": [flow({"k": "untyped", "prov": "ret:FindFile"})]}
+        origins = self.origins({"k": "untyped", "prov": "load:param:f#0"}, flows)
+        self.assertEqual([o.kind for o in origins], ["disk"])
+
+    def test_pointer_loaded_through_an_unknown_pointer_stays_unresolved(self):
+        origins = self.origins({"k": "untyped", "prov": "load:param:f#0"}, {})
+        self.assertEqual([o.kind for o in origins], ["unresolved"])
+
+    def test_global_nothing_writes_is_null(self):
+        self.assertTrue(audit.never_written("var:g_fixtureNeverWrittenAnywhere"))
+        self.assertFalse(audit.never_written("var:g_languageTexts"))
+        self.assertEqual(self.origins({"k": "untyped", "prov": "var:g_fixtureNeverWrittenAnywhere"}, {}), [])
+
     def test_single_sizeof_in_text_is_not_evidence_of_homogeneous_storage(self):
         allocation = {"k": "alloc", "prov": "alloc:fixture",
                       "sizeText": "otherBytes + count * sizeof(Header) + 8"}
@@ -220,6 +262,22 @@ void fixture(int n, int otherBytes) {
                 for name in ["callocLeft", "callocRight"]:
                     self.assertIn("sizeof(Header)", allocations[name]["sizeText"])
                     self.assertIn("(n)", allocations[name]["sizeText"])
+
+    def test_element_loaded_through_a_pointer_is_a_load(self):
+        audit.build_plugin()
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            source = directory / "Fixture.cpp"
+            source.write_text("char *g_files[2];\n"
+                              "char *pick(char **pFiles, int i) { char *p = pFiles[i]; char *q = g_files[i]; return p ? p : q; }\n")
+            output = directory / "x86_64.jsonl"
+            subprocess.run(["clang++", "-target", audit.TARGETS["x86_64"], "-fsyntax-only", "-std=c++17",
+                            f"-fplugin={audit.PLUGIN}", f"-fplugin-arg-rawaccess-out={output}",
+                            f"-fplugin-arg-rawaccess-dir={directory}/", str(source)], check=True)
+            flows = {r["dst"].split(":")[2]: r["root"]["prov"] for r in map(json.loads, output.read_text().splitlines())
+                     if r["t"] == "flow" and r["dst"].startswith("var:pick:")}
+            self.assertEqual(flows["p"], "load:param:pick#0")
+            self.assertEqual(flows["q"], "var:g_files")
 
 
 if __name__ == "__main__":

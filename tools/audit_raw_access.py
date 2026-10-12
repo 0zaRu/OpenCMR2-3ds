@@ -28,6 +28,7 @@ Needs clang-devel (the plugin is built against the installed Clang).
 """
 import argparse
 import collections
+import functools
 import concurrent.futures
 import hashlib
 import json
@@ -289,6 +290,49 @@ class Origin:
         return (self.kind, self.prov, self.offset, tuple(tuple(t) for t in self.terms))
 
 
+@functools.lru_cache(maxsize=None)
+def named_in_platform(name):
+    named = re.compile(rf"\b{re.escape(name)}\b")
+    return any(path.suffix in (".c", ".cpp", ".h") and named.search(path.read_text(errors="replace"))
+               for path in (ROOT / "src").rglob("*"))
+
+
+@functools.lru_cache(maxsize=None)
+def address_taken(name):
+    taken = re.compile(rf"&\s*(\w+\s*(\.|->)\s*)*{re.escape(name)}\b")
+    return any(taken.search(path.read_text(errors="replace"))
+               for path in list(GAME.glob("*.cpp")) + list(GAME.glob("*.h")))
+
+
+def game_only(prov):
+    """A global or field only game/ code can store to: its flows are complete."""
+    if prov.startswith("var:") and prov.count(":") == 1:
+        name = prov[len("var:"):]
+        return not named_in_platform(name) and not address_taken(name)
+    if prov.startswith("field:"):
+        record, _, field = prov[len("field:"):].rpartition("::")
+        return not named_in_platform(record.split("::")[-1]) and not address_taken(field)
+    return False
+
+
+@functools.lru_cache(maxsize=None)
+def never_written(prov):
+    """A global no code stores to, takes the address of or names outside
+    game/ (the platform code is not analysed): it keeps its zero value."""
+    if not prov.startswith("var:") or prov.count(":") != 1:
+        return False
+    name = re.escape(prov[len("var:"):])
+    stores = re.compile(rf"(&\s*{name}\b|\b{name}\s*(\[[^\]]*\]\s*)*([-+*/|&^]|<<|>>)?=(?!=)|\b{name}\s*(\+\+|--)|(\+\+|--)\s*{name}\b)")
+    for path in list(GAME.glob("*.cpp")) + list(GAME.glob("*.h")):
+        if stores.search(path.read_text(errors="replace")):
+            return False
+    named = re.compile(rf"\b{name}\b")
+    for path in (ROOT / "src").rglob("*"):
+        if path.suffix in (".c", ".cpp", ".h") and named.search(path.read_text(errors="replace")):
+            return False
+    return True
+
+
 def needs_provenance(root):
     if root["k"] == "untyped":
         return True
@@ -305,6 +349,7 @@ class Tracer:
         self.sites = target_data["sites"]
         self.layout = layout
         self.blob_views = None
+        self.cycles = 0
 
     def origins(self, root, offset, terms, pun_view=None):
         """Where a root ultimately points: typed objects, buffers, or dead ends.
@@ -313,7 +358,10 @@ class Tracer:
         declared type is then not trusted and its assignments are followed
         until they reach that record or run out."""
         out, seen = [], set()
+        self.cycles = 0
         self._trace(root, offset, list(terms), [], out, seen, 0, pun_view)
+        if not out and self.cycles:
+            out.append(Origin("unresolved", None, root.get("prov", ""), None, offset, terms, ["(only cycles)"]))
         uniq = {}
         for o in out:
             uniq.setdefault(o.ident(), o)
@@ -349,8 +397,18 @@ class Tracer:
             out.append(Origin(kind, root.get("type"), prov, root.get("size"), offset, terms, via,
                               root.get("sizeTerms") or ()))
             return
-        if depth >= MAX_DEPTH or prov in seen:
-            out.append(Origin("unresolved", root.get("type"), prov, None, offset, terms, via + ["(cycle or too deep)"]))
+        if prov in seen:
+            # A loop back to a local or parameter already being traced
+            # (p = next(p)) adds no origin: the other paths into the loop give
+            # them all. Fields and globals may also be written outside game/
+            # (the platform code), so a loop through them stays unresolved.
+            if prov.startswith("param:") or (prov.startswith("var:") and prov.count(":") == 3) or game_only(prov):
+                self.cycles += 1
+                return
+            out.append(Origin("unresolved", root.get("type"), prov, None, offset, terms, via + ["(cycle)"]))
+            return
+        if depth >= MAX_DEPTH:
+            out.append(Origin("unresolved", root.get("type"), prov, None, offset, terms, via + ["(too deep)"]))
             return
         seen = seen | {prov}
         keys = [prov]
@@ -376,7 +434,27 @@ class Tracer:
                     if inner and all(o.kind == "disk" for o in inner):
                         out.append(Origin("disk", None, inner[0].prov, None, offset, terms, via + [prov]))
                         return
+        if prov.startswith("load:"):
+            # A pointer loaded through another pointer: what was stored where
+            # that pointer points. Through file data it was relocated in place
+            # and points into the file; through pointer variables it is
+            # whatever was assigned to them.
+            inner = []
+            self._trace({"k": "untyped", "prov": prov[len("load:"):]}, 0, [], via + [prov], inner, seen, depth + 1)
+            if inner and all(o.kind == "disk" for o in inner):
+                out.append(Origin("disk", None, inner[0].prov, None, offset, terms, via + [prov]))
+                return
+            if not inner or any(not (o.kind == "object" and self._holds_pointers(o) or o.kind == "alloc")
+                                for o in inner):
+                out.append(Origin("unresolved", root.get("type"), prov, None, offset, terms, via))
+                return
+            keys = sorted({o.prov for o in inner if o.kind == "object"})
+            # Stores into those buffers through any pointer that reaches them.
+            buffers = {o.prov for o in inner}
+            keys += [k for k, held in self._stores_through().items() if held & buffers]
         incoming = [f for k in keys for f in self.flows.get(k, [])]
+        if not incoming and never_written(prov):
+            return  # a global nothing stores to holds its zero initialiser: NULL
         if not incoming:
             out.append(Origin("unresolved", root.get("type"), prov, None, offset, terms, via))
             return
@@ -420,6 +498,25 @@ class Tracer:
                             and r["prov"] not in carved:
                         self.blob_views[r["prov"]] = {"r": record}
         return self.blob_views
+
+    def _stores_through(self):
+        """For each pointer stored through ("load:K" destinations), the
+        variables and allocations K points at."""
+        if getattr(self, "_through", None) is None:
+            self._through = {}
+            for key in [k for k in self.flows if k.startswith("load:")]:
+                inner = []
+                self._trace({"k": "untyped", "prov": key[len("load:"):]}, 0, [], [], inner, frozenset(), 1)
+                self._through[key] = {o.prov for o in inner if o.kind in ("object", "alloc")}
+        return self._through
+
+    @staticmethod
+    def _holds_pointers(o):
+        """A variable that is a pointer or an array of pointers, read whole."""
+        t = o.type or {}
+        while "a" in t:
+            t = t["a"]
+        return "p" in t and o.prov.startswith("var:")
 
     def _loaded_field(self, prov):
         key = prov[len("site:"):]

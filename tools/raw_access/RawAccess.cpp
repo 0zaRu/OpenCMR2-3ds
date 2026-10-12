@@ -268,6 +268,10 @@ private:
                 decomposeLValue(as, c);
                 if (c.raw)
                     return "site:" + where(as->getExprLoc()) + ":subscript";
+                // An element reached through a pointer holds what was stored
+                // where that pointer points, not the pointer variable itself.
+                if (!base->getType()->isArrayType() && base->getType()->isPointerType())
+                    return c.prov.empty() ? "" : "load:" + c.prov;
                 return lvalueKey(base);
             }
         }
