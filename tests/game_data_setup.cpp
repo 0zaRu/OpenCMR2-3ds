@@ -167,9 +167,51 @@ int main()
     Check(messages.back().find("could not be saved") != std::string::npos &&
           Read(blockedUser / "opencmr2.ini") == "[video]\nfov = 85\n", "failed save preserves original INI");
     exitOnWarning = false;
+    const fs::path movedGame = root / "moved-game";
+    fs::create_directories(movedGame / "GAME/Tracks/Finland/1");
+    for (const char *inside : {"GAME", "GAME/Bigfiles", "GAME/Tracks/Finland/1", "frontend", "Sounds"}) {
+        folders = {(movedGame / inside).u8string()};
+        const fs::path smartUser = root / "inside-user";
+        fs::remove_all(smartUser);
+        Check(Start(smartUser), "select a folder inside the installation");
+        Check(std::string(Platform_GetDataDir()) == movedGame.u8string() + "/" &&
+              Read(smartUser / "opencmr2.ini").find("data = " + movedGame.u8string()) != std::string::npos,
+              "save the installation root rather than the chosen subfolder");
+        Platform_Shutdown();
+    }
+
+    const fs::path collection = root / "collection";
+    const fs::path nestedGame = collection / "download" / "CMR2" / "Data";
+    fs::create_directories(nestedGame.parent_path());
+    fs::rename(movedGame, nestedGame);
+    folders = {collection.u8string()};
+    Check(Start(root / "parent-user"), "find installation three levels below selected folder");
+    Check(std::string(Platform_GetDataDir()) == nestedGame.u8string() + "/", "persist the discovered nested root");
+    Platform_Shutdown();
+
+    const fs::path secondGame = collection / "another-copy";
+    fs::copy(nestedGame, secondGame, fs::copy_options::recursive);
+    folders = {collection.u8string(), (nestedGame / "GAME").u8string()};
+    const size_t beforeAmbiguous = messages.size();
+    Check(Start(root / "ambiguous-user"), "ask again when several installations are found");
+    Check(messages.size() == beforeAmbiguous + 2 &&
+          messages.back().find("More than one") != std::string::npos &&
+          std::string(Platform_GetDataDir()) == nestedGame.u8string() + "/", "do not choose a copy arbitrarily");
+    Platform_Shutdown();
+
+    // A cyclic symlink must not make a broad-folder search loop. Creating
+    // symlinks may be disallowed on Windows, so also test the non-link path.
+    std::error_code linkError;
+    const fs::path noGame = root / "no-game";
+    fs::create_directories(noGame / "child");
+    fs::create_directory_symlink(noGame, noGame / "child/loop", linkError);
+    folders = {noGame.u8string(), nestedGame.u8string()};
+    Check(Start(root / "cycle-user"), "reject empty folders and tolerate symlink cycles");
+    Platform_Shutdown();
+    const int beforeExit = dialogs;
     exitSetup = true;
     Check(!Start(root / "exit-user"), "exit from welcome dialog");
-    Check(dialogs == 5, "exit does not open folder selector");
+    Check(dialogs == beforeExit, "exit does not open folder selector");
     Check(Platform_WasSetupCanceled(), "welcome exit is a clean exit");
     Platform_SetTestDialogs(nullptr);
     fs::current_path(previous);

@@ -10,7 +10,10 @@ OpenCMR2 contains no game data. You need your own copy of the original game.
 
 On first launch, a graphical setup dialog lets you choose the folder of your
 original **PC** installation. The main data archives are checked and the path
-is remembered; your game files stay in their original location. This works on
+is remembered; your game files stay in their original location. You can select
+the installation, a folder inside it, or a parent folder containing it; the
+setup finds the actual data root. If several copies are found, it asks you to
+choose one. This works on
 Windows, Linux and macOS using SDL3's native folder selector. You can also put
 the game files in `Data` beside the executable for a portable setup.
 

@@ -11,8 +11,10 @@
 #include <time.h>
 
 #include <atomic>
+#include <filesystem>
 #include <map>
 #include <sstream>
+#include <set>
 #include <string>
 #include <vector>
 
@@ -304,6 +306,55 @@ std::string WithSlash(std::string dir)
     return dir;
 }
 
+std::vector<std::string> FindNearbyGameData(const std::string &selected)
+{
+    namespace fs = std::filesystem;
+    std::error_code error;
+    fs::path start = fs::weakly_canonical(fs::u8path(selected), error);
+    if (error)
+        return {};
+    // Selecting GAME, FRONTEND, or a track deep inside the installation should
+    // work too. Prefer the selected folder or its closest valid ancestor.
+    for (fs::path parent = start; !parent.empty(); parent = parent.parent_path()) {
+        std::string dir = WithSlash(parent.u8string());
+        if (MissingGameData(dir).empty())
+            return {dir};
+        if (parent == parent.parent_path())
+            break;
+    }
+
+    // A download/collection folder often wraps the installation in a few
+    // extra directories. Search locally, with a bound on depth and work; do
+    // not descend into a found installation or repeatedly follow symlinks.
+    std::vector<std::pair<fs::path, int>> pending{{start, 0}};
+    std::set<fs::path> visited{start};
+    std::vector<std::string> found;
+    for (size_t index = 0; index < pending.size() && index < 512; ++index) {
+        const auto current = pending[index];
+        std::string dir = WithSlash(current.first.u8string());
+        if (index != 0 && MissingGameData(dir).empty()) {
+            found.push_back(dir);
+            continue;
+        }
+        if (current.second == 3)
+            continue;
+        for (const auto &entry : ListDir(dir)) {
+            if (pending.size() >= 512)
+                break;
+            if (entry.second.empty() || entry.second[0] == '.')
+                continue;
+            std::string child = dir + entry.second;
+            SDL_PathInfo info{};
+            if (!SDL_GetPathInfo(child.c_str(), &info) || info.type != SDL_PATHTYPE_DIRECTORY)
+                continue;
+            fs::path canonical = fs::weakly_canonical(fs::u8path(child), error);
+            if (!error && visited.insert(canonical).second)
+                pending.emplace_back(canonical, current.second + 1);
+        }
+    }
+    return found;
+}
+
 bool AskForGameFolder(const std::string &message, bool warning = false)
 {
     const SDL_MessageBoxButtonData buttons[] = {
@@ -343,8 +394,8 @@ void SDLCALL FolderSelected(void *userdata, const char *const *files, int)
 bool SelectGameData(const std::string &settingsFile)
 {
     std::string message = "Welcome to OpenCMR2\n\n"
-                          "Choose the folder of your Colin McRae Rally 2.0 copy for PC.\n"
-                          "It should contain Game, FrontEnd and Sounds.\n\n"
+                          "Choose a folder containing your Colin McRae Rally 2.0 copy for PC.\n"
+                          "You can also choose a folder inside the installation.\n\n"
                           "Your files stay in place. You only need to choose this folder once.";
     bool warning = false;
     while (AskForGameFolder(message, warning)) {
@@ -370,16 +421,25 @@ bool SelectGameData(const std::string &settingsFile)
             s_setupCanceled = true;
             return false; // Cancel is a normal exit, with no extra error box.
         }
-        std::string dir = WithSlash(selection.path);
         s_dirCache.clear(); // Allow retry after the user copies missing files.
-        std::string missing = MissingGameData(dir);
-        if (!missing.empty()) {
-            message = "This folder is missing required game files:" + missing +
+        std::vector<std::string> matches = FindNearbyGameData(selection.path);
+        if (matches.size() > 1) {
+            message = "More than one game installation was found in this folder:\n";
+            for (size_t i = 0; i < matches.size() && i < 4; ++i)
+                message += "\n- " + matches[i];
+            message += "\n\nSelect the installation you want to use, or a folder inside it.";
+            warning = true;
+            continue;
+        }
+        if (matches.empty()) {
+            message = "No complete game installation was found in or near this folder.\n"
+                      "Required files missing from the selected folder:" + MissingGameData(WithSlash(selection.path)) +
                       "\n\nSelect the folder of a complete PC installation.\n"
                       "Files on a CD or ISO may need to be installed or extracted first.";
             warning = true;
             continue;
         }
+        const std::string &dir = matches.front();
         if (!SaveDataSetting(settingsFile, dir)) {
             message = "The game folder is valid, but its location could not be saved.\n\n" +
                       std::string(SDL_GetError()) + "\n\nCheck that this settings file is writable:\n" + settingsFile;

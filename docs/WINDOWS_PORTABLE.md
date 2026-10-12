@@ -10,7 +10,9 @@ DLLs, licenses, `Jugar.cmd`, `LEEME.txt` and a SHA-256 file manifest. Original
 game assets are excluded from CI packages. On first launch, choose the folder
 of your original PC game installation in the native folder selector. OpenCMR2
 checks the main data archives and remembers the path in `UserData/opencmr2.ini`;
-the original files stay in place. Canceling closes the application.
+the original files stay in place. Selecting a subfolder or a parent containing
+the installation also works. If multiple copies are found, choose the one you
+want to use. Canceling closes the application.
 
 For a self-contained USB folder, copy your game files inside `Data` instead.
 This folder is detected automatically; selecting an external installation
