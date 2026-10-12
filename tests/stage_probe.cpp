@@ -50,11 +50,14 @@ extern int StageTiming_GetCheckpointSplitIndex(int);
 extern BYTE StageTiming_GetCheckpointField19(int);
 extern int StageTiming_GetCarSplitTime(int, int);
 extern CarContact *g_carContacts;
-extern unsigned char g_unk0x00542e78[];
-extern unsigned char g_carStageTiming[];
+// Match the production types: the MSVC ABI includes them in symbol names.
+struct Unk0x00542e78;
+struct CarStageTiming;
+extern Unk0x00542e78 g_unk0x00542e78[8];
+extern CarStageTiming g_carStageTiming[8];
 extern int g_unk0x0053d1b0;
 extern char g_unk0x00818ebc[20];
-extern BYTE *Race_GetPlayerRecordPointer(int);
+extern ReplayStream *Race_GetPlayerRecordPointer(int);
 extern int Replay_StopRecording(BYTE *);
 extern void Race_StartPlayerAndOpponentReplays(int);
 extern void StageTiming_RecordDriverTimeoutFinish(int);
@@ -181,7 +184,8 @@ struct Probe : Diagnostics::TimingObserver {
             view.cars = pCars;
             view.parts = pParts; view.damage = reinterpret_cast<const unsigned char *>(g_carDamageRecords);
             view.contacts = reinterpret_cast<const unsigned char *>(g_carContacts);
-            view.timing = g_carStageTiming; view.checkpoints = g_unk0x00542e78;
+            view.timing = reinterpret_cast<const unsigned char *>(g_carStageTiming);
+            view.checkpoints = reinterpret_cast<const unsigned char *>(g_unk0x00542e78);
             view.transforms = reinterpret_cast<const unsigned char *>(g_carTransforms);
             view.shadow = reinterpret_cast<const unsigned char *>(g_carTransformsShadow);
             view.wheels = reinterpret_cast<const unsigned char *>(g_carWheelTransforms);
@@ -247,11 +251,11 @@ struct Probe : Diagnostics::TimingObserver {
         if (const char *replayAt = getenv("OPENCMR2_PROBE_REPLAY_AT_TICK")) {
             if (tick + 1 == unsigned(atoi(replayAt))) {
                 for (int car = 0; car < g_carOrderCount; ++car)
-                    Replay_StopRecording(Race_GetPlayerRecordPointer(car));
+                    Replay_StopRecording(reinterpret_cast<BYTE *>(Race_GetPlayerRecordPointer(car)));
                 Race_StartPlayerAndOpponentReplays(0);
                 fprintf(stderr, "probe: recorded replay started at tick %u\n", tick + 1);
             }
-            auto *stream = (ReplayStream *)Race_GetPlayerRecordPointer(0);
+            auto *stream = Race_GetPlayerRecordPointer(0);
             if (stream && tick % 25 == 0)
                 fprintf(stderr, "probe: replay tick=%u playing=%d lane=%d frame=%d length=%d\n",
                     tick, stream->playing, stream->lane, stream->frame,
@@ -272,7 +276,7 @@ struct Probe : Diagnostics::TimingObserver {
         for (int i = 0; i < g_carOrderCount; ++i) {
             const Car &c = g_carBuffer[g_carOrder[i]];
             if (getenv("OPENCMR2_PROBE_OPPONENT") && c.index == 1 && tick % 100 == 0) {
-                const ReplayStream *p = (const ReplayStream *)Race_GetPlayerRecordPointer(1);
+                const ReplayStream *p = Race_GetPlayerRecordPointer(1);
                 if (p) fprintf(stderr, "opponent tick=%u rate=%g playing=%d started=%d type=%d lane=%d/%d frame=%d/%d repeat=%u capacity=%d\n",
                     tick, c.simulationRateHz, p->playing, p->playStarted, p->type, p->lane, p->laneCount,
                     p->frame, p->lane < p->laneCount ? p->pLaneSamples[p->lane] : -1, p->field_0x21, p->samplesPerLane);
