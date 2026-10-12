@@ -6,6 +6,8 @@ project(OpenCMR2 LANGUAGES C CXX)
 #    have the original's layout there, which the golden tests compare against.
 #  - linux, windows-x64, macos: native 64-bit builds. Raw access review and
 #    original-game parity checks are tracked in docs/64bit-raw-access.md.
+#  - Android: built by the Gradle project in android/, which passes the NDK
+#    toolchain and the SDL3 source it also takes SDLActivity from.
 
 # The game source needs Clang with GNU-style options: -fms-extensions for the
 # MSVC dialect it was written in, forced includes and the semantics below.
@@ -18,7 +20,7 @@ if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
 endif()
 
 option(OPENCMR2_SANITIZE "Build with AddressSanitizer and UBSan" OFF)
-option(OPENCMR2_VENDORED_SDL "Download and build SDL3 instead of using an installed one" OFF)
+option(OPENCMR2_VENDORED_SDL "Download and build SDL3 instead of using an installed one" ${ANDROID})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -61,12 +63,15 @@ if(NOT TARGET SDL3::SDL3)
     set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(SDL3
         GIT_REPOSITORY https://github.com/libsdl-org/SDL.git
-        GIT_TAG release-3.2.30
+        GIT_TAG release-3.4.18
         GIT_SHALLOW TRUE)
     FetchContent_MakeAvailable(SDL3)
 endif()
 
 add_subdirectory(src)
 
-enable_testing()
-add_subdirectory(tests)
+# The tests run on the build machine; the Android build is the game alone.
+if(NOT ANDROID)
+    enable_testing()
+    add_subdirectory(tests)
+endif()

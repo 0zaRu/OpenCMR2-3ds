@@ -242,7 +242,24 @@ struct Executor : GfxExecutor {
 #ifdef OPENCMR2_SHADERS_MSL
         formats |= SDL_GPU_SHADERFORMAT_MSL;
 #endif
-        device = SDL_CreateGPUDevice(formats, debug, NULL);
+        SDL_PropertiesID props = SDL_CreateProperties();
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_SPIRV_BOOLEAN,
+                               (formats & SDL_GPU_SHADERFORMAT_SPIRV) != 0);
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_SHADERS_MSL_BOOLEAN,
+                               (formats & SDL_GPU_SHADERFORMAT_MSL) != 0);
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_DEBUGMODE_BOOLEAN, debug);
+#if SDL_VERSION_ATLEAST(3, 4, 0)
+        // SDL asks Vulkan for these features by default. The renderer does not
+        // use them (anisotropy only when video.anisotropy is set, see Sampler),
+        // and many Android GPUs lack some, for which SDL would refuse the device.
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_CLIP_DISTANCE_BOOLEAN, false);
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_DEPTH_CLAMPING_BOOLEAN, false);
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_INDIRECT_DRAW_FIRST_INSTANCE_BOOLEAN, false);
+        SDL_SetBooleanProperty(props, SDL_PROP_GPU_DEVICE_CREATE_FEATURE_ANISOTROPY_BOOLEAN,
+                               Platform_GetSettingInt("video.anisotropy", 1) > 1);
+#endif
+        device = SDL_CreateGPUDeviceWithProperties(props);
+        SDL_DestroyProperties(props);
         if (device == NULL) {
             Sys_Log("gfx: SDL_CreateGPUDevice: %s", SDL_GetError());
             return false;
