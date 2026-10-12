@@ -4,7 +4,7 @@
 #include <cstdio>
 #include <initializer_list>
 
-extern void Replay_PlayStreamFrame(int *);
+extern void Replay_PlayStreamFrame(ReplayStream *);
 #define REQUIRE(x) do { if (!(x)) { fprintf(stderr, "replay events: line %d: %s\n", __LINE__, #x); return 1; } } while (0)
 
 int main()
@@ -35,14 +35,14 @@ int main()
             inputs.eventCount = states.eventCount = eventCount;
             events[0] = {0, 0, 7, 0};
             events[1] = {1, 0, 9, 0};
-            Replay_PlayStreamFrame(reinterpret_cast<int *>(&stream));
+            Replay_PlayStreamFrame(&stream);
             REQUIRE(stream.frame == 0 && stream.field_0x21 == 1);
             REQUIRE(stream.field_0x10c == (eventCount ? 7 : 42));
             REQUIRE(car.flag0x1d0[0] == 31 && car.flag0x1d0[2] == 63 && car.handbrake == 1);
-            Replay_PlayStreamFrame(reinterpret_cast<int *>(&stream));
+            Replay_PlayStreamFrame(&stream);
             REQUIRE(stream.frame == 1 && stream.field_0x21 == 0);
             REQUIRE(stream.field_0x10c == (eventCount ? 9 : 42));
-            Replay_PlayStreamFrame(reinterpret_cast<int *>(&stream));
+            Replay_PlayStreamFrame(&stream);
             REQUIRE(stream.frame == 1 && stream.field_0x21 == 1);
             REQUIRE(stream.field_0x10c == (eventCount ? 9 : 42));
         }
