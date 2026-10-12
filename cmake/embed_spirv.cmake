@@ -1,4 +1,4 @@
-# Writes a C++ header with the given shader files as byte arrays:
+# Writes a C++ header with the given files (shaders, the window icon) as byte arrays:
 #   cmake -DOUTPUT=out.h -DINPUTS="a.spv|b.spv|a.msl" -P embed_spirv.cmake
 # Each array is named g_<file name with dots turned into underscores>,
 # without the .spv extension (fixed.frag.spv -> g_fixed_frag,

@@ -218,6 +218,8 @@ enum GfxTextureTransform {
 /* Creates the GPU device on first use and sets the back buffer size and
    window mode (it may be called again to change them). */
 BOOL Gfx_SetVideoMode(int width, int height, BOOL fullscreen);
+/* Switches the window between fullscreen and windowed, keeping the mode. */
+void Gfx_SetFullscreen(BOOL fullscreen);
 void Gfx_Shutdown(void);
 
 /* Resolutions to offer, largest first. */

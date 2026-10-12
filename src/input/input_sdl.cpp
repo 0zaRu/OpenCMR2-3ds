@@ -43,6 +43,7 @@ namespace {
 
 bool s_initialised;
 const BYTE *s_testKeyboard;
+bool s_heldBack[SDL_SCANCODE_COUNT];
 
 void EnsureInit()
 {
@@ -308,6 +309,12 @@ extern "C" void Input_SetAxisSaturation(InputDevice *device, DWORD offset, DWORD
         device->axes[axis].saturation = saturation > 10000 ? 10000 : saturation;
 }
 
+void Input_HoldBackKey(SDL_Scancode scancode)
+{
+    if (scancode > SDL_SCANCODE_UNKNOWN && scancode < SDL_SCANCODE_COUNT)
+        s_heldBack[scancode] = true;
+}
+
 extern "C" void Input_SetMouseExclusive(InputDevice *device, BOOL exclusive)
 {
     if (device->type == DEVICE_MOUSE && Platform_GetWindow() != NULL)
@@ -325,6 +332,11 @@ extern "C" BOOL Input_ReadKeyboard(InputDevice *device, BYTE keys[256])
 
     memset(keys, 0, 256);
     for (int scancode = 0; scancode < count; scancode++) {
+        if (scancode < SDL_SCANCODE_COUNT && s_heldBack[scancode]) {
+            if (state[scancode])
+                continue;
+            s_heldBack[scancode] = false;
+        }
         if (state[scancode]) {
             int dik = Keys_FromScancode((SDL_Scancode)scancode);
             if (dik != 0)

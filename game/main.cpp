@@ -169,6 +169,17 @@ void CMain::HandleEvent(const SysEvent *event)
 	case SYS_EVENT_TEXT:
 		CInput::QueueInputCharacter(event->character);
 		break;
+
+	// PORT: Alt+Enter switches between fullscreen and a window, and is
+	// remembered in opencmr2.ini. The main loop shows or hides the cursor;
+	// the mouse is captured only in fullscreen.
+	case SYS_EVENT_TOGGLE_FULLSCREEN:
+		g_pGraphics->isFullscreen = !g_pGraphics->isFullscreen;
+		Gfx_SetFullscreen(g_pGraphics->isFullscreen);
+		Sys_SetOption("video.fullscreen", g_pGraphics->isFullscreen);
+		if (!CGame::m_isActive)
+			CInput::SetMouseCoopLevel(1);
+		break;
 	}
 }
 

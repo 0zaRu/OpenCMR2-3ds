@@ -34,7 +34,8 @@ enum SysEventType {
     SYS_EVENT_MINIMIZED,
     SYS_EVENT_RESTORED,
     SYS_EVENT_KEY_DOWN,      /* key: DirectInput scan code (DIK_*), with repeats */
-    SYS_EVENT_TEXT           /* character: one character in Windows-1252 */
+    SYS_EVENT_TEXT,          /* character: one character in Windows-1252 */
+    SYS_EVENT_TOGGLE_FULLSCREEN /* Alt+Enter; the Enter key is kept from the game */
 };
 
 typedef struct SysEvent {
@@ -130,6 +131,9 @@ const char *Sys_GetInstallSetting(const char *name);
 
 /* OpenCMR2 options (opencmr2.ini, "section.key", e.g. "video.fullscreen"). */
 int Sys_GetOption(const char *name, int fallback);
+/* Changes an option and saves it to opencmr2.ini, keeping the rest of the
+   file. Returns 0 if it could not be saved (the new value still applies). */
+BOOL Sys_SetOption(const char *name, int value);
 
 #ifdef __cplusplus
 }

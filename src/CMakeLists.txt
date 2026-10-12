@@ -50,6 +50,7 @@ target_link_libraries(opencmr2_platform PUBLIC SDL3::SDL3)
 add_executable(opencmr2 platform/main.cpp)
 target_link_libraries(opencmr2 PRIVATE opencmr2_platform)
 if(WIN32)
+    target_sources(opencmr2 PRIVATE ${PROJECT_SOURCE_DIR}/res/opencmr2.rc)
     # SDL3.dll (and any other runtime DLL) next to the executable.
     add_custom_command(TARGET opencmr2 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:opencmr2> $<TARGET_FILE_DIR:opencmr2>
@@ -117,6 +118,19 @@ add_custom_command(
     DEPENDS ${SHADER_FILES} ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
     COMMENT "Embedding shaders")
 
+# ---- window icon (embedded) ------------------------------------------------------
+# res/opencmr2.png is the source; the derived icons are regenerated with:
+#   magick res/opencmr2.png -define icon:auto-resize=256,128,96,64,48,40,32,24,20,16 res/opencmr2.ico
+#   magick res/opencmr2.png -resize 128x128 -type TrueColor BMP3:res/opencmr2_icon.bmp
+set(ICON_BMP ${PROJECT_SOURCE_DIR}/res/opencmr2_icon.bmp)
+set(ICON_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/opencmr2_icon.h)
+add_custom_command(
+    OUTPUT ${ICON_HEADER}
+    COMMAND ${CMAKE_COMMAND} -DOUTPUT=${ICON_HEADER} -DINPUTS=${ICON_BMP} -P ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
+    VERBATIM
+    DEPENDS ${ICON_BMP} ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
+    COMMENT "Embedding the window icon")
+
 # ---- network (UDP with ENet, third_party/enet) -------------------------------------
 set(ENET_DIR ${PROJECT_SOURCE_DIR}/third_party/enet)
 add_library(enet STATIC
@@ -141,6 +155,7 @@ target_sources(opencmr2_platform PRIVATE
     render/gfx_core.cpp
     render/gfx_gpu.cpp
     ${SHADER_HEADER}
+    ${ICON_HEADER}
     audio/audio_sdl.cpp
     input/input_sdl.cpp
     video/movie.cpp

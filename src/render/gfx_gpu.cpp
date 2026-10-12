@@ -310,17 +310,31 @@ struct Executor : GfxExecutor {
             if (backColor == NULL || backDepth == NULL)
                 return false;
         }
+        SDL_SetWindowResizable(window, true);
+        SetFullscreen(fullscreen);
+        SDL_ShowWindow(window);
+        return true;
+    }
+
+    // Fullscreen on the desktop resolution, or a centred window of the back
+    // buffer size times video.window_scale.
+    void SetFullscreen(bool fullscreen) override
+    {
+        if (window == NULL)
+            return;
+        bool wasFullscreen = (SDL_GetWindowFlags(window) & SDL_WINDOW_FULLSCREEN) != 0;
+        SDL_SetWindowFullscreen(window, fullscreen);
+        if (fullscreen)
+            return;
+        // Leaving fullscreen restores the earlier window size; the new size
+        // only applies once the window is out of fullscreen.
+        if (wasFullscreen)
+            SDL_SyncWindow(window);
         int scale = Platform_GetSettingInt("video.window_scale", 1);
         if (scale < 1)
             scale = 1;
-        SDL_SetWindowResizable(window, true);
-        SDL_SetWindowFullscreen(window, fullscreen);
-        if (!fullscreen) {
-            SDL_SetWindowSize(window, width * scale, height * scale);
-            SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
-        }
-        SDL_ShowWindow(window);
-        return true;
+        SDL_SetWindowSize(window, backWidth * scale, backHeight * scale);
+        SDL_SetWindowPosition(window, SDL_WINDOWPOS_CENTERED, SDL_WINDOWPOS_CENTERED);
     }
 
     // ---- textures ----

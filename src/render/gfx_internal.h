@@ -134,6 +134,7 @@ struct GfxReadback {
 struct GfxExecutor {
     virtual ~GfxExecutor() {}
     virtual bool SetVideoMode(int width, int height, bool fullscreen) = 0;
+    virtual void SetFullscreen(bool fullscreen) = 0;
     // Runs the recorded commands; with present, shows the back buffer and
     // ends the frame (otherwise the next commands continue it).
     virtual void Execute(GfxFrame &frame, std::vector<GfxTexture *> &textures, GfxReadback &readback, bool present,

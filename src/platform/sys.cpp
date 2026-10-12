@@ -18,6 +18,10 @@
 #include <string>
 #include <vector>
 
+#ifndef _WIN32
+#include "opencmr2_icon.h"
+#endif
+
 namespace {
 
 SDL_Window *s_window;
@@ -202,43 +206,56 @@ void LoadSettings(const std::string &file)
     }
 }
 
-// Keep unrelated settings and comments, using SDL's UTF-8 paths on Windows too.
-bool SaveDataSetting(const std::string &file, const std::string &dir)
+// Sets "key = value" in [section] of the settings file: the first such line
+// is replaced in place and repeats (in any [section] block) are dropped.
+// Unrelated settings and comments are kept; SDL's UTF-8 paths work on Windows too.
+bool SaveSetting(const std::string &file, const std::string &section, const std::string &key,
+                 const std::string &value)
 {
-    if (dir.find_first_of("\r\n") != std::string::npos)
-        return SDL_SetError("The folder name contains a line break");
+    if (value.find_first_of("\r\n") != std::string::npos)
+        return SDL_SetError("The value contains a line break");
     char *contents = (char *)SDL_LoadFile(file.c_str(), NULL);
     if (!contents)
         return false;
     std::istringstream input(contents);
     SDL_free(contents);
-    std::string output, line, section;
-    bool inserted = false;
+    const std::string setting = key + " = " + value;
+    std::vector<std::string> lines;
+    std::string line, current;
+    size_t headerEnd = std::string::npos;
+    bool written = false;
     while (std::getline(input, line)) {
         if (!line.empty() && line.back() == '\r')
             line.pop_back();
         size_t start = line.find_first_not_of(" \t");
         std::string text = start == std::string::npos ? "" : line.substr(start);
         if (!text.empty() && text[0] == '[') {
-            section = Lower(text.substr(1, text.find(']') - 1));
-            output += line + '\n';
-            if (section == "paths" && !inserted) {
-                output += "data = " + dir + '\n';
-                inserted = true;
-            }
+            current = Lower(text.substr(1, text.find(']') - 1));
+            lines.push_back(line);
+            if (current == section && headerEnd == std::string::npos)
+                headerEnd = lines.size();
             continue;
         }
         size_t eq = text.find('=');
-        if (section == "paths" && eq != std::string::npos) {
-            std::string key = text.substr(0, eq);
-            size_t end = key.find_last_not_of(" \t");
-            if (end != std::string::npos && Lower(key.substr(0, end + 1)) == "data")
+        if (current == section && eq != std::string::npos) {
+            std::string name = text.substr(0, eq);
+            size_t end = name.find_last_not_of(" \t");
+            if (end != std::string::npos && Lower(name.substr(0, end + 1)) == key) {
+                if (!written)
+                    lines.push_back(setting);
+                written = true;
                 continue;
+            }
         }
-        output += line + '\n';
+        lines.push_back(line);
     }
-    if (!inserted)
-        output += "\n[paths]\ndata = " + dir + '\n';
+    if (!written && headerEnd != std::string::npos)
+        lines.insert(lines.begin() + headerEnd, setting);
+    else if (!written)
+        lines.insert(lines.end(), {"", "[" + section + "]", setting});
+    std::string output;
+    for (const std::string &l : lines)
+        output += l + '\n';
     const std::string temporary = file + ".tmp";
     if (!SDL_SaveFile(temporary.c_str(), output.data(), output.size()))
         return false;
@@ -247,8 +264,15 @@ bool SaveDataSetting(const std::string &file, const std::string &dir)
         SDL_RemovePath(temporary.c_str());
         return SDL_SetError("%s", error.c_str());
     }
-    s_settings["paths.data"] = dir;
+    s_settings[section + "." + key] = value;
     return true;
+}
+
+bool SaveDataSetting(const std::string &file, const std::string &dir)
+{
+    if (dir.find_first_of("\r\n") != std::string::npos)
+        return SDL_SetError("The folder name contains a line break");
+    return SaveSetting(file, "paths", "data", dir);
 }
 
 const char s_defaultSettings[] =
@@ -265,7 +289,8 @@ const char s_defaultSettings[] =
     "sku = EUROPE\n"
     "\n"
     "[video]\n"
-    "; 1 = fullscreen (on the desktop resolution), 0 = window.\n"
+    "; 1 = fullscreen (on the desktop resolution), 0 = window. Alt+Enter\n"
+    "; switches between them in game and saves the choice here.\n"
     "fullscreen = 1\n"
     "; Field of view, 30 to 150 (70 = original).\n"
     "; fov = 70\n"
@@ -464,6 +489,31 @@ bool SelectGameData(const std::string &settingsFile)
     return false;
 }
 
+// Earlier versions kept the user files one level deeper, in OpenCMR2/OpenCMR2
+// (~/.local/share/OpenCMR2/OpenCMR2/, %APPDATA%\OpenCMR2\OpenCMR2\). Moves
+// them up to userDir once, while it has no settings of its own.
+void MoveOldUserDir(const std::string &userDir)
+{
+    namespace fs = std::filesystem;
+    std::error_code error;
+    const fs::path dir = fs::u8path(userDir);
+    const fs::path old = dir / "OpenCMR2";
+    if (fs::exists(dir / "opencmr2.ini", error) || !fs::is_directory(old, error))
+        return;
+    std::vector<fs::path> entries;
+    for (const fs::directory_entry &entry : fs::directory_iterator(old, error))
+        entries.push_back(entry.path());
+    for (const fs::path &entry : entries) {
+        const fs::path target = dir / entry.filename();
+        if (fs::exists(target, error))
+            continue;
+        fs::rename(entry, target, error);
+        if (error)
+            fprintf(stderr, "Cannot move %s: %s\n", entry.u8string().c_str(), error.message().c_str());
+    }
+    fs::remove(old, error);   // only when everything was moved
+}
+
 } // namespace
 
 // ---- platform lifecycle ------------------------------------------------------
@@ -475,6 +525,9 @@ bool Platform_Init(int argc, char **argv)
     s_settings.clear();
     s_dirCache.clear();
     s_setupCanceled = false;
+    // The identifier names the window for the desktop (the Wayland app ID,
+    // matching a future .desktop file) and the game's audio streams.
+    SDL_SetAppMetadata("OpenCMR2", NULL, "io.github.pablocpas.OpenCMR2");
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return false;
@@ -492,9 +545,11 @@ bool Platform_Init(int argc, char **argv)
             return false;
         }
     } else {
-        char *pref = SDL_GetPrefPath("OpenCMR2", "OpenCMR2");
+        char *pref = SDL_GetPrefPath("", "OpenCMR2");
         s_userDir = pref ? pref : "./";
         SDL_free(pref);
+        if (pref != NULL)
+            MoveOldUserDir(s_userDir);
     }
     s_logFile = OpenHostFile((s_userDir + "opencmr2.log").c_str(), "w");
 
@@ -531,8 +586,8 @@ bool Platform_Init(int argc, char **argv)
     }
     if (const char *env = SDL_getenv("OPENCMR2_DATA"))
         candidates.push_back(env);
-    // A portable Data folder stays usable if the package moves to another PC,
-    // even when its settings remember an external installation on the old PC.
+    // A Data folder beside the executable stays usable if the folder moves to
+    // another PC, even when its settings remember an installation on the old one.
     candidates.push_back("./Data");
     if (const char *base = SDL_GetBasePath())
         candidates.push_back(std::string(base) + "Data");
@@ -676,6 +731,15 @@ bool Translate(const SDL_Event &e, SysEvent *out)
         out->type = SYS_EVENT_RESTORED;
         return !RunInBackground();
     case SDL_EVENT_KEY_DOWN:
+        // Alt+Enter switches between fullscreen and a window. The game reads
+        // the keyboard state too, so Enter is hidden from it until released
+        // (it would also confirm the menu entry).
+        if ((e.key.scancode == SDL_SCANCODE_RETURN || e.key.scancode == SDL_SCANCODE_KP_ENTER) &&
+            (e.key.mod & SDL_KMOD_ALT) != 0) {
+            Input_HoldBackKey(e.key.scancode);
+            out->type = SYS_EVENT_TOGGLE_FULLSCREEN;
+            return !e.key.repeat;
+        }
         out->type = SYS_EVENT_KEY_DOWN;
         out->key = Keys_FromScancode(e.key.scancode);
         out->repeat = e.key.repeat;
@@ -751,6 +815,14 @@ extern "C" BOOL Sys_CreateWindow(const char *title, BOOL fullscreen)
         Sys_Log("SDL_CreateWindow failed: %s", SDL_GetError());
         return FALSE;
     }
+#ifndef _WIN32
+    // On Windows, SDL takes the icon from the executable's resources.
+    SDL_Surface *icon = SDL_LoadBMP_IO(SDL_IOFromConstMem(g_opencmr2_icon_bmp, sizeof(g_opencmr2_icon_bmp)), true);
+    if (icon != NULL) {
+        SDL_SetWindowIcon(s_window, icon);
+        SDL_DestroySurface(icon);
+    }
+#endif
     SDL_StartTextInput(s_window);
     return TRUE;
 }
@@ -979,4 +1051,19 @@ extern "C" const char *Sys_GetInstallSetting(const char *name)
 extern "C" int Sys_GetOption(const char *name, int fallback)
 {
     return Platform_GetSettingInt(name, fallback);
+}
+
+extern "C" BOOL Sys_SetOption(const char *name, int value)
+{
+    std::string key = Lower(name);
+    size_t dot = key.find('.');
+    if (dot == std::string::npos)
+        return FALSE;
+    std::string text = std::to_string(value);
+    if (!SaveSetting(s_userDir + "opencmr2.ini", key.substr(0, dot), key.substr(dot + 1), text)) {
+        Sys_Log("could not save %s = %s: %s", name, text.c_str(), SDL_GetError());
+        s_settings[key] = text;
+        return FALSE;
+    }
+    return TRUE;
 }

@@ -271,6 +271,12 @@ extern "C" BOOL Gfx_SetVideoMode(int width, int height, BOOL fullscreen)
     return TRUE;
 }
 
+extern "C" void Gfx_SetFullscreen(BOOL fullscreen)
+{
+    if (s_executor != NULL)
+        s_executor->SetFullscreen(fullscreen != 0);
+}
+
 extern "C" void Gfx_Shutdown(void)
 {
     while (!s_textures.empty())
@@ -899,6 +905,7 @@ namespace {
 
 struct NullExecutor : GfxExecutor {
     bool SetVideoMode(int, int, bool) override { return true; }
+    void SetFullscreen(bool) override {}
     void Execute(GfxFrame &, std::vector<GfxTexture *> &textures, GfxReadback &readback, bool present, bool,
                  bool) override
     {

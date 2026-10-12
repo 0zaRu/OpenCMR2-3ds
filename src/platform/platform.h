@@ -24,4 +24,8 @@ SDL_Scancode Keys_ToScancode(int dik);
 // Name of a key for the controls screen (GetKeyNameText).
 const char *Keys_GetName(int dik);
 
+// Hides a held key from the game's keyboard state until it is released
+// (the key of a platform shortcut such as Alt+Enter).
+void Input_HoldBackKey(SDL_Scancode scancode);
+
 #endif

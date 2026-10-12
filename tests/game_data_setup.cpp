@@ -137,6 +137,14 @@ int main()
 
     Check(Start(root / "explicit-user", game.u8string()), "explicit --data skips GUI");
     Check(dialogs == 2, "explicit data needs no selector");
+    // Alt+Enter remembers the window mode: the default line changes in place.
+    Check(Sys_SetOption("video.fullscreen", 0) && Sys_GetOption("video.fullscreen", 1) == 0 &&
+          Sys_SetOption("Extra.Value", 3), "save options");
+    const std::string options = Read(root / "explicit-user" / "opencmr2.ini");
+    Check(options.find("fullscreen = 1") == std::string::npos &&
+          options.find("; 1 = fullscreen") < options.find("fullscreen = 0") &&
+          options.find("fullscreen = 0") < options.find("[net]") &&
+          options.find("\n[extra]\nvalue = 3\n") != std::string::npos, "options saved in place");
     Platform_Shutdown();
     Check(!Start(root / "invalid-user", (root / "incomplete").u8string()), "invalid explicit data fails");
     Check(!Platform_WasSetupCanceled(), "invalid explicit data is an error");
@@ -148,8 +156,8 @@ int main()
     Check(Platform_WasSetupCanceled(), "cancel is a clean exit");
     Check(Read(ini) == saved, "cancel leaves saved settings intact");
     fs::rename(root / "moved-game", root / "Data");
-    Check(Start(root / "portable-user"), "automatically find portable Data folder");
-    Check(dialogs == 3, "portable data needs no selector");
+    Check(Start(root / "data-folder-user"), "automatically find Data folder beside the executable");
+    Check(dialogs == 3, "Data folder needs no selector");
     Check(!Platform_WasSetupCanceled(), "new launch resets cancellation state");
     Platform_Shutdown();
 
@@ -210,6 +218,24 @@ int main()
     Platform_Shutdown();
     if (!linkError)
         Check(SDL_RemovePath((noGame / "child/loop").u8string().c_str()), "remove cyclic symlink fixture");
+#ifdef __linux__
+    // Without --user-dir, files that earlier versions kept one level deeper
+    // (OpenCMR2/OpenCMR2) move up to the user directory.
+    const fs::path xdg = root / "xdg";
+    Write(xdg / "OpenCMR2/OpenCMR2/opencmr2.ini", "[paths]\ndata = " + nestedGame.u8string() + "\n");
+    Write(xdg / "OpenCMR2/OpenCMR2/Configuration/GameInfo.rcf", "old save");
+    setenv("XDG_DATA_HOME", xdg.u8string().c_str(), 1);
+    Check(SDL_SetEnvironmentVariable(SDL_GetEnvironment(), "SDL_VIDEODRIVER", "dummy", true), "dummy video");
+    char name[] = "game_data_setup";
+    char *args[] = {name};
+    Check(Platform_Init(1, args), "start from the default user directory");
+    Check(std::string(Platform_GetUserDir()) == (xdg / "OpenCMR2").u8string() + "/" &&
+          std::string(Platform_GetDataDir()) == nestedGame.u8string() + "/" &&
+          Read(xdg / "OpenCMR2/Configuration/GameInfo.rcf") == "old save" &&
+          !fs::exists(xdg / "OpenCMR2/OpenCMR2"), "move the old nested user directory");
+    Platform_Shutdown();
+    unsetenv("XDG_DATA_HOME");
+#endif
     const int beforeExit = dialogs;
     exitSetup = true;
     Check(!Start(root / "exit-user"), "exit from welcome dialog");
@@ -218,5 +244,5 @@ int main()
     Platform_SetTestDialogs(nullptr);
     fs::current_path(previous);
     fs::remove_all(root);
-    puts("game data setup: retry, UTF-8 paths, persistence, explicit data, cancel and portable discovery passed");
+    puts("game data setup: retry, UTF-8 paths, persistence, explicit data, cancel, Data folder and folder discovery passed");
 }

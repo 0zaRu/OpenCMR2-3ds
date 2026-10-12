@@ -1,0 +1,3 @@
+// Windows resources of opencmr2.exe. The first icon is the one Explorer shows
+// and SDL gives the game window.
+1 ICON "opencmr2.ico"
