@@ -87,6 +87,13 @@ std::vector<std::string> SplitGamePath(const char *path)
 // Directory listings, lower-case name -> name on disk.
 std::map<std::string, std::map<std::string, std::string>> s_dirCache;
 
+SDL_EnumerationResult SDLCALL CollectDirectoryEntry(void *userdata, const char *, const char *name)
+{
+    auto &entries = *(std::map<std::string, std::string> *)userdata;
+    entries.emplace(Lower(name), name);
+    return SDL_ENUM_CONTINUE;
+}
+
 const std::map<std::string, std::string> &ListDir(const std::string &dir)
 {
     auto it = s_dirCache.find(dir);
@@ -94,17 +101,9 @@ const std::map<std::string, std::string> &ListDir(const std::string &dir)
         return it->second;
 
     std::map<std::string, std::string> &entries = s_dirCache[dir];
-    int count = 0;
-    char **names = SDL_GlobDirectory(dir.c_str(), NULL, 0, &count);
-    if (names != NULL) {
-        for (int i = 0; i < count; i++) {
-            std::string name = names[i];
-            if (!name.empty() && name.back() == '/')
-                name.pop_back();
-            entries.emplace(Lower(name), name);
-        }
-        SDL_free(names);
-    }
+    // Enumerate direct children only. A glob with no pattern can recurse
+    // through the entire tree on some SDL backends, especially drive roots.
+    SDL_EnumerateDirectory(dir.c_str(), CollectDirectoryEntry, &entries);
     return entries;
 }
 
@@ -310,9 +309,16 @@ std::vector<std::string> FindNearbyGameData(const std::string &selected)
 {
     namespace fs = std::filesystem;
     std::error_code error;
-    fs::path start = fs::weakly_canonical(fs::u8path(selected), error);
+    fs::path start = fs::absolute(fs::u8path(selected), error).lexically_normal();
     if (error)
         return {};
+    // Resolve links when encountered, keeping ordinary paths inexpensive and
+    // preserving their spelling (e.g. macOS's /var alias for /private/var).
+    if (fs::is_symlink(start, error)) {
+        start = fs::weakly_canonical(start, error);
+        if (error)
+            return {};
+    }
     // Selecting GAME, FRONTEND, or a track deep inside the installation should
     // work too. Prefer the selected folder or its closest valid ancestor.
     for (fs::path parent = start; !parent.empty(); parent = parent.parent_path()) {
@@ -347,9 +353,14 @@ std::vector<std::string> FindNearbyGameData(const std::string &selected)
             SDL_PathInfo info{};
             if (!SDL_GetPathInfo(child.c_str(), &info) || info.type != SDL_PATHTYPE_DIRECTORY)
                 continue;
-            fs::path canonical = fs::weakly_canonical(fs::u8path(child), error);
-            if (!error && visited.insert(canonical).second)
-                pending.emplace_back(canonical, current.second + 1);
+            fs::path childPath = fs::u8path(child).lexically_normal();
+            if (fs::is_symlink(childPath, error)) {
+                childPath = fs::weakly_canonical(childPath, error);
+                if (error)
+                    continue;
+            }
+            if (visited.insert(childPath).second)
+                pending.emplace_back(childPath, current.second + 1);
         }
     }
     return found;

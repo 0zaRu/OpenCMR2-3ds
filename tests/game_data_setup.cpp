@@ -90,7 +90,7 @@ static bool Start(const fs::path &user, const std::string &explicitData = "")
 int main()
 {
     const fs::path previous = fs::current_path();
-    const fs::path root = fs::temp_directory_path() /
+    const fs::path root = fs::canonical(fs::temp_directory_path()) /
         ("opencmr2-setup-" + std::to_string(SDL_GetPerformanceCounter()));
     fs::create_directories(root);
     fs::current_path(root);
@@ -208,6 +208,8 @@ int main()
     folders = {noGame.u8string(), nestedGame.u8string()};
     Check(Start(root / "cycle-user"), "reject empty folders and tolerate symlink cycles");
     Platform_Shutdown();
+    if (!linkError)
+        Check(SDL_RemovePath((noGame / "child/loop").u8string().c_str()), "remove cyclic symlink fixture");
     const int beforeExit = dialogs;
     exitSetup = true;
     Check(!Start(root / "exit-user"), "exit from welcome dialog");
