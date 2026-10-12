@@ -337,6 +337,21 @@ def game_only(prov):
 
 
 @functools.lru_cache(maxsize=None)
+def never_called(name):
+    """A function no platform code names and no game code uses as a value (a
+    function pointer). With no game call passing it arguments, it never runs."""
+    if named_in_platform(name):
+        return False
+    value = re.compile(rf"&\s*{re.escape(name)}\b|\b{re.escape(name)}\s*[,;)=?:]")
+    for path in list(GAME.glob("*.cpp")) + list(GAME.glob("*.h")):
+        for line in path.read_text(errors="replace").splitlines():
+            code = line.split("//")[0]
+            if value.search(code):
+                return False
+    return True
+
+
+@functools.lru_cache(maxsize=None)
 def never_written(prov):
     """A global no code stores to, takes the address of or names outside
     game/ (the platform code is not analysed): it keeps its zero value."""
@@ -489,6 +504,8 @@ class Tracer:
                     out.append(Origin("unresolved", root.get("type"), dst, None, offset, terms, via + [prov]))
             if outs and not incoming:
                 return
+        if not incoming and prov.startswith("param:") and self.never_called(prov[len("param:"):].rpartition("#")[0]):
+            return  # a parameter of code nothing runs
         if not incoming and never_written(prov):
             return  # a global nothing stores to holds its zero initialiser: NULL
         if not incoming:
@@ -534,6 +551,11 @@ class Tracer:
                             and r["prov"] not in carved:
                         self.blob_views[r["prov"]] = {"r": record}
         return self.blob_views
+
+    def never_called(self, name):
+        if getattr(self, "_called", None) is None:
+            self._called = {k[len("param:"):].rpartition("#")[0] for k in self.flows if k.startswith("param:")}
+        return name not in self._called and never_called(name)
 
     def _stores_through(self):
         """For each pointer stored through ("load:K" destinations), the

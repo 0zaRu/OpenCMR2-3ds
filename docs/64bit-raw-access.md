@@ -7,8 +7,8 @@ original meant) and the x86_64 layout (what the port touches).
 | Verdict | Accesses |
 | --- | --- |
 | bug | 0 |
-| unresolved | 162 |
-| safe | 7169 |
+| unresolved | 101 |
+| safe | 7233 |
 
 `safe` means the layout checks passed or the access was individually reviewed below. It is not
 a proof of bounds, lifetime, control flow or physics equivalence. `bug` is an automatic finding
@@ -28,33 +28,24 @@ reasons. Use `--without-reviews` to inspect all automatic findings.
 
 Fixing or typing one root usually settles every access listed under it.
 
-- 17 × root param:deflateSetDictionary#1: `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36` ...
 - 15 × root load:var:Scene_ProjectCasterIntoLightZone:pTri:1767: `SceneNode.cpp:1929`, `SceneNode.cpp:1930`, `SceneNode.cpp:1931`, `SceneNode.cpp:1932`, `SceneNode.cpp:1933`, `SceneNode.cpp:1934`, `SceneNode.cpp:1935`, `SceneNode.cpp:1936` ...
 - 9 × index i: stride 0x1 matches no array: `Car.cpp:2895`, `Car.cpp:2895`, `Car.cpp:5288`, `Collision2D.cpp:754`, `Collision2D.cpp:755`, `Collision2D.cpp:756`, `Collision2D.cpp:775`, `Collision2D.cpp:776` ...
 - 9 × root field:SceneNode::pObject: `GameInfo.cpp:11197`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8991`, `StageObjects.cpp:931`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
 - 7 × index off: stride 0x1 matches no array: `Car.cpp:2936:33`, `Car.cpp:2946`, `Car.cpp:2952:33`, `Car.cpp:2957`, `Car.cpp:2958`, `Car.cpp:2959`, `Car.cpp:3069:32`
 - 6 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4948`, `StageObjects.cpp:14014`
 - 4 × root opaque (): `FrontendScreens.cpp:11497:93`, `FrontendScreens.cpp:11515:97`, `FrontendScreens.cpp:11524:93`, `FrontendScreens.cpp:11529:93`
-- 4 × root expr:s->outbuf = Z_NULL: `ZlibDeflate.cpp:408:13`, `ZlibGzio.cpp:387:11`, `ZlibInfutil.cpp:51:11`, `ZlibInfutil.cpp:77:13`
 - 3 × root ret:strchr: `GameInfo.cpp:2798:32`, `GameInfo.cpp:2805:26`, `GameInfo.cpp:2805:36`
 - 3 × root var:RallyData_FormatResultDriverName:entry:5825: `RallyData.cpp:5844:89`, `RallyData.cpp:5855:94`, `RallyData.cpp:5857:75`
 - 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1874:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3497:24`
 - 3 × root param:Knockout_UpdateRaceStateAndFades#0: `StageObjects.cpp:2272:55`, `StageUI.cpp:929:43`, `StageUI.cpp:946:47`
-- 3 × root expr:s->inbuf = Z_NULL: `ZlibDeflate.cpp:655:18`, `ZlibGzio.cpp:387:31`, `ZlibInfblock.cpp:203:18`
-- 3 × root param:gzgets#1: `ZlibGzio.cpp:368:20`, `ZlibGzio.cpp:376:16`, `ZlibGzio.cpp:377:26`
 - 2 × root load:var:RallyData_FindCheatNameIndex:p:1521: `FrontendScreens.cpp:6177:40`, `FrontendScreens.cpp:6178:16`
 - 2 × root param:OptionMenu_RestartEmptyItemRecords#0: `GameInfo.cpp:6349:27`, `GameInfo.cpp:6350`
 - 2 × root param:OptionMenu_DispatchRecordEditState#0: `GameInfo.cpp:9669`, `GameInfo.cpp:9670:54`
 - 2 × root param:OptionMenu_DrawValueSelectionRows#0: `GameInfo.cpp:9688`, `GameInfo.cpp:9706`
 - 2 × root site:StageObjects.cpp:14142:36:deref: `StageObjects.cpp:14052:9`, `StageObjects.cpp:1524`
-- 2 × root expr:pBox2 = pText = g_barTextColour: `StageObjects.cpp:5759`, `StageObjects.cpp:5766`
-- 2 × root expr:pText = g_barTextColour: `StageObjects.cpp:5787`, `StageObjects.cpp:5794`
 - 2 × index ((BYTE *)pSlot - (BYTE *)pRecord->geometry.meshes) * (sizeof(Mesh *) - sizeof(int)) / sizeof(Mesh *): stride 0x-1 matches no array: `StageTiming.cpp:2315`, `StageTiming.cpp:2435`
 - 2 × root param:FindLoadTexture#3: `Texture.cpp:35:68`, `Texture.cpp:38:72`
 - 2 × index vertexOffset: stride 0x1 matches no array: `VehiclePhysics.cpp:271:31`, `VehiclePhysics.cpp:304:41`
-- 2 × root param:gzputs#1: `ZlibGzio.cpp:495:25`, `ZlibGzio.cpp:512:28`
-- 2 × root param:gztell#0: `ZlibGzio.cpp:655:20`, `ZlibGzio.cpp:733:20`
-- 2 × root expr:s->write = s->window: `ZlibInfutil.cpp:51:14`, `ZlibInfutil.cpp:77:16`
 - 1 × index local_c: stride 0x2 matches no array: `Car.cpp:6108:34`
 - 1 × root var:g_pCurrentCar: `Car.cpp:6406:25`
 - 1 × root param:CarEffects_UpdateRisingParticle#0: `CarEffects.cpp:1150:19`
@@ -72,33 +63,9 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × root var:LoadFrontendCarPreviewTextures:carNames:281: `Frontend.cpp:311`
 - 1 × root expr:value == 0 ? pBright : pDim: `FrontendMenus.cpp:1402:59`
 - 1 × root expr:value == 0 ? pDim : pBright: `FrontendMenus.cpp:1404:60`
-- 1 × root param:FrontendMenus_DrawLabel#3: `FrontendMenus.cpp:1410:34`
-- 1 × root param:FrontendMenus_DrawLabel#0: `FrontendMenus.cpp:1411:33`
 - 1 × root field:NetMsgCreatePlayer::lpData: `FrontendScreens.cpp:1791:62`
 - 1 × root field:NetMsgSetPlayerData::lpData: `FrontendScreens.cpp:1837:62`
-- 1 × root param:Game_CompareDeferredDrawDepth#0: `Game.cpp:2178`
-- 1 × root param:Game_CompareDeferredDrawDepth#1: `Game.cpp:2179`
-- 1 × root param:Game_CompareTransparentDrawEntries#0: `Game.cpp:2246`
-- 1 × root param:Game_CompareTransparentDrawEntries#1: `Game.cpp:2247`
 - 1 × root param:OptionMenu_SelectItemAndRefresh#0: `GameInfo.cpp:6316`
-- 1 × root param:NetPlayers_ComparePlayerIDs#0: `NetPlayers.cpp:1022`
-- 1 × root param:NetPlayers_ComparePlayerIDs#1: `NetPlayers.cpp:1022`
-- 1 × root param:NetPlayers_CompareResultRecords#0: `NetPlayers.cpp:516:21`
-- 1 × root param:NetPlayers_CompareResultRecords#1: `NetPlayers.cpp:517:21`
-- 1 × root param:NetPlayers_CompareStandingRecords#0: `NetPlayers.cpp:648:23`
-- 1 × root param:NetPlayers_CompareStandingRecords#1: `NetPlayers.cpp:649:23`
-- 1 × root param:NetPlayers_CompareClassificationRecords#0: `NetPlayers.cpp:835:29`
-- 1 × root param:NetPlayers_CompareClassificationRecords#1: `NetPlayers.cpp:836:29`
-- 1 × root param:NetworkLeaderboard_CompareEntries#0: `NetworkLeaderboards.cpp:105:41`
-- 1 × root param:NetworkLeaderboard_CompareEntries#1: `NetworkLeaderboards.cpp:106:41`
 - 1 × index scratchOffset: stride 0x1 matches no array: `RallyData.cpp:7506:32`
 - 1 × index itemOff: stride 0x1 matches no array: `SceneNode.cpp:2118:41`
 - 1 × index r.native: stride 0x1 matches no array: `StageObjects.cpp:1571:20`
-- 1 × root param:deflateInit_#2: `ZlibDeflate.cpp:216`
-- 1 × root param:gzsetparams#0: `ZlibGzio.cpp:221:20`
-- 1 × root param:gzprintf#0: `ZlibGzio.cpp:491:20`
-- 1 × root param:gzflush#0: `ZlibGzio.cpp:636:20`
-- 1 × root param:gzeof#0: `ZlibGzio.cpp:768:20`
-- 1 × root param:gzerror#0: `ZlibGzio.cpp:838:20`
-- 1 × root param:inflateSetDictionary#1: `ZlibInfblock.cpp:378:22`
-- 1 × root param:inflateInit_#1: `ZlibInflate.cpp:86`

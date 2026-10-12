@@ -138,6 +138,11 @@ class ClassificationTests(unittest.TestCase):
         origins = self.origins({"k": "untyped", "prov": "load:param:f#0"}, {})
         self.assertEqual([o.kind for o in origins], ["unresolved"])
 
+    def test_parameter_of_a_function_nothing_calls_has_no_origin(self):
+        self.assertTrue(audit.never_called("deflateSetDictionary"))
+        self.assertFalse(audit.never_called("NetPlayers_CompareResultRecords"))  # passed to qsort
+        self.assertEqual(self.origins({"k": "untyped", "prov": "param:deflateSetDictionary#1"}, {}), [])
+
     def test_global_nothing_writes_is_null(self):
         self.assertTrue(audit.never_written("var:g_fixtureNeverWrittenAnywhere"))
         self.assertFalse(audit.never_written("var:g_languageTexts"))
@@ -310,6 +315,28 @@ void fixture(int n, int otherBytes) {
                      if r["t"] == "site" and r["text"].endswith("->n")}
             self.assertEqual(sites["once"]["terms"], [["i", 16]])
             self.assertEqual(sites["twice"]["terms"], [["off", 1]])
+
+    def test_comparators_and_chained_assignments(self):
+        audit.build_plugin()
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            source = directory / "Fixture.cpp"
+            source.write_text('extern "C" void qsort(void *, __SIZE_TYPE__, __SIZE_TYPE__, int (*)(const void *, const void *));\n'
+                              "struct Rec { void *p; int n; };\nRec g_recs[4];\nchar g_buf[8];\n"
+                              "int cmp(const void *a, const void *b) { return ((const Rec *)a)->n - ((const Rec *)b)->n; }\n"
+                              "void sort() { qsort(g_recs, 4, sizeof(Rec), cmp); }\n"
+                              "char *chain() { char *a, *b; a = b = g_buf; return a; }\n")
+            output = directory / "x86_64.jsonl"
+            subprocess.run(["clang++", "-target", audit.TARGETS["x86_64"], "-fsyntax-only", "-std=c++17",
+                            f"-fplugin={audit.PLUGIN}", f"-fplugin-arg-rawaccess-out={output}",
+                            f"-fplugin-arg-rawaccess-dir={directory}/", str(source)], check=True)
+            flows = [r for r in map(json.loads, output.read_text().splitlines()) if r["t"] == "flow"]
+            for i in (0, 1):
+                element = [f for f in flows if f["dst"] == f"param:cmp#{i}"]
+                self.assertEqual([(f["root"]["prov"], f["terms"]) for f in element],
+                                 [("var:g_recs", [["(element)", 16]])])
+            into_a = [f["root"]["prov"] for f in flows if f["dst"].startswith("var:chain:a:")]
+            self.assertEqual(into_a, ["var:g_buf"])
 
 
 if __name__ == "__main__":

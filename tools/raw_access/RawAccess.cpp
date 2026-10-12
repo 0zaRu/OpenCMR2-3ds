@@ -160,7 +160,43 @@ public:
         for (unsigned i = 0; i < e->getNumArgs() && i < callee->getNumParams(); i++)
             flow("param:" + name + "#" + std::to_string(i), callee->getParamDecl(i)->getType(), e->getArg(i),
                  e->getArg(i)->getExprLoc(), "arg");
+        // The C library calls the comparator with pointers to elements of the
+        // base array (bsearch: the key first).
+        if (name == "qsort" && e->getNumArgs() == 4)
+            comparatorFlows(e, 0, 2, 3, false);
+        else if (name == "bsearch" && e->getNumArgs() == 5)
+            comparatorFlows(e, 1, 3, 4, true);
         return true;
+    }
+
+    void comparatorFlows(const CallExpr *e, unsigned baseArg, unsigned sizeArg, unsigned cmpArg, bool keyFirst)
+    {
+        const Expr *cmp = e->getArg(cmpArg)->IgnoreParenCasts();
+        if (const auto *uo = dyn_cast<UnaryOperator>(cmp))
+            if (uo->getOpcode() == UO_AddrOf)
+                cmp = uo->getSubExpr()->IgnoreParenCasts();
+        const auto *dr = dyn_cast<DeclRefExpr>(cmp);
+        const auto *fd = dr ? dyn_cast<FunctionDecl>(dr->getDecl()) : nullptr;
+        if (!fd || fd->getNumParams() < 2)
+            return;
+        std::string prefix = "param:" + fd->getNameAsString() + "#";
+        if (keyFirst)
+            flow(prefix + "0", fd->getParamDecl(0)->getType(), e->getArg(0), e->getArg(0)->getExprLoc(), "key");
+        Chain c;
+        decomposePtr(e->getArg(baseArg), c);
+        if (c.kind == "opaque")
+            return;
+        if (auto v = e->getArg(sizeArg)->IgnoreParenImpCasts()->getIntegerConstantExpr(Ctx))
+            c.terms.push_back({"(element)", v->getExtValue()});
+        for (int i = keyFirst ? 1 : 0; i < 2; i++) {
+            json::Object site = siteBase(c, e->getArg(baseArg), "flow:element");
+            site["t"] = "flow";
+            site["dst"] = prefix + std::to_string(i);
+            site["view"] = nullptr;
+            site["width"] = 0;
+            site["int"] = false;
+            emit(std::move(site));
+        }
     }
 
 private:
@@ -508,6 +544,12 @@ private:
     void leafPointer(const Expr *lv, QualType pointerType, Chain &c)
     {
         lv = lv->IgnoreParens();
+        // The value of a = b (as in x = a = b) is what was assigned.
+        if (const auto *bo = dyn_cast<BinaryOperator>(lv))
+            if (bo->getOpcode() == BO_Assign) {
+                decomposePtr(bo->getRHS(), c);
+                return;
+            }
         QualType pointee = pointerType->isPointerType() ? pointerType->getPointeeType() : QualType();
         if (pointee.isNull() || isByteLike(pointee)) {
             c.kind = "untyped";
