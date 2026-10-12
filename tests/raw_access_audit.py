@@ -338,6 +338,24 @@ void fixture(int n, int otherBytes) {
             into_a = [f["root"]["prov"] for f in flows if f["dst"].startswith("var:chain:a:")]
             self.assertEqual(into_a, ["var:g_buf"])
 
+    def test_sizeof_cursor_keeps_its_stride_but_literal_offsets_do_not(self):
+        audit.build_plugin()
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            source = directory / "Fixture.cpp"
+            source.write_text("struct Row { void *p; int n; };\nRow g_rows[4];\n"
+                              "int sized() { int s = 0, off; for (off = 0; off < 4 * (int)sizeof(Row); off += sizeof(Row))"
+                              " s += ((Row *)((char *)g_rows + off))->n; return s; }\n"
+                              "int literal() { int s = 0, off; for (off = 0x8; off < 0x40; off += 0x10)"
+                              " s += *(int *)((char *)g_rows + off); return s; }\n")
+            output = directory / "x86_64.jsonl"
+            subprocess.run(["clang++", "-target", audit.TARGETS["x86_64"], "-fsyntax-only", "-std=c++17",
+                            f"-fplugin={audit.PLUGIN}", f"-fplugin-arg-rawaccess-out={output}",
+                            f"-fplugin-arg-rawaccess-dir={directory}/", str(source)], check=True)
+            sites = {r["fn"]: r for r in map(json.loads, output.read_text().splitlines()) if r["t"] == "site"}
+            self.assertEqual(sites["sized"]["terms"], [["off", 16]])
+            self.assertEqual(sites["literal"]["terms"], [["off", 1]])
+
 
 if __name__ == "__main__":
     unittest.main()

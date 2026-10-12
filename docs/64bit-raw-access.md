@@ -7,8 +7,8 @@ original meant) and the x86_64 layout (what the port touches).
 | Verdict | Accesses |
 | --- | --- |
 | bug | 0 |
-| unresolved | 70 |
-| safe | 7230 |
+| unresolved | 63 |
+| safe | 7237 |
 
 `safe` means the layout checks passed or the access was individually reviewed below. It is not
 a proof of bounds, lifetime, control flow or physics equivalence. `bug` is an automatic finding
@@ -35,13 +35,11 @@ Fixing or typing one root usually settles every access listed under it.
 - 4 × root opaque (): `FrontendScreens.cpp:11497:93`, `FrontendScreens.cpp:11515:97`, `FrontendScreens.cpp:11524:93`, `FrontendScreens.cpp:11529:93`
 - 3 × root ret:strchr: `GameInfo.cpp:2798:32`, `GameInfo.cpp:2805:26`, `GameInfo.cpp:2805:36`
 - 3 × root var:RallyData_FormatResultDriverName:entry:5825: `RallyData.cpp:5844:89`, `RallyData.cpp:5855:94`, `RallyData.cpp:5857:75`
-- 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1867:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3497:24`
 - 3 × root param:Knockout_UpdateRaceStateAndFades#0: `StageObjects.cpp:2272:55`, `StageUI.cpp:929:43`, `StageUI.cpp:946:47`
 - 2 × root load:var:RallyData_FindCheatNameIndex:p:1521: `FrontendScreens.cpp:6177:40`, `FrontendScreens.cpp:6178:16`
 - 2 × root site:StageObjects.cpp:14142:36:deref: `StageObjects.cpp:14052:9`, `StageObjects.cpp:1524`
 - 2 × index ((BYTE *)pSlot - (BYTE *)pRecord->geometry.meshes) * (sizeof(Mesh *) - sizeof(int)) / sizeof(Mesh *): stride 0x-1 matches no array: `StageTiming.cpp:2315`, `StageTiming.cpp:2435`
 - 2 × root param:FindLoadTexture#3: `Texture.cpp:35:68`, `Texture.cpp:38:72`
-- 2 × index vertexOffset: stride 0x1 matches no array: `VehiclePhysics.cpp:271:31`, `VehiclePhysics.cpp:304:41`
 - 1 × index local_c: stride 0x2 matches no array: `Car.cpp:6108:34`
 - 1 × root var:g_pCurrentCar: `Car.cpp:6406:25`
 - 1 × root param:CarEffects_InitParticleOwnerData#2: `CarEffects.cpp:1267`
@@ -52,6 +50,4 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × root expr:value == 0 ? pDim : pBright: `FrontendMenus.cpp:1404:60`
 - 1 × root field:NetMsgCreatePlayer::lpData: `FrontendScreens.cpp:1791:62`
 - 1 × root field:NetMsgSetPlayerData::lpData: `FrontendScreens.cpp:1837:62`
-- 1 × index scratchOffset: stride 0x1 matches no array: `RallyData.cpp:7506:32`
-- 1 × index itemOff: stride 0x1 matches no array: `SceneNode.cpp:2108:41`
 - 1 × index r.native: stride 0x1 matches no array: `StageObjects.cpp:1571:20`

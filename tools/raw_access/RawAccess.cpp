@@ -489,6 +489,87 @@ private:
         return result;
     }
 
+    // The step every value of a local integer is a multiple of, when each
+    // assignment is a constant, x * C, or += / -= C (C constant, sizeof
+    // included), it is not otherwise modified and its address is not taken:
+    // the greatest common divisor of those constants. 0 when unknown.
+    std::map<const VarDecl *, int64_t> CursorSteps;
+
+    int64_t cursorStep(const VarDecl *vd)
+    {
+        auto it = CursorSteps.find(vd);
+        if (it != CursorSteps.end())
+            return it->second;
+        CursorSteps[vd] = 0;
+        int64_t step = 0;
+        bool ok = true;
+        auto gcd = [](int64_t a, int64_t b) {
+            a = a < 0 ? -a : a;
+            b = b < 0 ? -b : b;
+            while (b) {
+                int64_t t = a % b;
+                a = b;
+                b = t;
+            }
+            return a;
+        };
+        // Constants must come from sizeof (or be 0): a literal offset such as
+        // 0x8b8 is a 32-bit layout position, exactly what the audit checks.
+        auto value = [&](const Expr *x, bool add) {
+            x = x->IgnoreParenImpCasts();
+            if (auto v = x->getIntegerConstantExpr(Ctx)) {
+                if (v->getExtValue() == 0 && !add)
+                    return;
+                if (!containsSizeof(x)) {
+                    ok = false;
+                    return;
+                }
+                step = gcd(step, v->getExtValue());
+                return;
+            }
+            if (const auto *bo = dyn_cast<BinaryOperator>(x))
+                if (bo->getOpcode() == BO_Mul && !add)
+                    for (const Expr *side : {bo->getLHS(), bo->getRHS()})
+                        if (auto v = side->IgnoreParenImpCasts()->getIntegerConstantExpr(Ctx)) {
+                            if (!containsSizeof(side))
+                                break;
+                            step = gcd(step, v->getExtValue());
+                            return;
+                        }
+            ok = false;
+        };
+        if (vd->getInit())
+            value(vd->getInit(), false);
+        std::function<void(const Stmt *)> scan = [&](const Stmt *s) {
+            if (!s || !ok)
+                return;
+            auto refers = [&](const Expr *x) {
+                const auto *dr = dyn_cast<DeclRefExpr>(x->IgnoreParenImpCasts());
+                return dr && dr->getDecl() == vd;
+            };
+            if (const auto *bo = dyn_cast<BinaryOperator>(s)) {
+                if (bo->isAssignmentOp() && refers(bo->getLHS())) {
+                    if (bo->getOpcode() == BO_Assign)
+                        value(bo->getRHS(), false);
+                    else if (bo->getOpcode() == BO_AddAssign || bo->getOpcode() == BO_SubAssign)
+                        value(bo->getRHS(), true);
+                    else
+                        ok = false;
+                }
+            } else if (const auto *uo = dyn_cast<UnaryOperator>(s)) {
+                if ((uo->isIncrementDecrementOp() || uo->getOpcode() == UO_AddrOf) && refers(uo->getSubExpr()))
+                    ok = false;
+            }
+            for (const Stmt *child : s->children())
+                scan(child);
+        };
+        if (const auto *fd = dyn_cast_or_null<FunctionDecl>(vd->getParentFunctionOrMethod()))
+            scan(fd->getBody());
+        int64_t result = ok && step > 1 ? step : 0;
+        CursorSteps[vd] = result;
+        return result;
+    }
+
     // Integer expression scaled into the chain's offset: constants fold, the
     // rest become terms with their byte stride.
     void addIntOffset(const Expr *e, int64_t scale, int64_t sign, Chain &c)
@@ -531,11 +612,18 @@ private:
         // A byte cursor computed once as index * sizeof(T): its stride.
         if (const auto *dr = dyn_cast<DeclRefExpr>(e))
             if (const auto *vd = dyn_cast<VarDecl>(dr->getDecl()))
-                if (vd->isLocalVarDecl() && vd->getType()->isIntegerType())
+                if (vd->isLocalVarDecl() && vd->getType()->isIntegerType()) {
                     if (const Expr *def = singleDefinition(vd)) {
                         addIntOffset(def, scale, sign, c);
                         return;
                     }
+                    // A cursor only ever set to multiples of one step
+                    // (offset += sizeof(T)): an index of that stride.
+                    if (int64_t step = cursorStep(vd)) {
+                        c.terms.push_back({text(e), sign * scale * step});
+                        return;
+                    }
+                }
         c.terms.push_back({text(e), sign * scale});
     }
 
