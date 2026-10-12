@@ -1,0 +1,57 @@
+package io.github.pablocpas.opencmr2
+
+import android.os.Bundle
+import android.view.KeyEvent
+import android.view.MotionEvent
+import org.libsdl.app.SDLActivity
+
+/** The game: SDL runs SDL_main from libmain.so, with the on-screen controls over it. */
+class GameActivity : SDLActivity() {
+    private var controls: TouchControls? = null
+
+    override fun getLibraries() = arrayOf("SDL3", "main")
+
+    override fun getArguments() = arrayOf("--data", GameData.directory(this).absolutePath)
+
+    override fun onCreate(savedInstanceState: Bundle?) {
+        super.onCreate(savedInstanceState)
+        // SDLActivity shows its own error when the libraries do not load.
+        if (!mBrokenLibraries && mLayout != null)
+            controls = TouchControls(this, mLayout)
+    }
+
+    // Back (the button or the gesture) is the game's Escape. Android sends its
+    // press and release together; the game reads the keyboard once a frame,
+    // so the release is held back long enough for it to see the press.
+    override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        controls?.onInput(event.device, event.source)
+        if (event.keyCode != KeyEvent.KEYCODE_BACK || mBrokenLibraries)
+            return super.dispatchKeyEvent(event)
+        if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
+            onNativeKeyDown(KeyEvent.KEYCODE_ESCAPE)
+            window.decorView.postDelayed({ onNativeKeyUp(KeyEvent.KEYCODE_ESCAPE) }, 100)
+        }
+        return true
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        controls?.onInput(event.device, event.source)
+        return super.dispatchTouchEvent(event)
+    }
+
+    override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
+        controls?.onInput(event.device, event.source)
+        return super.dispatchGenericMotionEvent(event)
+    }
+
+    override fun onPause() {
+        controls?.releaseAll()
+        super.onPause()
+    }
+
+    override fun onDestroy() {
+        controls?.close()
+        controls = null
+        super.onDestroy()
+    }
+}

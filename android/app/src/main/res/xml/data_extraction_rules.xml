@@ -1,0 +1,12 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Saves and settings are backed up; the imported game files are not. -->
+<data-extraction-rules>
+    <cloud-backup>
+        <exclude domain="external" path="game/" />
+        <exclude domain="external" path="game.import/" />
+    </cloud-backup>
+    <device-transfer>
+        <exclude domain="external" path="game/" />
+        <exclude domain="external" path="game.import/" />
+    </device-transfer>
+</data-extraction-rules>

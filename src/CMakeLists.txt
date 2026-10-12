@@ -48,7 +48,13 @@ target_include_directories(opencmr2_platform PUBLIC ${CMAKE_CURRENT_SOURCE_DIR} 
 target_link_libraries(opencmr2_platform PUBLIC SDL3::SDL3)
 
 
-add_executable(opencmr2 platform/main.cpp)
+if(ANDROID)
+    # SDLActivity loads libmain.so and calls its SDL_main.
+    add_library(opencmr2 SHARED platform/main.cpp)
+    set_target_properties(opencmr2 PROPERTIES OUTPUT_NAME main)
+else()
+    add_executable(opencmr2 platform/main.cpp)
+endif()
 target_link_libraries(opencmr2 PRIVATE opencmr2_platform)
 if(WIN32)
     target_sources(opencmr2 PRIVATE ${PROJECT_SOURCE_DIR}/res/opencmr2.rc)
@@ -56,7 +62,7 @@ if(WIN32)
     add_custom_command(TARGET opencmr2 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:opencmr2> $<TARGET_FILE_DIR:opencmr2>
         COMMAND_EXPAND_LISTS)
-elseif(OPENCMR2_BUILT_SDL)
+elseif(OPENCMR2_BUILT_SDL AND NOT ANDROID)
     # The SDL3 built here goes next to the executable, which looks for it
     # there, so the release archives run without SDL3 installed.
     if(APPLE)

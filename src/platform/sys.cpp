@@ -568,6 +568,12 @@ bool Platform_Init(int argc, char **argv)
     // The identifier names the window for the desktop (the Wayland app ID,
     // matching a future .desktop file) and the game's audio streams.
     SDL_SetAppMetadata("OpenCMR2", NULL, "io.github.pablocpas.OpenCMR2");
+#ifdef __ANDROID__
+    // The game keeps text input on for its whole run, which on a phone would
+    // keep the on-screen keyboard open. Back is the game's Escape (GameActivity).
+    SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "0");
+    SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
+#endif
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return false;
@@ -932,7 +938,11 @@ extern "C" void Sys_Log(const char *format, ...)
     va_start(args, format);
     vsnprintf(line, sizeof(line), format, args);
     va_end(args);
+#ifdef __ANDROID__
+    SDL_Log("%s", line);   // logcat: Android apps have no stderr
+#else
     fprintf(stderr, "%s\n", line);
+#endif
     if (s_logFile != NULL) {
         fprintf(s_logFile, "%s\n", line);
         fflush(s_logFile);

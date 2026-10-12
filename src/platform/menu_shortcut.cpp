@@ -12,7 +12,7 @@
 #include <objbase.h>
 #include <shlobj.h>
 #include <shobjidl.h>
-#elif defined(__linux__)
+#elif defined(__linux__) && !defined(__ANDROID__)
 #include "opencmr2_icon.h"
 #endif
 
@@ -101,7 +101,7 @@ bool Shortcut_Update(bool present)
     return WriteShortcut(exe, file);
 }
 
-#elif defined(__linux__)
+#elif defined(__linux__) && !defined(__ANDROID__)
 
 namespace {
 
@@ -227,7 +227,7 @@ bool Shortcut_Update(bool present)
 
 #else
 
-// macOS: the app bundle is the menu entry.
+// macOS and Android: the app bundle or package is the menu entry.
 bool Shortcut_IsSupported(void) { return false; }
 const char *Shortcut_MenuName(void) { return ""; }
 bool Shortcut_Update(bool) { return true; }

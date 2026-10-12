@@ -6,7 +6,10 @@
 #include "diagnostics/timing.h"
 #include "main.h"
 
+// On Android, SDLActivity calls SDL_main, which SDL_main.h renames main to.
+#ifndef __ANDROID__
 #define SDL_MAIN_HANDLED
+#endif
 #include <SDL3/SDL_main.h>
 
 int main(int argc, char **argv)

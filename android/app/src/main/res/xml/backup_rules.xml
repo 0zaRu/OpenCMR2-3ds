@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<!-- Android 10 and 11; see data_extraction_rules.xml. -->
+<full-backup-content>
+    <exclude domain="external" path="game/" />
+    <exclude domain="external" path="game.import/" />
+</full-backup-content>
