@@ -1,16 +1,13 @@
 # Stage baseline and CPU profiling
 
-The first modernisation deliverable observed the existing scheduling and tick
-body. The subsequent numeric and timing corrections preserve the stored vehicle
-update rate; see [PHYSICS_PARITY.md](PHYSICS_PARITY.md).
+These tools record a real stage with controlled clocks and inputs, replay it
+at different render cadences and measure CPU frame timings. They compare the
+port with itself; the comparison with the original executable is in
+[ORIGINAL_REFERENCE.md](ORIGINAL_REFERENCE.md) and
+[PHYSICS_PARITY.md](PHYSICS_PARITY.md).
+
 Normal play has no observer unless `OPENCMR2_PROFILE` is set. The fake clock and
 keyboard overrides are enabled only by the separate `stage_probe` executable.
-
-An independently recorded original + SilentPatch fixture is now available;
-see [ORIGINAL_REFERENCE.md](ORIGINAL_REFERENCE.md). The numeric differences it
-detected are now corrected, with a separate original-reference regression in
-[PHYSICS_PARITY.md](PHYSICS_PARITY.md). The self-repeat checks below compare
-the port with itself; the original-reference test supplies independent evidence.
 
 ## Capture and playback
 
@@ -78,7 +75,7 @@ OPENCMR2_HEADLESS=1 build/linux-x86/tests/stage_probe \
     ~/cmr2game /tmp/stage.jsonl 60 500 build/baseline-first/inputs.csv
 ```
 
-## Recorded coverage and initial results
+## Coverage and results
 
 The trace covers selected fields of the ordered car: position/history, body
 axes, velocities, controls, contact triangles and surfaces, suspension, wheel

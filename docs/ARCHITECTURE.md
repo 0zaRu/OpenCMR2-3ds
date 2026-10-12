@@ -2,13 +2,7 @@
 
 OpenCMR2 is a native port of Colin McRae Rally 2.0 built from the
 [CMR2Decomp](https://github.com/pablocpas/CMR2Decomp) decompilation. It runs on
-SDL3 and the SDL GPU API (Vulkan, Direct3D 12, Metal) and needs the original
-game data.
-
-The design for modern rendering while preserving the simulation is in
-[MODERNIZATION.md](MODERNIZATION.md). It records the existing 25 Hz car
-scheduling/interpolation, the remaining shared-state boundaries and the
-verification required before changing the timing architecture.
+SDL3 and the SDL GPU API (Vulkan, Metal) and needs the original game data.
 
 ## Layout
 
@@ -24,9 +18,9 @@ verification required before changing the timing architecture.
 | `src/net/` | Network sessions behind `net.h` (replaces DirectPlay). |
 | `tests/` | Unit tests and the golden replay tests. |
 | `tests/reference/` | Frozen recordings, comparison reports and provenance used by regression tests. |
-| `tools/` | Source sync, layout generation, audits, captures and packaging. |
-| `docs/` | Maintained guides and the generated raw-access report; past validation batches live in `docs/history/`. |
-| `build/` | Ignored build outputs, local captures, logs, toolchains and package experiments. |
+| `tools/` | Source sync, layout generation, audits, captures and release packaging. |
+| `docs/` | Guides and the generated raw-access report. |
+| `build/` | Ignored build outputs, local captures, logs and toolchains. |
 
 ## How the game is ported
 
@@ -73,9 +67,12 @@ block, and draws with an "uber" shader that reproduces the fixed-function
 equations. Device enumeration, display-mode switching, lost surfaces and
 COM disappear: the game asks for what it needs and the backend provides it.
 
-Rendering upgrades (resolution, widescreen, MSAA, anisotropic filtering,
-per-pixel lighting) live in the backend and shaders, each behind an option,
-with the original look as the default preset.
+The display modes offered to the game go up to the desktop resolution,
+including widescreen ones. As in SilentPatch, the projection keeps the
+vertical view at any aspect ratio instead of stretching it, and the field of
+view is configurable (`View_SetPlayerProjection`). Further rendering
+improvements will be added one at a time, each behind an option, with the
+original look as the default.
 
 Textures: the game decodes TGA/DDS itself and writes pixels through
 `Gfx_LockTexture`, using the pixel format the backend reports. The backend
@@ -114,9 +111,8 @@ controlled clocks and recorded tick inputs. The corrected 500-update fixture
 matches original + SilentPatch at six render cadences on Linux x86 and x86-64
 and Windows x64 under Wine; see [PHYSICS_PARITY.md](PHYSICS_PARITY.md) for the
 fields and timing contract. Shared RNG and presentation state are outside that
-equivalence claim. [BASELINE.md](BASELINE.md) covers capture and CPU profiling;
-full-game equivalence and graphics-setting independence remain open in
-[MODERNIZATION.md](MODERNIZATION.md).
+equivalence claim, and full-game equivalence is not yet established.
+[BASELINE.md](BASELINE.md) covers capture and CPU profiling.
 
 The compiler flags encode what the decompiled code relies on:
 
@@ -136,7 +132,7 @@ The compiler flags encode what the decompiled code relies on:
 - `linux` and `linux-debug`: native Linux x86-64/ARM64, with optional sanitizers.
 - `windows-x64` and `macos`: Windows x64 and macOS Apple silicon.
 
-All target presets are built in CI. Linux x86-64 and Windows x64 under Wine
-have real-stage regression coverage; ARM64 and physical Windows gameplay
-still need validation. Remaining raw accesses are tracked in the
+All target presets are built, tested and packaged in CI. Linux x86-64 and
+Windows x64 under Wine have real-stage regression coverage; ARM64, macOS and
+physical Windows gameplay still need validation. Remaining raw accesses are tracked in the
 [generated audit](64bit-raw-access.md).

@@ -39,7 +39,7 @@ through the real frontend with fresh settings, default model 0 and automatic
 gears. Each run contains 125 waiting/countdown updates and 375 driving updates,
 including acceleration, steering, lateral contact, braking and handbrake.
 
-## Timing defects preserved in the historical repo, fixed in the port
+## Timing defects of the original, fixed in the port
 
 The original recorder measured race x87 control word `0x027f`: 53-bit arithmetic
 and nearest-even conversion. Disassembly of `Car_UpdateEngineNoteFalloff` shows

@@ -1,18 +1,13 @@
 # Executable reference: original + SilentPatch
 
-The original executable with the real SilentPatch is now recorded independently
-of OpenCMR2. The corrected port now matches the fixture's physical vehicle state
-for 500 updates at six render cadences; full-state/full-game equivalence remains
-open. Numeric conversion fixes and intentional timing corrections are documented
-in [PHYSICS_PARITY.md](PHYSICS_PARITY.md).
+The original executable with the real SilentPatch is recorded independently
+of OpenCMR2, and the port's vehicle state is compared with it field by field.
+The port matches the fixture for 500 updates at six render cadences, keeping
+25 updates per second; full-state and full-game equivalence remain open. The
+numeric conversion fixes and the intentional removal of the original's
+duplicate scheduling steps are documented in [PHYSICS_PARITY.md](PHYSICS_PARITY.md).
 
-The primary vehicle and game-speed checks across render FPS are documented in
-[PHYSICS_PARITY.md](PHYSICS_PARITY.md). The port retains 25 updates per second
-and identical measured vehicle states against the patched original across
-30..240 FPS in this fixture. It deliberately removes duplicate scheduling steps
-observed in the original, so wall-clock pacing differs from that defect.
-
-## Historical recordings before numeric fixes (2026-10-09)
+## The Finland fixture
 
 The frozen fixture is [`tests/reference/finland-stage1`](../tests/reference/finland-stage1).
 It contains compressed raw recordings, the scalar schema, resolved input CSV,
@@ -145,16 +140,9 @@ The comparator exits 0 for identical canonical state, 1 for differences and 2
 for invalid/incomplete input. It accepts raw or gzip recordings. Normal gameplay
 is unaffected by the optional probe environment variables.
 
-## Next fidelity work
+## Extending the coverage
 
-Start before the first observed tick: investigate car/ground initialisation and
-numeric conversion behaviour against the original machine code. The original
-scheduler contains inline x87 `fistp` conversions; Linux casts currently truncate.
-That is a concrete audit target, not yet a demonstrated cause of all trajectory
-differences. Preserve the frozen reference while changing these paths, and compare
-both full state and authoritative car fields after each correction. Timing/RNG
-and presentation differences require their own investigation.
-
-After this fixture matches, expand to other surfaces, cars, collisions, restarts,
-manual gears, pause/focus and race completion. A matching short Finland fixture
-cannot establish universal equivalence.
+A matching short Finland fixture cannot establish universal equivalence. The
+next fixtures should cover other surfaces, cars, collisions, restarts, manual
+gears, pause/focus and race completion, comparing both full state and the
+authoritative car fields.

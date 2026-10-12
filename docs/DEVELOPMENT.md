@@ -17,6 +17,28 @@ cmake --build --preset linux-x86
 ctest --preset linux-x86
 ```
 
+The 32-bit build needs i386 libraries. On Ubuntu 24.04 (the CI environment),
+SDL3 is built from source:
+
+```sh
+sudo dpkg --add-architecture i386
+sudo apt-get update
+sudo apt-get install clang g++-multilib ninja-build glslang-tools pkg-config \
+    libx11-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 \
+    libxi-dev:i386 libxss-dev:i386 libxkbcommon-dev:i386 \
+    libwayland-dev:i386 wayland-protocols libegl1-mesa-dev:i386 \
+    libasound2-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
+export PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+cmake --preset linux-x86 -DOPENCMR2_VENDORED_SDL=ON
+```
+
+On Fedora:
+
+```sh
+sudo dnf install clang gcc-c++ glibc-devel.i686 libstdc++-devel.x86_64 \
+    libstdc++-devel.i686 SDL3-devel.i686 ninja-build glslang
+```
+
 To include real-stage physics, runtime, lighting and movie regressions,
 configure with your own original game data, then rebuild and test:
 
@@ -34,9 +56,10 @@ the fixture scope and recording commands.
 The `game_data_setup` test uses synthetic archive placeholders and simulated
 desktop dialogs with SDL's dummy video driver. It covers first-run selection,
 missing files, reading archives and writing saves under UTF-8 paths, remembered
-settings, cancellation and portable data discovery. It also checks selecting
-subfolders or parent folders, ambiguous installations and symlink cycles on
-every CI platform, without original assets or a display server.
+settings, cancellation and a `Data` folder beside the executable. It also
+checks selecting subfolders or parent folders, ambiguous installations and
+symlink cycles on every CI platform, without original assets or a display
+server.
 
 ## Source sync and generated files
 
@@ -65,15 +88,15 @@ in `tools/raw_access/reviewed.json` retain source guards and automatic evidence.
 
 ## Files to keep
 
-- Keep maintained guides in `docs/` and link them from its index.
-- Keep past validation notes and their useful evidence in `docs/history/`,
-  with the baseline commit and coverage limits.
+- Keep guides in `docs/` and link them from its index. Results of a past
+  investigation belong in the commit message, not in a new document.
 - Keep frozen regression inputs, accepted comparisons and provenance in
   `tests/reference/`. Its recordings and audit logs support reproducible tests.
-- Put temporary plans, logs, captures, build products, downloaded toolchains
-  and package experiments under `build/`. It is ignored by Git, as are `out/`,
-  `dist/`, Python caches and local `CMakeUserPresets.json`.
+- Put temporary plans, logs, captures, build products and downloaded
+  toolchains under `build/`. It is ignored by Git, as are `out/`, `dist/`,
+  Python caches and local `CMakeUserPresets.json`.
+- Never commit original game files. Release packages contain only the
+  executable, its libraries and the licences.
 
 Before committing, review `git status --short`, `git diff --check` and the staged
-diff. Preserve the test evidence and original game data separately from public
-packages; the Windows packager excludes game assets when `--data` is omitted.
+diff.

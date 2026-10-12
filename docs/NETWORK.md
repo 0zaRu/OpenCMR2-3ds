@@ -99,3 +99,18 @@ unguaranteed messages, messages to all, player data, session description,
 buffers too small, garbage datagrams, protocol violations, a guest leaving,
 host migration and a host that disappears without a word. It also passes
 under ThreadSanitizer and AddressSanitizer.
+
+`net_frontend` runs a real UDP host and guest, receiving into memory above
+4 GB on 64-bit builds, and calls the game's notification handlers for joins,
+player updates, host options and departures.
+
+`tests/lan_game.py` runs two game processes through the real discovery, join
+and ready menus, then checks 500 updates, two cars and movement of the remote
+car on both machines. It is registered in CTest when original game data is
+supplied. A Windows build can take part through Wine:
+
+```sh
+python3 tests/lan_game.py --host-probe build/windows-probe \
+  --guest-probe build/linux/tests/stage_probe --data /path/to/game \
+  --output build/lan-windows-host
+```

@@ -1,139 +1,258 @@
+<p align="center">
+  <img src="docs/logo.jpeg" width="320" alt="OpenCMR2 logo">
+</p>
+
 # OpenCMR2
 
-A native, modernised port of **Colin McRae Rally 2.0** (PC, 2000), built from
-the [CMR2Decomp](https://github.com/pablocpas/CMR2Decomp) decompilation. It
-replaces DirectDraw/Direct3D 7, DirectSound, DirectInput, DirectPlay and Bink
-with SDL3 and the SDL GPU API (Vulkan, Direct3D 12, Metal) and our own code,
-so the game runs natively on Linux, Windows and macOS.
+[![Build](https://github.com/pablocpas/OpenCMR2/actions/workflows/build.yml/badge.svg)](https://github.com/pablocpas/OpenCMR2/actions/workflows/build.yml)
 
-OpenCMR2 contains no game data. You need your own copy of the original game.
+OpenCMR2 is a work-in-progress native port of **Colin McRae Rally 2.0** (PC, 2000)
+to modern platforms, built on the [CMR2Decomp](https://github.com/pablocpas/CMR2Decomp)
+decompilation. It runs the original game code natively on Linux, Windows and
+macOS. There is no emulation and no Wine or DirectX wrapper: DirectDraw,
+Direct3D 7, DirectSound, DirectInput, DirectPlay and Bink are replaced with
+SDL3, the SDL GPU API (Vulkan, Metal) and the port's own code.
 
-On first launch, a graphical setup dialog lets you choose the folder of your
-original **PC** installation. The main data archives are checked and the path
-is remembered; your game files stay in their original location. You can select
-the installation, a folder inside it, or a parent folder containing it; the
-setup finds the actual data root. If several copies are found, it asks you to
-choose one. This works on
-Windows, Linux and macOS using SDL3's native folder selector. You can also put
-the game files in `Data` beside the executable for a portable setup.
+<!-- Replace with a gameplay video: drag an .mp4 into this file in GitHub's
+     editor, or use a YouTube thumbnail link. -->
+https://github.com/user-attachments/assets/VIDEO-PLACEHOLDER
 
-For command-line use, pass `--data /path/to/game` to skip the selector.
-An incomplete `--data` folder reports the missing files and exits without
-opening dialogs. `OPENCMR2_DATA` and `[paths] data` in `opencmr2.ini` remain
-supported. CD/ISO installer files need to be installed or extracted first.
+*Colin McRae Rally 2.0 running on Linux with OpenCMR2.*
 
-> [!NOTE]
-> Work in progress: Linux x86 and x86-64 play stages, and Windows x64 has
-> been checked under Wine. Full-game parity and visual fidelity remain open.
-> See [docs/PLAN.md](docs/PLAN.md) for the roadmap,
-> [docs/ARCHITECTURE.md](docs/ARCHITECTURE.md) for the architecture and
-> [docs/MODERNIZATION.md](docs/MODERNIZATION.md) for the design of graphics
-> modernisation with the original simulation.
-> The [documentation index](docs/README.md) also links development instructions
-> and historical validation evidence.
+> [!WARNING]
+> This repository contains no game assets. You need your own copy of the
+> original PC version of Colin McRae Rally 2.0 to play.
 
-## Goals
+## Status
 
-- **Faithful by default.** The target is the original simulation, bit for bit
-  in the reference build. Fixed-point helpers have assembly equivalence tests;
-  500 Finland stage 1 updates now match original + SilentPatch at six render
-  cadences, with stable 25 Hz scheduling. Full-game parity remains open;
-  see [the comparison](docs/PHYSICS_PARITY.md).
-- **Modern where it helps, always optional.** Any resolution and aspect ratio,
-  high refresh rates with the physics at its original rate, better image
-  quality and lighting, modern controllers and force feedback, and
-  quality-of-life improvements. The original look is one preset away.
+Everything tested so far works: the intro videos, the menus, the stages and
+network races over LAN. The project is still in development, so you may find
+bugs. If you do, please [report them](https://github.com/pablocpas/OpenCMR2/issues).
+The game code follows CMR2Decomp, and its progress is brought into the port
+as it is made.
+
+| Platform | Architecture | Status |
+| --- | --- | --- |
+| Linux | x86-64 | Plays stages and matches the original physics |
+| Linux | i686 | Plays stages, reference build with the original memory layout |
+| Linux | ARM64 | Builds and passes the tests, gameplay not yet tested |
+| Windows | x86-64 | Plays stages and matches the original physics (tested under Wine) |
+| macOS | ARM64 | Builds and passes the tests, gameplay not yet tested |
+
+### Features
+
+* Native SDL3 platform layer for windowing, input, audio and files, with saves
+  and settings in the user directory
+* SDL GPU renderer (Vulkan, Metal) reproducing the Direct3D 7 fixed-function
+  pipeline in shaders
+* Fullscreen on the desktop resolution or a resizable window, switched with
+  Alt+Enter
+* Keyboard, mouse and gamepads through SDL3
+* Bink intro and country videos with a built-in decoder
+* Multiplayer over LAN and the internet using UDP instead of DirectPlay
+* Folder dialog on first launch to locate the game installation
+* Fixes for some original bugs, such as German in the language menu loading
+  Spanish
+
+The improvements of [SilentPatch](https://cookieplmonster.github.io/mods/colin-mcrae-rally-2/)
+are built in as well:
+
+* Widescreen resolutions up to the desktop resolution, with the correct
+  perspective instead of a stretched picture
+* Configurable field of view
+* High and variable frame rates without changing the game speed or the
+  physics, verified against the original game
+
+## Approach
+
+The game code in `game/` comes from CMR2Decomp and is kept as close to the
+original as possible. Every change the port needs is marked with a `PORT:`
+comment. The rest of the port (`src/`) implements the platform APIs the game
+expects on top of SDL3.
+
+Accuracy is tested against the original executable rather than assumed:
+
+* The fixed-point helpers are compared with the original x87 assembly
+* The startup math tables (16,896 entries) are compared with dumps from the
+  original game
+* 500 vehicle updates of a Finland stage, driven by recorded input, are
+  compared field by field with the original game + SilentPatch at 30, 60,
+  120, 144 and 240 FPS and at a variable frame rate. All of them match bit
+  for bit ([details](docs/PHYSICS_PARITY.md)).
+
+Graphical enhancements will be added one at a time and kept optional, so the
+original look stays available.
+
+## Running
+
+Download the package for your platform from
+[Releases](https://github.com/pablocpas/OpenCMR2/releases):
+
+| Platform | Package |
+| --- | --- |
+| Windows x64 | `OpenCMR2-Windows-x64.zip` |
+| Linux x86-64 | `OpenCMR2-Linux-x86_64.tar.gz` |
+| Linux ARM64 | `OpenCMR2-Linux-arm64.tar.gz` |
+| Linux 32-bit | `OpenCMR2-Linux-i686.tar.gz` |
+| macOS (Apple silicon) | `OpenCMR2-macOS-arm64.zip` |
+
+Extract it and run `opencmr2`. On first launch, choose the folder of your PC
+installation. The installation itself, a folder inside it or a parent folder
+all work. The location is checked and remembered, and the game files stay
+where they are.
+
+If you have the CD or an ISO, install the game or extract it first: OpenCMR2
+reads the installed folders (`Game`, `FrontEnd`, `Sounds`, ...).
+
+The Linux packages are built on Ubuntu 24.04 and need a distribution of
+similar age or newer. The macOS package is not signed: after extracting it,
+run `xattr -dr com.apple.quarantine OpenCMR2-macOS-arm64` once.
+
+Command-line options:
+
+| Option | Description |
+| --- | --- |
+| `--data <dir>` | Use this game installation and skip the folder dialog |
+| `--user-dir <dir>` | Keep saves, settings and logs in this directory |
+
+The installation can also be set with the `OPENCMR2_DATA` environment variable
+or `[paths] data` in `opencmr2.ini`, or copied into a `Data` folder next to the
+executable, which is found without asking.
+
+## Configuration
+
+Settings are stored in `opencmr2.ini` in the user directory
+(`~/.local/share/OpenCMR2/OpenCMR2/` on Linux,
+`%APPDATA%\OpenCMR2\OpenCMR2\` on Windows).
+It is created with comments on first launch.
+
+| Setting | Default | Description |
+| --- | --- | --- |
+| `[video] fullscreen` | `1` | Fullscreen (`1`) or window (`0`), changed and saved by Alt+Enter |
+| `[video] fov` | `70` | Field of view in degrees, 30 to 150 (70 is the original) |
+| `[video] run_in_background` | `0` | Keep running when the window loses focus |
+| `[install] language` | `English` | English, American, French, German, Italian, Spanish or Polish |
+| `[install] sku` | `EUROPE` | Game edition: `EUROPE`, `AMERICA`, `POLAND` or `JAPAN` |
+| `[net] ...` | | Network play, see [NETWORK.md](docs/NETWORK.md) |
 
 ## Building
 
-OpenCMR2 builds with Clang, CMake (3.24+), Ninja and `glslang` (or
-`glslangValidator` on older installations), on
-every platform from the presets in `CMakePresets.json`. SDL3 comes from the
-system when it is installed; otherwise CMake downloads and builds it (or pass
-`-DOPENCMR2_VENDORED_SDL=ON`).
+OpenCMR2 builds with Clang, CMake 3.24+, Ninja and glslang, using the presets
+in `CMakePresets.json`:
 
-| Preset | Target | Status |
-|---|---|---|
-| `linux-x86` | Linux, 32-bit x86 | Reference build: plays the game; golden tests compare it with the original |
-| `linux` | Linux, 64-bit (x86-64 or ARM64) | x86-64 plays stages and passes original physics fixtures; ARM64 needs gameplay validation |
-| `macos` | macOS, Apple silicon | Metal shaders are translated from SPIR-V; gameplay validation remains open |
-| `windows-x64` | Windows x64 (`clang++`, MSVC runtime) | Vulkan renderer; also cross-built with LLVM-MinGW and checked under Wine |
+| Preset | Target |
+| --- | --- |
+| `linux` | Linux, 64-bit (x86-64 or ARM64) |
+| `windows-x64` | Windows x64 (`clang++` with the MSVC runtime) |
+| `macos` | macOS, Apple silicon |
+| `linux-x86` | Linux, 32-bit x86 (reference build for the tests) |
 
-The remaining raw accesses are tracked in [docs/64bit-raw-access.md](docs/64bit-raw-access.md).
-Preservation changes are also checked in CMR2Decomp with MSVC6 and original-code comparisons.
+SDL3 is used from the system when installed. Otherwise CMake downloads and
+builds it and places it next to the executable (to force this, pass
+`-DOPENCMR2_VENDORED_SDL=ON`). Start by cloning the repository:
 
-### Linux, 32-bit reference build
+```sh
+git clone https://github.com/pablocpas/OpenCMR2.git
+cd OpenCMR2
+```
 
-Ubuntu 24.04 LTS (the CI environment):
+### Linux
 
-    sudo dpkg --add-architecture i386
-    sudo apt-get update
-    sudo apt-get install clang g++-multilib ninja-build glslang-tools pkg-config \
-        libx11-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 \
-        libxi-dev:i386 libxss-dev:i386 libxkbcommon-dev:i386 \
-        libwayland-dev:i386 wayland-protocols libegl1-mesa-dev:i386 \
-        libasound2-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
-    export PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+Install the dependencies.
 
-SDL3 is built from source when it is not installed.
+Fedora:
 
-Fedora packages:
+```sh
+sudo dnf install clang cmake ninja-build glslang SDL3-devel
+```
 
-    sudo dnf install clang gcc-c++ glibc-devel.i686 libstdc++-devel.x86_64 libstdc++-devel.i686 SDL3-devel.i686 ninja-build glslang
+Ubuntu 24.04 or Debian, where SDL3 is built from source with these
+development libraries:
 
-Then:
+```sh
+sudo apt install clang cmake ninja-build glslang-tools pkg-config \
+    libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev \
+    libxkbcommon-dev libwayland-dev wayland-protocols libegl1-mesa-dev \
+    libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
+```
 
-    cmake --preset linux-x86
-    cmake --build --preset linux-x86
-    ctest --preset linux-x86
+Then build:
 
-### Linux, 64-bit
+```sh
+cmake --preset linux
+cmake --build --preset linux
+```
 
-    sudo dnf install clang SDL3-devel ninja-build glslang     # Fedora
-    cmake --preset linux && cmake --build --preset linux
+The executable is `build/linux/src/opencmr2`.
 
 ### macOS
 
-    brew install ninja glslang sdl3
-    cmake --preset macos && cmake --build --preset macos
+```sh
+brew install cmake ninja glslang sdl3
+cmake --preset macos
+cmake --build --preset macos
+```
 
-SDL_GPU uses Metal there, which takes MSL: the build fetches and builds
-SPIRV-Cross to translate the shaders (or uses `spirv-cross` from the PATH).
+Metal needs MSL shaders, so the build fetches SPIRV-Cross to translate them
+(or uses `spirv-cross` from the `PATH`).
 
 ### Windows
 
-From a "x64 Native Tools" prompt of Visual Studio 2022 with its Clang
-component (or LLVM's installer), Ninja and `glslangValidator` on the PATH:
+Install Visual Studio 2022 with its "C++ Clang tools" component (or LLVM),
+Ninja and [glslang](https://github.com/KhronosGroup/glslang/releases). From an
+"x64 Native Tools" command prompt:
 
-    cmake --preset windows-x64
-    cmake --build --preset windows-x64
+```bat
+cmake --preset windows-x64
+cmake --build --preset windows-x64
+```
 
-`clang-cl` is not supported: the build uses GNU-style options. SDL_GPU runs on
-Vulkan there (Direct3D 12 would need DXIL shaders).
+`clang-cl` is not supported, as the build uses GNU-style options. To
+cross-build from Linux with LLVM-MinGW, see [WINDOWS.md](docs/WINDOWS.md).
 
-CI builds and tests all platforms. Successful Windows jobs upload a portable
-ZIP containing the executable, runtime DLLs, licenses and launcher. A `v*` tag
-publishes that ZIP and its SHA-256 after all platform jobs pass. The original
-game data is added locally, so it is never included in public release assets.
-See [docs/WINDOWS_PORTABLE.md](docs/WINDOWS_PORTABLE.md) for USB packaging and
-cross-building on Linux.
+### Tests
 
-To record and replay a real stage at different render cadences, or measure CPU
-frame/tick/presentation timings, see [docs/BASELINE.md](docs/BASELINE.md).
-For frozen Windows original + SilentPatch recordings and field-by-field
-comparison with the port, see [docs/ORIGINAL_REFERENCE.md](docs/ORIGINAL_REFERENCE.md).
-Vehicle physics and game-speed checks at different render FPS are summarized
-in [docs/PHYSICS_PARITY.md](docs/PHYSICS_PARITY.md).
+```sh
+ctest --preset linux
+```
 
-    python3 tools/stage_baseline.py run --data ~/cmr2game --output build/baseline-first
+The 32-bit `linux-x86` build keeps the original data layout and is the
+reference for the tests against the original game. Its dependencies and
+the rest of the development workflow are described in
+[DEVELOPMENT.md](docs/DEVELOPMENT.md).
 
-## Updating the game source
+## Documentation
 
-`game/` follows CMR2Decomp. To bring in upstream changes:
+| Document | Contents |
+| --- | --- |
+| [ARCHITECTURE.md](docs/ARCHITECTURE.md) | Source layout, platform APIs and renderer design |
+| [DEVELOPMENT.md](docs/DEVELOPMENT.md) | Tests, syncing with CMR2Decomp, repository conventions |
+| [PHYSICS_PARITY.md](docs/PHYSICS_PARITY.md) | Physics and timing comparison with the original game |
+| [ORIGINAL_REFERENCE.md](docs/ORIGINAL_REFERENCE.md) | Recording the original game for the comparisons |
+| [BASELINE.md](docs/BASELINE.md) | Stage capture, replay and CPU profiling |
+| [NETWORK.md](docs/NETWORK.md) | Network play setup and protocol |
+| [VIDEO.md](docs/VIDEO.md) | Bink decoder |
+| [WINDOWS.md](docs/WINDOWS.md) | Release packages and cross-building for Windows |
+| [64bit-raw-access.md](docs/64bit-raw-access.md) | 64-bit memory access audit |
 
-    git remote add upstream https://github.com/pablocpas/CMR2Decomp   # once
-    tools/sync_upstream.py
+The full index is in [docs/README.md](docs/README.md).
+
+## Credits
+
+* [CMR2Decomp](https://github.com/pablocpas/CMR2Decomp), the decompilation
+  this port is built on
+* Silent, for [SilentPatch](https://cookieplmonster.github.io/mods/colin-mcrae-rally-2/),
+  whose improvements are built in and which is the reference for the
+  comparisons with the original game
+* The [SDL](https://libsdl.org) and [ENet](http://enet.bespin.org) projects
+* Konstantin Shishkov, Peter Ross and Daniel Verkamp for FFmpeg's Bink
+  decoder, which `src/video/` is adapted from
 
 ## Licence
 
-GPL-3.0, like CMR2Decomp.
+OpenCMR2 is licensed under the [GPL-3.0](LICENSE). Bundled third-party code
+keeps its own licence: SDL3 (zlib), ENet (MIT) and the Bink decoder (LGPL-2.1).
+
+OpenCMR2 is an unofficial project, not affiliated with or endorsed by
+Codemasters or Electronic Arts. Colin McRae Rally 2.0 is a trademark of its
+respective owners.
