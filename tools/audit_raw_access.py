@@ -53,6 +53,21 @@ ANNOTATION = re.compile(r"^// (?:FUNCTION|LIBRARY|TODO|STUB): CMR2 (0x[0-9a-fA-F
 # 32-bit layout, so 32-bit offsets into them are right on every target.
 DISK_SOURCES = {"ret:FindFile", "ret:FindFileInArchive", "ret:Profile_ReadLocalFile", "field:GenericFile::buffer",
                 "ret:Disk_Data"}
+# Pointers the platform code (src/, not analysed) stores through an argument
+# of the game's calls: what they point at. "wire" data has the original's
+# fixed 32-bit layout, like files; "bytes" are pixels or samples, which hold
+# no records at all. Both are checked like file data.
+OUT_SOURCES = {
+    "param:Network_PollReceivedMessageBuffer#1": "wire",  # player packets, or a system message
+    "param:Audio_LockBuffer#3": "bytes",
+    "param:Audio_LockBuffer#5": "bytes",
+}
+# Platform fields that point at pixels.
+DATA_FIELDS = {"field:GfxLockedRect::pixels": "bytes"}
+# Native records the platform hands over instead of wire data: the system
+# messages (sender id 0) of the network layer, built in native layout.
+NATIVE_VIEWS = {"param:Network_PollReceivedMessageBuffer#1":
+                {"NetMsgCreatePlayer", "NetMsgDestroyPlayer", "NetMsgSetPlayerData", "NetMsgSetSessionDesc"}}
 MAX_DEPTH = 16
 MAX_ORIGINS = 24
 
@@ -375,7 +390,7 @@ class Tracer:
             return  # an integer constant (a sentinel or a count), not an address
         if kind == "opaque" and root.get("why") in ("null", "FunctionToPointerDecay", "Dependent"):
             return
-        if prov in DISK_SOURCES:
+        if prov in DISK_SOURCES or prov in DATA_FIELDS:
             out.append(Origin("disk", None, prov, None, offset, terms, via))
             return
         if prov.startswith("ret:?ZALLOC") or prov.startswith("ret:?ALLOC"):
@@ -453,6 +468,21 @@ class Tracer:
             buffers = {o.prov for o in inner}
             keys += [k for k, held in self._stores_through().items() if held & buffers]
         incoming = [f for k in keys for f in self.flows.get(k, [])]
+        if prov.startswith("var:") and not incoming:
+            # Stored only through its address: by game code (stores through a
+            # pointer that reaches it) or by the platform (an out argument).
+            writers = [k for k, held in self._stores_through().items() if prov in held]
+            incoming = [f for k in writers for f in self.flows.get(k, [])]
+            outs = {f["dst"] for fs in self.flows.values() for f in fs
+                    if f["dst"].startswith("param:") and f["root"]["k"] == "object"
+                    and f["root"].get("prov") == prov and f["off"] == 0 and not f["terms"]}
+            for dst in sorted(outs):
+                if dst in OUT_SOURCES:
+                    out.append(Origin("disk", None, dst, None, offset, terms, via + [prov]))
+                elif not any(k == "load:" + dst for k in writers):
+                    out.append(Origin("unresolved", root.get("type"), dst, None, offset, terms, via + [prov]))
+            if outs and not incoming:
+                return
         if not incoming and never_written(prov):
             return  # a global nothing stores to holds its zero initialiser: NULL
         if not incoming:
@@ -645,6 +675,8 @@ def classify(key, sites, layouts, tracers, base, others):
             bugs = []
             if "p" in view:
                 bugs.append(f"pointer-sized access in file data ({o.prov}), whose slots are 32-bit")
+            elif "r" in view and view["r"] in NATIVE_VIEWS.get(o.prov, ()):
+                pass
             elif "r" in view and not layouts[base].identical(view, layouts[others[0]], sites[others[0]].get("view")):
                 bugs.append(f"file data ({o.prov}) viewed as {view['r']}, whose layout differs on 64-bit")
             verdicts.append((describe_origin(o), bugs, []))

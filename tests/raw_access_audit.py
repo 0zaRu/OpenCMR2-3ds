@@ -107,8 +107,8 @@ class ClassificationTests(unittest.TestCase):
         self.assertEqual([o.kind for o in self.origins(local, flows)], ["unresolved"])
 
     def test_loop_through_a_field_the_platform_writes_stays_unresolved(self):
-        field = {"k": "untyped", "prov": "field:GfxLockedRect::pixels"}
-        flows = {"field:GfxLockedRect::pixels": [flow(field)]}
+        field = {"k": "untyped", "prov": "field:SysEvent::data"}
+        flows = {"field:SysEvent::data": [flow(field)]}
         self.assertIn("unresolved", [o.kind for o in self.origins(field, flows)])
 
     def test_pointer_loaded_through_a_pointer_variable_follows_its_stores(self):
@@ -278,6 +278,23 @@ void fixture(int n, int otherBytes) {
                      if r["t"] == "flow" and r["dst"].startswith("var:pick:")}
             self.assertEqual(flows["p"], "load:param:pick#0")
             self.assertEqual(flows["q"], "var:g_files")
+
+    def test_byte_cursor_defined_once_with_sizeof_keeps_its_stride(self):
+        audit.build_plugin()
+        with tempfile.TemporaryDirectory() as temp:
+            directory = Path(temp)
+            source = directory / "Fixture.cpp"
+            source.write_text("struct Row { void *p; int n; };\nRow g_rows[4];\n"
+                              "int once(int i) { int off = i * sizeof(Row); return ((Row *)((char *)g_rows + off))->n; }\n"
+                              "int twice(int i) { int off = i * sizeof(Row); off += 1; return ((Row *)((char *)g_rows + off))->n; }\n")
+            output = directory / "x86_64.jsonl"
+            subprocess.run(["clang++", "-target", audit.TARGETS["x86_64"], "-fsyntax-only", "-std=c++17",
+                            f"-fplugin={audit.PLUGIN}", f"-fplugin-arg-rawaccess-out={output}",
+                            f"-fplugin-arg-rawaccess-dir={directory}/", str(source)], check=True)
+            sites = {r["fn"]: r for r in map(json.loads, output.read_text().splitlines())
+                     if r["t"] == "site" and r["text"].endswith("->n")}
+            self.assertEqual(sites["once"]["terms"], [["i", 16]])
+            self.assertEqual(sites["twice"]["terms"], [["off", 1]])
 
 
 if __name__ == "__main__":

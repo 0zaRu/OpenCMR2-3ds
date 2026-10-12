@@ -7,8 +7,8 @@ original meant) and the x86_64 layout (what the port touches).
 | Verdict | Accesses |
 | --- | --- |
 | bug | 0 |
-| unresolved | 388 |
-| safe | 6943 |
+| unresolved | 211 |
+| safe | 7120 |
 
 `safe` means the layout checks passed or the access was individually reviewed below. It is not
 a proof of bounds, lifetime, control flow or physics equivalence. `bug` is an automatic finding
@@ -30,37 +30,23 @@ reasons. Use `--without-reviews` to inspect all automatic findings.
 
 Fixing or typing one root usually settles every access listed under it.
 
-- 30 × root var:FrontendNetwork_DrainMessageQueue:pData:1914: `FrontendScreens.cpp:1719`, `FrontendScreens.cpp:1720`, `FrontendScreens.cpp:1721`, `FrontendScreens.cpp:1722`, `FrontendScreens.cpp:1723`, `FrontendScreens.cpp:1724`, `FrontendScreens.cpp:1725`, `FrontendScreens.cpp:1726` ...
-- 30 × index INTERIOR_NODES: stride 0x1 matches no array: `StageObjects.cpp:9044`, `StageObjects.cpp:9047`, `StageObjects.cpp:9048`, `StageObjects.cpp:9049`, `StageObjects.cpp:9054`, `StageObjects.cpp:9055`, `StageObjects.cpp:9056`, `StageObjects.cpp:9057` ...
 - 28 × index (p->samplesPerLane * p->laneCount + *pIndex): stride 0x4 matches no array: `StageObjects.cpp:10182:33`, `StageObjects.cpp:10193:37`, `StageObjects.cpp:10194`, `StageObjects.cpp:10208`, `StageObjects.cpp:10223`, `StageObjects.cpp:10238`, `StageObjects.cpp:7971`, `StageObjects.cpp:7973` ...
-- 25 × root field:GfxLockedRect::pixels: `Graphics.cpp:1119:25`, `Graphics.cpp:1706:12`, `Graphics.cpp:1707:14`, `Graphics.cpp:2546:16`, `Graphics.cpp:2551:16`, `Graphics.cpp:2553:20`, `Graphics.cpp:3842`, `Graphics.cpp:3858` ...
 - 17 × root param:deflateSetDictionary#1: `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36`, `ZlibAdler32.cpp:36` ...
-- 16 × root var:NetRace_DrainPendingMessages:pData:205: `NetRace.cpp:1023:36`, `NetRace.cpp:1025:33`, `NetRace.cpp:137`, `NetRace.cpp:140:47`, `NetRace.cpp:148`, `NetRace.cpp:148`, `NetRace.cpp:151`, `NetRace.cpp:151` ...
-- 16 × root var:g_unk0x00538238: `Race.cpp:4427`, `Race.cpp:769:29`, `StageObjects.cpp:6165`, `StageObjects.cpp:6166`, `StageObjects.cpp:6169`, `StageObjects.cpp:6170`, `StageObjects.cpp:6174`, `StageObjects.cpp:6331` ...
 - 15 × root load:var:Scene_ProjectCasterIntoLightZone:pTri:1767: `SceneNode.cpp:1929`, `SceneNode.cpp:1930`, `SceneNode.cpp:1931`, `SceneNode.cpp:1932`, `SceneNode.cpp:1933`, `SceneNode.cpp:1934`, `SceneNode.cpp:1935`, `SceneNode.cpp:1936` ...
-- 13 × root var:GameInfo_ProcessNetworkMessages:pMessage:1596: `GameInfo.cpp:1533:36`, `GameInfo.cpp:1535:33`, `GameInfo.cpp:1555`, `GameInfo.cpp:1557:43`, `GameInfo.cpp:1563`, `GameInfo.cpp:1563`, `GameInfo.cpp:1567`, `GameInfo.cpp:1567` ...
-- 13 × index PREVIEW_SCENE_AT_OFFSET(off): stride 0x1 matches no array: `GameInfo.cpp:7241`, `GameInfo.cpp:7243`, `GameInfo.cpp:7244`, `GameInfo.cpp:7244`, `GameInfo.cpp:7248`, `GameInfo.cpp:7250`, `GameInfo.cpp:7251`, `GameInfo.cpp:7251` ...
 - 12 × index (p->samplesPerLane * p->lane + p->frame): stride 0x4 matches no array: `StageObjects.cpp:14073:61`, `StageObjects.cpp:1501`, `StageObjects.cpp:1503`, `StageObjects.cpp:1510`, `StageObjects.cpp:1511`, `StageObjects.cpp:1512`, `StageObjects.cpp:1513`, `StageObjects.cpp:1514` ...
-- 11 × root var:g_unk0x00538234: `Race.cpp:4427`, `Race.cpp:769:72`, `StageObjects.cpp:6337`, `StageObjects.cpp:6339`, `StageObjects.cpp:6344`, `StageObjects.cpp:6344`, `StageObjects.cpp:6345`, `StageObjects.cpp:6350` ...
 - 9 × index i: stride 0x1 matches no array: `Car.cpp:2895`, `Car.cpp:2895`, `Car.cpp:5288`, `Collision2D.cpp:754`, `Collision2D.cpp:755`, `Collision2D.cpp:756`, `Collision2D.cpp:775`, `Collision2D.cpp:776` ...
 - 9 × root field:SceneNode::pObject: `GameInfo.cpp:11197`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8991`, `StageObjects.cpp:931`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
 - 7 × index off: stride 0x1 matches no array: `Car.cpp:2936:33`, `Car.cpp:2946`, `Car.cpp:2952:33`, `Car.cpp:2957`, `Car.cpp:2958`, `Car.cpp:2959`, `Car.cpp:3069:32`
 - 6 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4948`, `StageObjects.cpp:14014`
 - 5 × index p->laneCapacity * recordSize: stride 0x1 matches no array: `StageObjects.cpp:10888`, `StageObjects.cpp:11937:53`, `StageObjects.cpp:11939:77`, `StageObjects.cpp:7279:64`, `StageObjects.cpp:7283:63`
 - 4 × root opaque (): `FrontendScreens.cpp:11497:93`, `FrontendScreens.cpp:11515:97`, `FrontendScreens.cpp:11524:93`, `FrontendScreens.cpp:11529:93`
-- 4 × root var:OptionMenu_DrawStageSummaryPanel:table:10203: `GameInfo.cpp:10294`, `GameInfo.cpp:10295`, `GameInfo.cpp:10306`, `GameInfo.cpp:10307`
-- 4 × index INTERIOR_PROFILE: stride 0x1 matches no array: `StageObjects.cpp:9046`, `StageObjects.cpp:9067`, `StageObjects.cpp:9068`, `StageObjects.cpp:9072`
 - 4 × root expr:s->outbuf = Z_NULL: `ZlibDeflate.cpp:408:13`, `ZlibGzio.cpp:387:11`, `ZlibInfutil.cpp:51:11`, `ZlibInfutil.cpp:77:13`
 - 3 × root ret:strchr: `GameInfo.cpp:2798:32`, `GameInfo.cpp:2805:26`, `GameInfo.cpp:2805:36`
 - 3 × root var:RallyData_FormatResultDriverName:entry:5825: `RallyData.cpp:5844:89`, `RallyData.cpp:5855:94`, `RallyData.cpp:5857:75`
 - 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1874:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3497:24`
-- 3 × root var:Sound_RewindAndFillMusicBuffer:pAudio1:552: `Sound.cpp:521:21`, `Sound.cpp:535:53`, `Sound.cpp:563:59`
-- 3 × root var:Sound_BuildSlotLoopBuffer:p1:832: `Sound.cpp:814:24`, `Sound.cpp:816:24`, `Sound.cpp:841:53`
 - 3 × root param:Knockout_UpdateRaceStateAndFades#0: `StageObjects.cpp:2272:55`, `StageUI.cpp:929:43`, `StageUI.cpp:946:47`
 - 3 × root expr:s->inbuf = Z_NULL: `ZlibDeflate.cpp:655:18`, `ZlibGzio.cpp:387:31`, `ZlibInfblock.cpp:203:18`
 - 3 × root param:gzgets#1: `ZlibGzio.cpp:368:20`, `ZlibGzio.cpp:376:16`, `ZlibGzio.cpp:377:26`
-- 2 × root var:FrontendMenu_DrawRallySummary:table:10811: `FrontendScreens.cpp:10874`, `FrontendScreens.cpp:10875`
-- 2 × root var:FrontendMenu_DrawRallyReport:table:10963: `FrontendScreens.cpp:11005`, `FrontendScreens.cpp:11006`
 - 2 × root load:var:RallyData_FindCheatNameIndex:p:1521: `FrontendScreens.cpp:6177:40`, `FrontendScreens.cpp:6178:16`
 - 2 × root param:OptionMenu_RestartEmptyItemRecords#0: `GameInfo.cpp:6349:27`, `GameInfo.cpp:6350`
 - 2 × root param:OptionMenu_DispatchRecordEditState#0: `GameInfo.cpp:9669`, `GameInfo.cpp:9670:54`
@@ -100,7 +86,6 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × root param:Game_CompareTransparentDrawEntries#0: `Game.cpp:2246`
 - 1 × root param:Game_CompareTransparentDrawEntries#1: `Game.cpp:2247`
 - 1 × root param:OptionMenu_SelectItemAndRefresh#0: `GameInfo.cpp:6316`
-- 1 × root var:g_previewOriginalNodeTypes: `GameInfo.cpp:7996`
 - 1 × root param:NetPlayers_ComparePlayerIDs#0: `NetPlayers.cpp:1022`
 - 1 × root param:NetPlayers_ComparePlayerIDs#1: `NetPlayers.cpp:1022`
 - 1 × root param:NetPlayers_CompareResultRecords#0: `NetPlayers.cpp:516:21`
@@ -113,10 +98,6 @@ Fixing or typing one root usually settles every access listed under it.
 - 1 × root param:NetworkLeaderboard_CompareEntries#1: `NetworkLeaderboards.cpp:106:41`
 - 1 × index scratchOffset: stride 0x1 matches no array: `RallyData.cpp:7506:32`
 - 1 × index itemOff: stride 0x1 matches no array: `SceneNode.cpp:2118:41`
-- 1 × root var:Sound_RefillMusicBufferRegions:pAudio1:625: `Sound.cpp:636:71`
-- 1 × root var:Sound_RefillMusicBufferRegions:pAudio2:626: `Sound.cpp:640:71`
-- 1 × root var:Sound_CopyBufferData:p1:807: `Sound.cpp:814:20`
-- 1 × root var:Sound_CopyBufferData:p2:809: `Sound.cpp:816:20`
 - 1 × index p->laneCount * p->samplesPerLane: stride 0x4 matches no array: `StageObjects.cpp:10236:33`
 - 1 × index p->samplesPerLane * p->lane: stride 0x10 matches no array: `StageObjects.cpp:12190:84`
 - 1 × index p->samplesPerLane * p->laneCount: stride 0x10 matches no array: `StageObjects.cpp:14460:107`

@@ -25,6 +25,7 @@
 #include "llvm/Support/JSON.h"
 #include "llvm/Support/raw_ostream.h"
 
+#include <functional>
 #include <map>
 #include <set>
 
@@ -410,6 +411,48 @@ private:
         c.why = why;
     }
 
+    // The only value a local integer is ever given, when it is a sizeof-based
+    // expression (not modified elsewhere, address never taken); else null.
+    std::map<const VarDecl *, const Expr *> SingleDefs;
+
+    const Expr *singleDefinition(const VarDecl *vd)
+    {
+        auto it = SingleDefs.find(vd);
+        if (it != SingleDefs.end())
+            return it->second;
+        SingleDefs[vd] = nullptr;  // guards against recursion through the definition
+        const Expr *def = vd->getInit();
+        int count = def ? 1 : 0;
+        bool escapes = false;
+        std::function<void(const Stmt *)> scan = [&](const Stmt *s) {
+            if (!s)
+                return;
+            auto refers = [&](const Expr *x) {
+                const auto *dr = dyn_cast<DeclRefExpr>(x->IgnoreParenImpCasts());
+                return dr && dr->getDecl() == vd;
+            };
+            if (const auto *bo = dyn_cast<BinaryOperator>(s)) {
+                if (bo->isAssignmentOp() && refers(bo->getLHS())) {
+                    count++;
+                    if (bo->getOpcode() == BO_Assign)
+                        def = bo->getRHS();
+                    else
+                        escapes = true;
+                }
+            } else if (const auto *uo = dyn_cast<UnaryOperator>(s)) {
+                if ((uo->isIncrementDecrementOp() || uo->getOpcode() == UO_AddrOf) && refers(uo->getSubExpr()))
+                    escapes = true;
+            }
+            for (const Stmt *child : s->children())
+                scan(child);
+        };
+        if (const auto *fd = dyn_cast_or_null<FunctionDecl>(vd->getParentFunctionOrMethod()))
+            scan(fd->getBody());
+        const Expr *result = !escapes && count == 1 && def && containsSizeof(def) ? def : nullptr;
+        SingleDefs[vd] = result;
+        return result;
+    }
+
     // Integer expression scaled into the chain's offset: constants fold, the
     // rest become terms with their byte stride.
     void addIntOffset(const Expr *e, int64_t scale, int64_t sign, Chain &c)
@@ -449,6 +492,14 @@ private:
                 break;
             }
         }
+        // A byte cursor computed once as index * sizeof(T): its stride.
+        if (const auto *dr = dyn_cast<DeclRefExpr>(e))
+            if (const auto *vd = dyn_cast<VarDecl>(dr->getDecl()))
+                if (vd->isLocalVarDecl() && vd->getType()->isIntegerType())
+                    if (const Expr *def = singleDefinition(vd)) {
+                        addIntOffset(def, scale, sign, c);
+                        return;
+                    }
         c.terms.push_back({text(e), sign * scale});
     }
 
