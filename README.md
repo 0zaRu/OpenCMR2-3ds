@@ -13,9 +13,7 @@ macOS. There is no emulation and no Wine or DirectX wrapper: DirectDraw,
 Direct3D 7, DirectSound, DirectInput, DirectPlay and Bink are replaced with
 SDL3, the SDL GPU API (Vulkan, Metal) and the port's own code.
 
-<!-- Replace with a gameplay video: drag an .mp4 into this file in GitHub's
-     editor, or use a YouTube thumbnail link. -->
-https://github.com/user-attachments/assets/VIDEO-PLACEHOLDER
+https://github.com/user-attachments/assets/3c7322dc-576b-4fb0-8d6a-4d17de6fe17d
 
 *Colin McRae Rally 2.0 running on Linux with OpenCMR2.*
 
