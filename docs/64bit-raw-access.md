@@ -7,7 +7,7 @@ original meant) and the x86_64 layout (what the port touches).
 | Verdict | Accesses |
 | --- | --- |
 | bug | 0 |
-| unresolved | 101 |
+| unresolved | 85 |
 | safe | 7233 |
 
 `safe` means the layout checks passed or the access was individually reviewed below. It is not
@@ -30,7 +30,7 @@ Fixing or typing one root usually settles every access listed under it.
 
 - 15 × root load:var:Scene_ProjectCasterIntoLightZone:pTri:1767: `SceneNode.cpp:1929`, `SceneNode.cpp:1930`, `SceneNode.cpp:1931`, `SceneNode.cpp:1932`, `SceneNode.cpp:1933`, `SceneNode.cpp:1934`, `SceneNode.cpp:1935`, `SceneNode.cpp:1936` ...
 - 9 × index i: stride 0x1 matches no array: `Car.cpp:2895`, `Car.cpp:2895`, `Car.cpp:5288`, `Collision2D.cpp:754`, `Collision2D.cpp:755`, `Collision2D.cpp:756`, `Collision2D.cpp:775`, `Collision2D.cpp:776` ...
-- 9 × root field:SceneNode::pObject: `GameInfo.cpp:11197`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8991`, `StageObjects.cpp:931`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
+- 9 × root field:SceneNode::pObject: `GameInfo.cpp:11196`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8991`, `StageObjects.cpp:931`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
 - 7 × index off: stride 0x1 matches no array: `Car.cpp:2936:33`, `Car.cpp:2946`, `Car.cpp:2952:33`, `Car.cpp:2957`, `Car.cpp:2958`, `Car.cpp:2959`, `Car.cpp:3069:32`
 - 6 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4948`, `StageObjects.cpp:14014`
 - 4 × root opaque (): `FrontendScreens.cpp:11497:93`, `FrontendScreens.cpp:11515:97`, `FrontendScreens.cpp:11524:93`, `FrontendScreens.cpp:11529:93`
@@ -39,33 +39,20 @@ Fixing or typing one root usually settles every access listed under it.
 - 3 × index offset: stride 0x1 matches no array: `SceneNode.cpp:1874:21`, `StageTiming.cpp:1638:37`, `StageTiming.cpp:3497:24`
 - 3 × root param:Knockout_UpdateRaceStateAndFades#0: `StageObjects.cpp:2272:55`, `StageUI.cpp:929:43`, `StageUI.cpp:946:47`
 - 2 × root load:var:RallyData_FindCheatNameIndex:p:1521: `FrontendScreens.cpp:6177:40`, `FrontendScreens.cpp:6178:16`
-- 2 × root param:OptionMenu_RestartEmptyItemRecords#0: `GameInfo.cpp:6349:27`, `GameInfo.cpp:6350`
-- 2 × root param:OptionMenu_DispatchRecordEditState#0: `GameInfo.cpp:9669`, `GameInfo.cpp:9670:54`
-- 2 × root param:OptionMenu_DrawValueSelectionRows#0: `GameInfo.cpp:9688`, `GameInfo.cpp:9706`
 - 2 × root site:StageObjects.cpp:14142:36:deref: `StageObjects.cpp:14052:9`, `StageObjects.cpp:1524`
 - 2 × index ((BYTE *)pSlot - (BYTE *)pRecord->geometry.meshes) * (sizeof(Mesh *) - sizeof(int)) / sizeof(Mesh *): stride 0x-1 matches no array: `StageTiming.cpp:2315`, `StageTiming.cpp:2435`
 - 2 × root param:FindLoadTexture#3: `Texture.cpp:35:68`, `Texture.cpp:38:72`
 - 2 × index vertexOffset: stride 0x1 matches no array: `VehiclePhysics.cpp:271:31`, `VehiclePhysics.cpp:304:41`
 - 1 × index local_c: stride 0x2 matches no array: `Car.cpp:6108:34`
 - 1 × root var:g_pCurrentCar: `Car.cpp:6406:25`
-- 1 × root param:CarEffects_UpdateRisingParticle#0: `CarEffects.cpp:1150:19`
-- 1 × root param:CarEffects_UpdateParticleAtCarPosition#0: `CarEffects.cpp:1159:19`
-- 1 × root param:CarEffects_UpdateCarFollowingRisingParticle#0: `CarEffects.cpp:1173:19`
-- 1 × root param:CarEffect_SpawnExhaustParticle#0: `CarEffects.cpp:1202:19`
-- 1 × root param:CarEffects_UpdateSpiralParticle#0: `CarEffects.cpp:1244:9`
-- 1 × root param:CarEffects_InitParticleOwnerData#2: `CarEffects.cpp:1273`
-- 1 × root param:CarEffects_InitParticleOwnerData#0: `CarEffects.cpp:1275`
-- 1 × root param:Debris_Init#0: `CarEffects.cpp:1466:19`
-- 1 × root param:Debris_Init#2: `CarEffects.cpp:1467:19`
-- 1 × root param:CarEffects_UpdateAgedParticleAppearance#0: `CarEffects.cpp:437:19`
-- 1 × root param:GlassShard_Init#0: `CarEffects.cpp:513:19`
-- 1 × root param:GlassShard_Init#2: `CarEffects.cpp:514:17`
+- 1 × root param:CarEffects_InitParticleOwnerData#2: `CarEffects.cpp:1267`
+- 1 × root param:Debris_Init#2: `CarEffects.cpp:1460:19`
+- 1 × root param:GlassShard_Init#2: `CarEffects.cpp:512:17`
 - 1 × root var:LoadFrontendCarPreviewTextures:carNames:281: `Frontend.cpp:311`
 - 1 × root expr:value == 0 ? pBright : pDim: `FrontendMenus.cpp:1402:59`
 - 1 × root expr:value == 0 ? pDim : pBright: `FrontendMenus.cpp:1404:60`
 - 1 × root field:NetMsgCreatePlayer::lpData: `FrontendScreens.cpp:1791:62`
 - 1 × root field:NetMsgSetPlayerData::lpData: `FrontendScreens.cpp:1837:62`
-- 1 × root param:OptionMenu_SelectItemAndRefresh#0: `GameInfo.cpp:6316`
 - 1 × index scratchOffset: stride 0x1 matches no array: `RallyData.cpp:7506:32`
 - 1 × index itemOff: stride 0x1 matches no array: `SceneNode.cpp:2118:41`
 - 1 × index r.native: stride 0x1 matches no array: `StageObjects.cpp:1571:20`
