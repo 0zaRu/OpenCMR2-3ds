@@ -169,7 +169,7 @@ class ReviewTests(unittest.TestCase):
                       "reason": "The buffer stores a fixed-width disk integer.",
                       "automatic_verdict": "bug", "automatic_reasons": ["automatic evidence"]}
         self.document = {"targets": ["i386", "x86_64"], "guards": {
-            str(p.relative_to(self.root)): hashlib.sha256(p.read_bytes()).hexdigest()
+            p.relative_to(self.root).as_posix(): hashlib.sha256(p.read_bytes()).hexdigest()
             for p in [self.source, self.header]}, "accesses": [self.entry]}
         self.path = self.root / "reviews.json"
         self.results = [dict(self.entry, verdict="bug", reasons=["automatic evidence"])]
