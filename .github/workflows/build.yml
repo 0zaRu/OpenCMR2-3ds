@@ -68,7 +68,8 @@ jobs:
       - name: glslang
         shell: pwsh
         run: |
-          Invoke-WebRequest https://github.com/KhronosGroup/glslang/releases/download/main-tot/glslang-main-windows-x86_64-release.zip -OutFile glslang.zip
+          curl.exe --fail --location --retry 3 --retry-delay 5 --output glslang.zip https://github.com/KhronosGroup/glslang/releases/download/main-tot/glslang-main-windows-x86_64-release.zip
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Expand-Archive glslang.zip -DestinationPath glslang
           & "$PWD\glslang\bin\glslang.exe" --version
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
