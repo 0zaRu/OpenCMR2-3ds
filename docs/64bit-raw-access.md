@@ -28,10 +28,10 @@ reasons. Use `--without-reviews` to inspect all automatic findings.
 
 Fixing or typing one root usually settles every access listed under it.
 
-- 9 × index i: stride 0x1 matches no array: `Car.cpp:2895`, `Car.cpp:2895`, `Car.cpp:5288`, `Collision2D.cpp:754`, `Collision2D.cpp:755`, `Collision2D.cpp:756`, `Collision2D.cpp:775`, `Collision2D.cpp:776` ...
+- 9 × index i: stride 0x1 matches no array: `Car.cpp:2898`, `Car.cpp:2898`, `Car.cpp:5291`, `Collision2D.cpp:754`, `Collision2D.cpp:755`, `Collision2D.cpp:756`, `Collision2D.cpp:775`, `Collision2D.cpp:776` ...
 - 9 × root field:SceneNode::pObject: `GameInfo.cpp:11200`, `Graphics.cpp:2861:50`, `Graphics.cpp:2906:30`, `Mesh.cpp:33`, `StageObjects.cpp:8991`, `StageObjects.cpp:931`, `StageTiming.cpp:2383:41`, `StageTiming.cpp:2502:41` ...
-- 7 × index off: stride 0x1 matches no array: `Car.cpp:2936:33`, `Car.cpp:2946`, `Car.cpp:2952:33`, `Car.cpp:2957`, `Car.cpp:2958`, `Car.cpp:2959`, `Car.cpp:3069:32`
-- 6 × index k: stride 0x1 matches no array: `Car.cpp:4763`, `Car.cpp:4764`, `Car.cpp:4765`, `Car.cpp:4766`, `FrontendScreens.cpp:4948`, `StageObjects.cpp:14014`
+- 7 × index off: stride 0x1 matches no array: `Car.cpp:2939:33`, `Car.cpp:2949`, `Car.cpp:2955:33`, `Car.cpp:2960`, `Car.cpp:2961`, `Car.cpp:2962`, `Car.cpp:3072:32`
+- 6 × index k: stride 0x1 matches no array: `Car.cpp:4766`, `Car.cpp:4767`, `Car.cpp:4768`, `Car.cpp:4769`, `FrontendScreens.cpp:4948`, `StageObjects.cpp:14014`
 - 4 × root opaque (): `FrontendScreens.cpp:11497:93`, `FrontendScreens.cpp:11515:97`, `FrontendScreens.cpp:11524:93`, `FrontendScreens.cpp:11529:93`
 - 3 × root ret:strchr: `GameInfo.cpp:2798:32`, `GameInfo.cpp:2805:26`, `GameInfo.cpp:2805:36`
 - 3 × root var:RallyData_FormatResultDriverName:entry:5825: `RallyData.cpp:5844:89`, `RallyData.cpp:5855:94`, `RallyData.cpp:5857:75`
@@ -40,8 +40,8 @@ Fixing or typing one root usually settles every access listed under it.
 - 2 × root site:StageObjects.cpp:14142:36:deref: `StageObjects.cpp:14052:9`, `StageObjects.cpp:1524`
 - 2 × index ((BYTE *)pSlot - (BYTE *)pRecord->geometry.meshes) * (sizeof(Mesh *) - sizeof(int)) / sizeof(Mesh *): stride 0x-1 matches no array: `StageTiming.cpp:2315`, `StageTiming.cpp:2435`
 - 2 × root param:FindLoadTexture#3: `Texture.cpp:35:68`, `Texture.cpp:38:72`
-- 1 × index local_c: stride 0x2 matches no array: `Car.cpp:6108:34`
-- 1 × root var:g_pCurrentCar: `Car.cpp:6406:25`
+- 1 × index local_c: stride 0x2 matches no array: `Car.cpp:6111:34`
+- 1 × root var:g_pCurrentCar: `Car.cpp:6409:25`
 - 1 × root param:CarEffects_InitParticleOwnerData#2: `CarEffects.cpp:1267`
 - 1 × root param:Debris_Init#2: `CarEffects.cpp:1460:19`
 - 1 × root param:GlassShard_Init#2: `CarEffects.cpp:512:17`
