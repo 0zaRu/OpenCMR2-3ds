@@ -9,14 +9,24 @@ permissions:
   contents: read
 
 jobs:
-  # 32-bit x86 reference build, in the environment the README documents.
+  # 32-bit x86 reference build on the same Ubuntu LTS as native Linux.
   linux-x86:
     runs-on: ubuntu-24.04
-    container: fedora:41
+    env:
+      PKG_CONFIG_LIBDIR: /usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
     steps:
-      - run: dnf install -y git cmake ninja-build clang glslang python3 glibc-devel.i686 libstdc++-devel.i686 SDL3-devel.i686
+      - name: Install 32-bit build dependencies
+        run: |
+          sudo dpkg --add-architecture i386
+          sudo apt-get update
+          sudo apt-get install -y clang g++-multilib ninja-build glslang-tools pkg-config \
+            libx11-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 \
+            libxi-dev:i386 libxss-dev:i386 libxkbcommon-dev:i386 \
+            libwayland-dev:i386 wayland-protocols libegl1-mesa-dev:i386 \
+            libasound2-dev:i386 libpulse-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
       - uses: actions/checkout@v4
-      - run: cmake --preset linux-x86
+      # Ubuntu 24.04 has no SDL3 package: compile it for i386 too.
+      - run: cmake --preset linux-x86 -DOPENCMR2_VENDORED_SDL=ON
       - run: cmake --build --preset linux-x86
       - run: ctest --preset linux-x86
 
@@ -58,8 +68,10 @@ jobs:
       - name: glslang
         shell: pwsh
         run: |
-          Invoke-WebRequest https://github.com/KhronosGroup/glslang/releases/download/main-tot/glslang-master-windows-Release.zip -OutFile glslang.zip
+          Invoke-WebRequest https://github.com/KhronosGroup/glslang/releases/download/main-tot/glslang-main-windows-x86_64-release.zip -OutFile glslang.zip
           Expand-Archive glslang.zip -DestinationPath glslang
+          & "$PWD\glslang\bin\glslang.exe" --version
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           Add-Content $env:GITHUB_PATH "$PWD\glslang\bin"
       # clang++ from Visual Studio's LLVM component; SDL3 is fetched.
       - run: cmake --preset windows-x64 -DOPENCMR2_VENDORED_SDL=ON

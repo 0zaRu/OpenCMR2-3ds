@@ -61,7 +61,8 @@ endif()
 # The MSL comes from the same SPIR-V through SPIRV-Cross; the SPIR-V bindings
 # already follow SDL_GPU's resource order, so they become the Metal indices.
 option(OPENCMR2_SHADERS_MSL "Also build Metal (MSL) shaders" ${APPLE})
-find_program(GLSLANG_VALIDATOR glslangValidator REQUIRED)
+# Recent glslang releases use glslang.exe; older packages keep glslangValidator.
+find_program(GLSLANG_VALIDATOR NAMES glslangValidator glslang REQUIRED)
 if(OPENCMR2_SHADERS_MSL)
     find_program(SPIRV_CROSS_EXECUTABLE spirv-cross)
     if(SPIRV_CROSS_EXECUTABLE)

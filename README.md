@@ -32,7 +32,8 @@ OpenCMR2 contains no game data. You need your own copy of the original game.
 
 ## Building
 
-OpenCMR2 builds with Clang, CMake (3.24+), Ninja and `glslangValidator`, on
+OpenCMR2 builds with Clang, CMake (3.24+), Ninja and `glslang` (or
+`glslangValidator` on older installations), on
 every platform from the presets in `CMakePresets.json`. SDL3 comes from the
 system when it is installed; otherwise CMake downloads and builds it (or pass
 `-DOPENCMR2_VENDORED_SDL=ON`).
@@ -49,9 +50,22 @@ Preservation changes are also checked in CMR2Decomp with MSVC6 and original-code
 
 ### Linux, 32-bit reference build
 
+Ubuntu 24.04 LTS (the CI environment):
+
+    sudo dpkg --add-architecture i386
+    sudo apt-get update
+    sudo apt-get install clang g++-multilib ninja-build glslang-tools pkg-config \
+        libx11-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 \
+        libxi-dev:i386 libxss-dev:i386 libxkbcommon-dev:i386 \
+        libwayland-dev:i386 wayland-protocols libegl1-mesa-dev:i386 \
+        libasound2-dev:i386 libpulse-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
+    export PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
+
+SDL3 is built from source when it is not installed.
+
 Fedora packages:
 
-    sudo dnf install clang glibc-devel.i686 libstdc++-devel.i686 SDL3-devel.i686 ninja-build glslang
+    sudo dnf install clang gcc-c++ glibc-devel.i686 libstdc++-devel.x86_64 libstdc++-devel.i686 SDL3-devel.i686 ninja-build glslang
 
 Then:
 
