@@ -222,9 +222,13 @@ BOOL Gfx_SetVideoMode(int width, int height, BOOL fullscreen);
 void Gfx_SetFullscreen(BOOL fullscreen);
 void Gfx_Shutdown(void);
 
-/* Resolutions to offer, largest first. */
+/* Resolutions to offer, smallest first. */
 int Gfx_GetDisplayModeCount(void);
 void Gfx_GetDisplayMode(int index, int *width, int *height);
+/* The resolution of a new configuration, one of the modes offered: the
+   display's aspect ratio at 720 lines (540 on Android), or the display's own
+   when smaller. */
+void Gfx_GetDefaultDisplayMode(int *width, int *height);
 
 /* A frame is BeginScene...EndScene blocks (any number) and one Present. */
 void Gfx_BeginScene(void);

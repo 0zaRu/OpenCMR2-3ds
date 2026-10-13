@@ -68,8 +68,12 @@ block, and draws with an "uber" shader that reproduces the fixed-function
 equations. Device enumeration, display-mode switching, lost surfaces and
 COM disappear: the game asks for what it needs and the backend provides it.
 
-The display modes offered to the game go up to the desktop resolution,
-including widescreen ones. As in SilentPatch, the projection keeps the
+The display modes offered to the game are the original 4:3 ones up to
+1024x768 and the display's own aspect ratio from 540 lines up to the desktop
+resolution. A new configuration starts at the display's aspect ratio at 720
+lines (540 on Android): the game draws its menus, text and HUD in pixels for
+640x480, so they shrink as the resolution grows, and higher modes are there
+for a sharper 3D picture. As in SilentPatch, the projection keeps the
 vertical view at any aspect ratio instead of stretching it, and the field of
 view is configurable (`View_SetPlayerProjection`). Further rendering
 improvements will be added one at a time, each behind an option, with the

@@ -163,19 +163,36 @@ GfxTexture *Root(GfxTexture *t)
     return t != NULL && t->cube != NULL ? t->cube : t;
 }
 
+// The desktop size, landscape: the game always runs that way (on Android the
+// display can still report its natural portrait size).
+void LandscapeDesktopSize(int *width, int *height)
+{
+    Sys_GetDesktopSize(width, height);
+    if (*height > *width)
+        std::swap(*width, *height);
+}
+
+// Resolutions at the display's aspect ratio, from 540 lines up to the display
+// itself, and the original 4:3 ones up to 1024x768. At most 10 (the game's
+// list), smallest first.
 void BuildModes()
 {
-    static const int candidates[][2] = { { 640, 480 }, { 800, 600 }, { 1024, 768 }, { 1280, 720 }, { 1280, 960 },
-                                         { 1600, 900 }, { 1920, 1080 }, { 2560, 1440 }, { 3840, 2160 } };
+    static const int classic[][2] = { { 640, 480 }, { 800, 600 }, { 1024, 768 } };
+    static const int heights[] = { 540, 720, 900, 1080, 1440, 2160 };
     int desktopW, desktopH;
 
     s_modes.clear();
-    Sys_GetDesktopSize(&desktopW, &desktopH);
-    for (const auto &c : candidates)
-        if (c[0] <= desktopW && c[1] <= desktopH)
-            s_modes.push_back({ c[0], c[1] });
-    if (std::find(s_modes.begin(), s_modes.end(), std::make_pair(desktopW, desktopH)) == s_modes.end())
-        s_modes.push_back({ desktopW, desktopH });
+    LandscapeDesktopSize(&desktopW, &desktopH);
+    auto add = [&](int w, int h) {
+        if (w <= desktopW && h <= desktopH &&
+            std::find(s_modes.begin(), s_modes.end(), std::make_pair(w, h)) == s_modes.end())
+            s_modes.push_back({ w, h });
+    };
+    for (const auto &c : classic)
+        add(c[0], c[1]);
+    for (int h : heights)
+        add((int)((long long)h * desktopW / desktopH) & ~1, h);
+    add(desktopW, desktopH);
     std::sort(s_modes.begin(), s_modes.end());
     while (s_modes.size() > 10)
         s_modes.erase(s_modes.begin() + 1);
@@ -290,6 +307,27 @@ extern "C" int Gfx_GetDisplayModeCount(void)
     if (s_modes.empty())
         BuildModes();
     return (int)s_modes.size();
+}
+
+extern "C" void Gfx_GetDefaultDisplayMode(int *width, int *height)
+{
+    // The display's aspect ratio, at a height where the game's 2D (menus,
+    // text, HUD), drawn in pixels for 640x480, stays readable: 720 lines, as
+    // the game was played at 1024x768, and 540 on Android's small screens.
+    // Higher modes stay available for a sharper 3D picture.
+#ifdef __ANDROID__
+    const int lines = 540;
+#else
+    const int lines = 720;
+#endif
+    int desktopW, desktopH;
+    LandscapeDesktopSize(&desktopW, &desktopH);
+    *width = desktopW;
+    *height = desktopH;
+    if (desktopH > lines) {
+        *width = (int)((long long)lines * desktopW / desktopH) & ~1;
+        *height = lines;
+    }
 }
 
 extern "C" void Gfx_GetDisplayMode(int index, int *width, int *height)

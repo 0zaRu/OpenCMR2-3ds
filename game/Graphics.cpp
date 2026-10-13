@@ -147,14 +147,20 @@ bool CGraphics::InitializeDirectX(void) {
 }
 
 // FUNCTION: CMR2 0x00405990
+// PORT: a new configuration starts at the display's aspect ratio
+// (Gfx_GetDefaultDisplayMode) instead of 640x480, in 32-bit colour, the only
+// depth the renderer offers (16-bit made it fall back to 640x480).
 void CGraphics::SetDefaults(void) {
+    int width, height;
+
+    Gfx_GetDefaultDisplayMode(&width, &height);
     CGameInfo::m_gameInfo.graphicsOptions |= 0x40000000;
-    CGameInfo::m_gameInfo.screenWidth = 0x280;
-    g_pGraphics->resX = 0x280;
-    CGameInfo::m_gameInfo.screenHeight = 0x1e0;
-    g_pGraphics->resY = 0x1e0;
-    CGameInfo::m_gameInfo.screenColourDepth = 0x10;
-    g_pGraphics->depth = 0x10;
+    CGameInfo::m_gameInfo.screenWidth = width;
+    g_pGraphics->resX = width;
+    CGameInfo::m_gameInfo.screenHeight = height;
+    g_pGraphics->resY = height;
+    CGameInfo::m_gameInfo.screenColourDepth = 0x20;
+    g_pGraphics->depth = 0x20;
     CGameInfo::m_gameInfo.graphicsOptions |= 1;
     g_pGraphics->isFullscreen = 1;
     CGameInfo::m_gameInfo.graphicsOptions &= 0xfffffff9;
@@ -371,8 +377,13 @@ BOOL CGraphics::CreateSelectedDisplayAndRenderDevice(int screenWidth, int screen
         g_pGraphics->resY = screenHeight;
         g_pGraphics->depth = colourDepth;
     } else {
-        g_pGraphics->resX = 640;
-        g_pGraphics->resY = 480;
+        // PORT: a saved resolution the display no longer offers (another
+        // monitor, or the list of an earlier version) falls back to the
+        // display's default instead of 640x480.
+        int width, height;
+        Gfx_GetDefaultDisplayMode(&width, &height);
+        g_pGraphics->resX = width;
+        g_pGraphics->resY = height;
         g_pGraphics->depth = 32;
     }
 
