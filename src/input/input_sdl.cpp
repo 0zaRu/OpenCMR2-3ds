@@ -26,6 +26,7 @@ struct Axis {
 struct InputDevice {
     DeviceType type;
     SDL_Joystick *joystick = nullptr;
+    SDL_Gamepad *gamepad = nullptr;     // controllers SDL knows the layout of
     SDL_Haptic *haptic = nullptr;
     char name[260] = {};
     Axis axes[8];               // X, Y, Z, Rx, Ry, Rz, slider 0, slider 1
@@ -82,6 +83,37 @@ LONG ScaleAxis(const Axis &axis, Sint16 raw)
     double centre = (axis.min + (double)axis.max) / 2.0;
     double half = (axis.max - (double)axis.min) / 2.0;
     return (LONG)lround(centre + out * half);
+}
+
+// Gamepads are presented as DirectInput showed an Xbox controller, which the
+// game was made for: left stick X and Y, right stick Rx and Ry, buttons A, B,
+// X, Y, LB, RB, Back, Start and the stick clicks, the D-pad as POV 0. The
+// triggers are Z (left) and Rz (right), centred when released: DirectInput
+// games take a released axis to be centred, while SDL's raw trigger axes rest
+// at their minimum, which the game read as the opposite pedal held down.
+// (DirectInput combined both triggers on Z; separate axes allow pressing both.)
+const SDL_GamepadAxis s_gamepadAxes[6] = {
+    SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, SDL_GAMEPAD_AXIS_LEFT_TRIGGER,
+    SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,
+};
+const SDL_GamepadButton s_gamepadButtons[10] = {
+    SDL_GAMEPAD_BUTTON_SOUTH, SDL_GAMEPAD_BUTTON_EAST, SDL_GAMEPAD_BUTTON_WEST, SDL_GAMEPAD_BUTTON_NORTH,
+    SDL_GAMEPAD_BUTTON_LEFT_SHOULDER, SDL_GAMEPAD_BUTTON_RIGHT_SHOULDER, SDL_GAMEPAD_BUTTON_BACK,
+    SDL_GAMEPAD_BUTTON_START, SDL_GAMEPAD_BUTTON_LEFT_STICK, SDL_GAMEPAD_BUTTON_RIGHT_STICK,
+};
+
+Uint8 HatOfGamepad(SDL_Gamepad *gamepad)
+{
+    Uint8 hat = SDL_HAT_CENTERED;
+    if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_UP))
+        hat |= SDL_HAT_UP;
+    if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_DOWN))
+        hat |= SDL_HAT_DOWN;
+    if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_LEFT))
+        hat |= SDL_HAT_LEFT;
+    if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT))
+        hat |= SDL_HAT_RIGHT;
+    return hat;
 }
 
 DWORD PovOfHat(Uint8 hat)
@@ -196,16 +228,20 @@ extern "C" InputDevice *Input_OpenJoystick(int index)
         SDL_free(ids);
         return NULL;
     }
-    SDL_Joystick *joystick = SDL_OpenJoystick(ids[index]);
+    SDL_Gamepad *gamepad = SDL_IsGamepad(ids[index]) ? SDL_OpenGamepad(ids[index]) : NULL;
+    SDL_Joystick *joystick = gamepad ? SDL_GetGamepadJoystick(gamepad) : SDL_OpenJoystick(ids[index]);
     SDL_free(ids);
-    if (joystick == NULL)
+    if (joystick == NULL) {
+        SDL_CloseGamepad(gamepad);
         return NULL;
+    }
 
     InputDevice *device = new InputDevice;
     device->type = DEVICE_JOYSTICK;
     device->joystick = joystick;
-    device->sdlAxisCount = SDL_GetNumJoystickAxes(joystick);
-    const char *name = SDL_GetJoystickName(joystick);
+    device->gamepad = gamepad;
+    device->sdlAxisCount = gamepad ? 6 : SDL_GetNumJoystickAxes(joystick);
+    const char *name = gamepad ? SDL_GetGamepadName(gamepad) : SDL_GetJoystickName(joystick);
     snprintf(device->name, sizeof(device->name), "%s", name ? name : "Joystick");
     if (SDL_IsJoystickHaptic(joystick))
         device->haptic = SDL_OpenHapticFromJoystick(joystick);
@@ -220,7 +256,9 @@ extern "C" void Input_CloseDevice(InputDevice *device)
         Input_DestroyEffect(device->effects.back());
     if (device->haptic != NULL)
         SDL_CloseHaptic(device->haptic);
-    if (device->joystick != NULL)
+    if (device->gamepad != NULL)
+        SDL_CloseGamepad(device->gamepad);   // and its joystick
+    else if (device->joystick != NULL)
         SDL_CloseJoystick(device->joystick);
     if (device->type == DEVICE_MOUSE && Platform_GetWindow() != NULL)
         SDL_SetWindowRelativeMouseMode(Platform_GetWindow(), false);
@@ -242,10 +280,10 @@ extern "C" void Input_GetCaps(InputDevice *device, InputCaps *caps)
     memset(caps, 0, sizeof(*caps));
     if (device->joystick != NULL) {
         caps->axes = device->sdlAxisCount > 8 ? 8 : device->sdlAxisCount;
-        caps->buttons = SDL_GetNumJoystickButtons(device->joystick);
+        caps->buttons = device->gamepad ? SDL_arraysize(s_gamepadButtons) : SDL_GetNumJoystickButtons(device->joystick);
         if (caps->buttons > 128)
             caps->buttons = 128;
-        caps->povs = SDL_GetNumJoystickHats(device->joystick);
+        caps->povs = device->gamepad ? 1 : SDL_GetNumJoystickHats(device->joystick);
         if (caps->povs > 4)
             caps->povs = 4;
         caps->forceFeedback = device->haptic != NULL;
@@ -371,9 +409,15 @@ extern "C" BOOL Input_ReadJoystick(InputDevice *device, InputJoystickState *stat
     if (device->joystick == NULL || !SDL_JoystickConnected(device->joystick))
         return FALSE;
     SDL_UpdateJoysticks();
-    for (int i = 0; i < 8; i++)
-        values[i] = i < device->sdlAxisCount ? ScaleAxis(device->axes[i], SDL_GetJoystickAxis(device->joystick, i))
-                                             : (device->axes[i].min + device->axes[i].max) / 2;
+    for (int i = 0; i < 8; i++) {
+        if (i >= device->sdlAxisCount) {
+            values[i] = (device->axes[i].min + device->axes[i].max) / 2;
+            continue;
+        }
+        Sint16 raw = device->gamepad ? SDL_GetGamepadAxis(device->gamepad, s_gamepadAxes[i])
+                                     : SDL_GetJoystickAxis(device->joystick, i);
+        values[i] = ScaleAxis(device->axes[i], raw);
+    }
     state->lX = values[0];
     state->lY = values[1];
     state->lZ = values[2];
@@ -382,6 +426,15 @@ extern "C" BOOL Input_ReadJoystick(InputDevice *device, InputJoystickState *stat
     state->lRz = values[5];
     state->rglSlider[0] = values[6];
     state->rglSlider[1] = values[7];
+    if (device->gamepad != NULL) {
+        state->rgdwPOV[0] = PovOfHat(HatOfGamepad(device->gamepad));
+        for (int i = 1; i < 4; i++)
+            state->rgdwPOV[i] = INPUT_POV_CENTERED;
+        for (size_t i = 0; i < SDL_arraysize(s_gamepadButtons); i++)
+            if (SDL_GetGamepadButton(device->gamepad, s_gamepadButtons[i]))
+                state->rgbButtons[i] = 0x80;
+        return TRUE;
+    }
     int hats = SDL_GetNumJoystickHats(device->joystick);
     for (int i = 0; i < 4; i++)
         state->rgdwPOV[i] = i < hats ? PovOfHat(SDL_GetJoystickHat(device->joystick, i)) : INPUT_POV_CENTERED;
