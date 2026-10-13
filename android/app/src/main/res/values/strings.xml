@@ -14,6 +14,8 @@
     <string name="setup_failed">The game files could not be copied.\n%1$s</string>
     <string name="touch_pause">Pause</string>
     <string name="touch_ok">OK</string>
+    <string name="touch_accelerate">Accelerate</string>
+    <string name="touch_brake">Brake</string>
     <string name="touch_handbrake">Handbrake</string>
     <string name="touch_camera">Camera</string>
     <string name="touch_gear_up">Gear up</string>

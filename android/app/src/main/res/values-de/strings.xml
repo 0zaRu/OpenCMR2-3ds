@@ -1,0 +1,22 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="setup_title">Willkommen bei OpenCMR2</string>
+    <string name="setup_intro">OpenCMR2 spielt deine Kopie von Colin McRae Rally 2.0 für PC. Kopiere ihren Installationsordner auf dieses Gerät und wähle ihn hier aus. Die Spieldateien werden einmalig in die App kopiert, etwa 700 MB.</string>
+    <string name="setup_where">Der Ordner muss Game, FrontEnd und Sounds enthalten. Du kannst auch einen Ordner wählen, der ihn enthält. Dateien auf einer CD oder ISO müssen zuerst installiert oder entpackt werden.</string>
+    <string name="setup_choose">Spielordner auswählen</string>
+    <string name="setup_choose_again">Anderen Ordner auswählen</string>
+    <string name="setup_searching">Spieldateien werden gesucht…</string>
+    <string name="setup_copying">Spieldateien werden kopiert: %1$s von %2$s</string>
+    <string name="setup_not_found">In diesem Ordner wurde keine vollständige Installation des Spiels gefunden. Er muss Game/Bigfiles/common.bfl, FrontEnd/common.bfl und Sounds/surface.bfl enthalten.</string>
+    <string name="setup_ambiguous">In diesem Ordner wurde mehr als eine Installation des Spiels gefunden:\n%1$s\nWähle die aus, die du verwenden möchtest.</string>
+    <string name="setup_no_space">Nicht genug freier Speicher: Das Spiel braucht %1$s, frei sind %2$s.</string>
+    <string name="setup_failed">Die Spieldateien konnten nicht kopiert werden.\n%1$s</string>
+    <string name="touch_pause">Pause</string>
+    <string name="touch_ok">OK</string>
+    <string name="touch_accelerate">Gas geben</string>
+    <string name="touch_brake">Bremsen</string>
+    <string name="touch_handbrake">Handbremse</string>
+    <string name="touch_camera">Kamera</string>
+    <string name="touch_gear_up">Hochschalten</string>
+    <string name="touch_gear_down">Herunterschalten</string>
+</resources>

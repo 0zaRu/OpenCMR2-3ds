@@ -13,6 +13,8 @@
     <string name="setup_failed">No se han podido copiar los archivos del juego.\n%1$s</string>
     <string name="touch_pause">Pausa</string>
     <string name="touch_ok">Aceptar</string>
+    <string name="touch_accelerate">Acelerar</string>
+    <string name="touch_brake">Frenar</string>
     <string name="touch_handbrake">Freno de mano</string>
     <string name="touch_camera">Cámara</string>
     <string name="touch_gear_up">Subir marcha</string>

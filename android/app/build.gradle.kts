@@ -115,6 +115,15 @@ android {
         compose = true
     }
 
+    // The app follows the system language, and Android 13+ lists these
+    // languages in its per-app language settings (from res/values-*).
+    // Library strings in other languages are left out, so a screen never
+    // mixes languages.
+    androidResources {
+        generateLocaleConfig = true
+        localeFilters += listOf("en", "de", "es", "fr", "it", "pl")
+    }
+
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
         targetCompatibility = JavaVersion.VERSION_17
