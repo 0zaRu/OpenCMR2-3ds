@@ -88,10 +88,9 @@ LONG ScaleAxis(const Axis &axis, Sint16 raw)
 // Gamepads are presented as DirectInput showed an Xbox controller, which the
 // game was made for: left stick X and Y, right stick Rx and Ry, buttons A, B,
 // X, Y, LB, RB, Back, Start and the stick clicks, the D-pad as POV 0. The
-// triggers are Z (left) and Rz (right), centred when released: DirectInput
-// games take a released axis to be centred, while SDL's raw trigger axes rest
-// at their minimum, which the game read as the opposite pedal held down.
-// (DirectInput combined both triggers on Z; separate axes allow pressing both.)
+// triggers are Z (left) and Rz (right), each read as a wheel's pedal:
+// DirectInput drivers combined the triggers on Z, but separate axes let
+// throttle and brake be held together. See RawAxis.
 const SDL_GamepadAxis s_gamepadAxes[6] = {
     SDL_GAMEPAD_AXIS_LEFTX, SDL_GAMEPAD_AXIS_LEFTY, SDL_GAMEPAD_AXIS_LEFT_TRIGGER,
     SDL_GAMEPAD_AXIS_RIGHTX, SDL_GAMEPAD_AXIS_RIGHTY, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER,
@@ -114,6 +113,28 @@ Uint8 HatOfGamepad(SDL_Gamepad *gamepad)
     if (SDL_GetGamepadButton(gamepad, SDL_GAMEPAD_BUTTON_DPAD_RIGHT))
         hat |= SDL_HAT_RIGHT;
     return hat;
+}
+
+// The game reads a throttle or brake on an axis of its own as DirectInput
+// wheels report their pedals: the maximum when released, the minimum when
+// pressed fully (a centred axis is half pressed). Returns axis i so: SDL's
+// triggers go from 0 released to the maximum, and a raw axis that rested at
+// its minimum when the device connected (SDL's initial state) is a pedal
+// that goes the other way.
+Sint16 RawAxis(const InputDevice *device, int i)
+{
+    if (device->gamepad != NULL) {
+        Sint16 raw = SDL_GetGamepadAxis(device->gamepad, s_gamepadAxes[i]);
+        if (s_gamepadAxes[i] != SDL_GAMEPAD_AXIS_LEFT_TRIGGER && s_gamepadAxes[i] != SDL_GAMEPAD_AXIS_RIGHT_TRIGGER)
+            return raw;
+        return (Sint16)(SDL_JOYSTICK_AXIS_MAX - 2 * SDL_max(raw, 0));
+    }
+    const Sint16 pedalRest = 30000;
+    Sint16 raw = SDL_GetJoystickAxis(device->joystick, i);
+    Sint16 rest = 0;
+    if (SDL_GetJoystickAxisInitialState(device->joystick, i, &rest) && rest <= -pedalRest)
+        return (Sint16)(-1 - raw);   // a pedal resting at the minimum
+    return raw;
 }
 
 DWORD PovOfHat(Uint8 hat)
@@ -318,6 +339,11 @@ extern "C" BOOL Input_GetObjectName(InputDevice *device, DWORD offset, char *nam
     return TRUE;
 }
 
+extern "C" BOOL Input_IsGamepad(InputDevice *device)
+{
+    return device != NULL && device->gamepad != NULL;
+}
+
 extern "C" BOOL Input_HasAxis(InputDevice *device, DWORD offset)
 {
     int axis = AxisOfOffset(offset);
@@ -414,9 +440,7 @@ extern "C" BOOL Input_ReadJoystick(InputDevice *device, InputJoystickState *stat
             values[i] = (device->axes[i].min + device->axes[i].max) / 2;
             continue;
         }
-        Sint16 raw = device->gamepad ? SDL_GetGamepadAxis(device->gamepad, s_gamepadAxes[i])
-                                     : SDL_GetJoystickAxis(device->joystick, i);
-        values[i] = ScaleAxis(device->axes[i], raw);
+        values[i] = ScaleAxis(device->axes[i], RawAxis(device, i));
     }
     state->lX = values[0];
     state->lY = values[1];

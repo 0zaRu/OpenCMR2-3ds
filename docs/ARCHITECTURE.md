@@ -98,9 +98,13 @@ Joysticks are read through SDL3 into a `DIJOYSTATE2`-like structure of our
 own (axes, sliders, POVs, buttons). Controllers SDL knows the layout of are
 presented as DirectInput showed an Xbox controller: sticks on X/Y and Rx/Ry,
 buttons A, B, X, Y, LB, RB, Back, Start and the stick clicks, the D-pad as
-POV 0. The triggers are Z and Rz, centred when released, as the game takes a
-released axis to be centred (DirectInput put both on Z, which kept them from
-being pressed together). Force-feedback effects (constant, spring,
+POV 0. The triggers are Z and Rz, each read as DirectInput wheels report a
+pedal: the maximum when released, the minimum when pressed fully, which is
+what the game expects of a throttle and a brake on separate axes (DirectInput
+put both triggers on Z, which kept them from being pressed together). Raw
+axes that rest at their minimum, such as some wheels' pedals, are turned the
+same way. A gamepad starts with throttle on the right trigger and brake on
+the left (`PORT:` in `CInput::InitDetectedControllerSlot`). Force-feedback effects (constant, spring,
 damper, friction, inertia) map to SDL haptic effects, with rumble as the
 fallback on gamepads.
 

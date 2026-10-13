@@ -1386,6 +1386,32 @@ void CInput::InitDetectedControllerSlot(DeviceInfo *pDevice, int index)
         ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[8], CFrontend::GetTextString(0x1fe));
         return;
     }
+    // PORT: a gamepad (Xbox layout, src/input) starts with the right trigger
+    // (Rz) as throttle and the left (Z) as brake, each read as a pedal, rather
+    // than both on the left stick's Y axis as for other joysticks.
+    if (pController->field_0x10c != 0 && Input_IsGamepad(m_unk0x0059f6b0[pDevice->field_0x18]) &&
+        *(DWORD *)DEVICE_BINDING(pDevice, 0) != 0 && *(DWORD *)DEVICE_BINDING(pDevice, 2) != 0 &&
+        *(DWORD *)DEVICE_BINDING(pDevice, 5) != 0) {
+        pController->field_0x128 = 1;
+        pController->field_0x12a = 2;
+        pController->field_0x210[0] = *DEVICE_BINDING(pDevice, 0);
+        pController->field_0x2d8[0] = 0;
+        pController->field_0x210[1] = *DEVICE_BINDING(pDevice, 0);
+        pController->field_0x2d8[1] = 0;
+        pController->field_0x12c = 4;
+        pController->field_0x210[2] = *DEVICE_BINDING(pDevice, 5);
+        pController->field_0x2d8[2] = 5;
+        pController->field_0x12e = 8;
+        pController->field_0x210[3] = *DEVICE_BINDING(pDevice, 2);
+        pController->field_0x2d8[3] = 2;
+        pController->field_0x130 = 0x10;
+        pController->field_0x132 = 0x20;
+        pController->field_0x134 = 0x40;
+        pController->field_0x136 = 0x80;
+        pController->field_0x138 = 0x100;
+        pController->field_0x13a = 0x200;
+        return;
+    }
     if (pController->field_0x10c != 0) {
         pController->field_0x128 = 1;
         pController->field_0x12a = 2;

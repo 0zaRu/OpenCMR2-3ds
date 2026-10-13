@@ -61,6 +61,7 @@ target_include_directories(preview_cleanup_test PRIVATE ${PROJECT_SOURCE_DIR}/ga
 target_link_libraries(preview_cleanup_test PRIVATE opencmr2_platform)
 add_test(NAME preview_cleanup COMMAND preview_cleanup_test)
 add_executable(gamepad_layout_test gamepad_layout.cpp)
+target_include_directories(gamepad_layout_test PRIVATE ${PROJECT_SOURCE_DIR}/game)
 target_link_libraries(gamepad_layout_test PRIVATE opencmr2_platform)
 add_test(NAME gamepad_layout COMMAND gamepad_layout_test)
 
