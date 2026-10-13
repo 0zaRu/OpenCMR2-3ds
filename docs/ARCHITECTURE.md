@@ -16,6 +16,7 @@ SDL3 and the SDL GPU API (Vulkan, Metal) and needs the original game data.
 | `src/input/` | Keyboard, mouse, joysticks, gamepads and force feedback (SDL3). |
 | `src/video/` | Standalone Bink 1 (`BIKi`) video/audio decoder behind `movie.h`; queued sound uses the SDL3 mixer. No external codec library. See [VIDEO.md](VIDEO.md). |
 | `src/net/` | Network sessions behind `net.h` (replaces DirectPlay). |
+| `android/` | Android app (Gradle): game data import, the activity SDL runs the game in, on-screen controls. |
 | `tests/` | Unit tests and the golden replay tests. |
 | `tests/reference/` | Frozen recordings, comparison reports and provenance used by regression tests. |
 | `tools/` | Source sync, layout generation, audits, captures and release packaging. |

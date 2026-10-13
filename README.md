@@ -8,8 +8,8 @@
 
 OpenCMR2 is a work-in-progress native port of **Colin McRae Rally 2.0** (PC, 2000)
 to modern platforms, built on the [CMR2Decomp](https://github.com/pablocpas/CMR2Decomp)
-decompilation. It runs the original game code natively on Linux, Windows and
-macOS. There is no emulation and no Wine or DirectX wrapper: DirectDraw,
+decompilation. It runs the original game code natively on Linux, Windows,
+macOS and Android. There is no emulation and no Wine or DirectX wrapper: DirectDraw,
 Direct3D 7, DirectSound, DirectInput, DirectPlay and Bink are replaced with
 SDL3, the SDL GPU API (Vulkan, Metal) and the port's own code.
 
@@ -36,6 +36,7 @@ as it is made.
 | Linux | ARM64 | Builds and passes the tests, gameplay not yet tested |
 | Windows | x86-64 | Plays stages and matches the original physics (tested under Wine) |
 | macOS | ARM64 | Builds and passes the tests, gameplay not yet tested |
+| Android | ARM64, x86-64 | Plays stages with on-screen controls (Android 10 or later, Vulkan) |
 
 ### Features
 
@@ -45,7 +46,7 @@ as it is made.
   pipeline in shaders
 * Fullscreen on the desktop resolution or a resizable window, switched with
   Alt+Enter
-* Keyboard, mouse and gamepads through SDL3
+* Keyboard, mouse and gamepads through SDL3, and on-screen controls on Android
 * Bink intro and country videos with a built-in decoder
 * Multiplayer over LAN and the internet using UDP instead of DirectPlay
 * Folder dialog on first launch to locate the game installation
@@ -93,6 +94,7 @@ Download the package for your platform from
 | Linux ARM64 | `OpenCMR2-Linux-arm64.tar.gz` |
 | Linux 32-bit | `OpenCMR2-Linux-i686.tar.gz` |
 | macOS (Apple silicon) | `OpenCMR2-macOS-arm64.zip` |
+| Android | `OpenCMR2-Android.apk` |
 
 Extract it and run `opencmr2`. On first launch, choose the folder of your PC
 installation. The installation itself, a folder inside it or a parent folder
@@ -101,6 +103,13 @@ where they are.
 
 If you have the CD or an ISO, install the game or extract it first: OpenCMR2
 reads the installed folders (`Game`, `FrontEnd`, `Sounds`, ...).
+
+On Android, install the APK and copy the installation folder to the
+device first. On first launch, choose it in the system's folder picker: the
+game files are copied into the app once (about 700 MB), as Android gives
+apps no direct access to other folders. The on-screen controls press the
+default keyboard keys, so they work in the menus and on the stages, and
+hide while an external gamepad is used. Back pauses the game.
 
 The Linux packages are built on Ubuntu 24.04 and need a distribution of
 similar age or newer. The macOS package is not signed: after extracting it,
@@ -210,6 +219,25 @@ cmake --build --preset windows-x64
 `clang-cl` is not supported, as the build uses GNU-style options. To
 cross-build from Linux with LLVM-MinGW, see [WINDOWS.md](docs/WINDOWS.md).
 
+### Android
+
+The Gradle project in `android/` builds the same CMake project with the
+Android NDK. It needs JDK 17 or later, the Android SDK (with `ANDROID_HOME`
+set or `sdk.dir` in `android/local.properties`) and glslang on the `PATH`.
+Gradle downloads SDL's source and fetches the NDK, CMake and SDK platform
+when the SDK licences are accepted:
+
+```sh
+cd android
+./gradlew assembleRelease
+```
+
+The APK is `android/app/build/outputs/apk/release/app-release.apk`. It is
+signed with the release key given by `OPENCMR2_KEYSTORE`,
+`OPENCMR2_KEYSTORE_PASSWORD`, `OPENCMR2_KEY_ALIAS` and
+`OPENCMR2_KEY_PASSWORD` (or the `opencmr2.keystore` Gradle properties), and
+with the debug key otherwise.
+
 ### Tests
 
 ```sh
@@ -245,13 +273,16 @@ The full index is in [docs/README.md](docs/README.md).
   whose improvements are built in and which is the reference for the
   comparisons with the original game
 * The [SDL](https://libsdl.org) and [ENet](http://enet.bespin.org) projects
+* Filippo Scognamiglio for [RadialGamePad](https://github.com/Swordfish90/RadialGamePad),
+  the on-screen controls on Android
 * Konstantin Shishkov, Peter Ross and Daniel Verkamp for FFmpeg's Bink
   decoder, which `src/video/` is adapted from
 
 ## Licence
 
 OpenCMR2 is licensed under the [GPL-3.0](LICENSE). Bundled third-party code
-keeps its own licence: SDL3 (zlib), ENet (MIT) and the Bink decoder (LGPL-2.1).
+keeps its own licence: SDL3 (zlib), ENet (MIT), the Bink decoder (LGPL-2.1)
+and RadialGamePad (GPL-3.0).
 
 OpenCMR2 is an unofficial project, not affiliated with or endorsed by
 Codemasters or Electronic Arts. Colin McRae Rally 2.0 is a trademark of its
