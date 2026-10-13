@@ -171,7 +171,7 @@ development libraries:
 
 ```sh
 sudo apt install clang cmake ninja-build glslang-tools pkg-config \
-    libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev \
+    libx11-dev libxext-dev libxrandr-dev libxcursor-dev libxi-dev libxss-dev libxtst-dev \
     libxkbcommon-dev libwayland-dev wayland-protocols libegl1-mesa-dev \
     libasound2-dev libpulse-dev libudev-dev libdbus-1-dev
 ```
