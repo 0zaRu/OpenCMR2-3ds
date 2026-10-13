@@ -51,7 +51,7 @@ if(OPENCMR2_SANITIZE)
 endif()
 
 if(NOT OPENCMR2_VENDORED_SDL)
-    find_package(SDL3 3.2 CONFIG COMPONENTS SDL3-shared)
+    find_package(SDL3 3.4 CONFIG COMPONENTS SDL3-shared)
 endif()
 if(NOT TARGET SDL3::SDL3)
     message(STATUS "OpenCMR2: building SDL3 from source")

@@ -156,9 +156,9 @@ in `CMakePresets.json`:
 | `macos` | macOS, Apple silicon |
 | `linux-x86` | Linux, 32-bit x86 (reference build for the tests) |
 
-SDL3 is used from the system when installed. Otherwise CMake downloads and
-builds it and places it next to the executable (to force this, pass
-`-DOPENCMR2_VENDORED_SDL=ON`). Start by cloning the repository:
+OpenCMR2 needs SDL 3.4 or later. An installed SDL3 of that version is used;
+otherwise CMake downloads and builds it and places it next to the executable
+(to force this, pass `-DOPENCMR2_VENDORED_SDL=ON`). Start by cloning the repository:
 
 ```sh
 git clone https://github.com/pablocpas/OpenCMR2.git
@@ -169,7 +169,7 @@ cd OpenCMR2
 
 Install the dependencies.
 
-Fedora:
+Fedora (SDL3-devel is used when it is 3.4 or later):
 
 ```sh
 sudo dnf install clang cmake ninja-build glslang SDL3-devel

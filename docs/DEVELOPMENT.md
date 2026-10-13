@@ -32,7 +32,7 @@ export PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
 cmake --preset linux-x86 -DOPENCMR2_VENDORED_SDL=ON
 ```
 
-On Fedora:
+On Fedora (`SDL3-devel.i686` is used when it is 3.4 or later):
 
 ```sh
 sudo dnf install clang gcc-c++ glibc-devel.i686 libstdc++-devel.x86_64 \

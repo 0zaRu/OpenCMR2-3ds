@@ -22,9 +22,9 @@ checksum.
 Use the official LLVM-MinGW UCRT bundle. The local build was validated with
 `llvm-mingw-20261006-ucrt-ubuntu-22.04-x86_64.tar.xz`, SHA-256
 `5f9c6ed95b2d4bdb2869a488c5fd5857fbdabcf288a0aa3eb1da43f6a08d8ab4`.
-The Windows SDL3 package used locally is the official `SDL3-devel-3.2.16-mingw.tar.gz`,
-SHA-256 `e95581bbef8f94042c7433a57b6e9ab4517c0ea54faddc85d0a706b2d35e04ef`,
-from [SDL's release](https://github.com/libsdl-org/SDL/releases/tag/release-3.2.16).
+The Windows SDL3 package used locally is the official `SDL3-devel-3.4.18-mingw.tar.gz`,
+SHA-256 `049b9dd711e3fb3f8d84feb998dfec54a75e17cf539c4a80ff4d058d839771cf`,
+from [SDL's release](https://github.com/libsdl-org/SDL/releases/tag/release-3.4.18).
 Host-side CMake, Ninja and glslangValidator generate the embedded Vulkan
 shaders.
 
