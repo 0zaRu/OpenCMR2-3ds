@@ -25,7 +25,7 @@ sudo dpkg --add-architecture i386
 sudo apt-get update
 sudo apt-get install clang g++-multilib ninja-build glslang-tools pkg-config \
     libx11-dev:i386 libxext-dev:i386 libxrandr-dev:i386 libxcursor-dev:i386 \
-    libxi-dev:i386 libxss-dev:i386 libxkbcommon-dev:i386 \
+    libxi-dev:i386 libxss-dev:i386 libxtst-dev:i386 libxkbcommon-dev:i386 \
     libwayland-dev:i386 wayland-protocols libegl1-mesa-dev:i386 \
     libasound2-dev:i386 libudev-dev:i386 libdbus-1-dev:i386
 export PKG_CONFIG_LIBDIR=/usr/lib/i386-linux-gnu/pkgconfig:/usr/share/pkgconfig
