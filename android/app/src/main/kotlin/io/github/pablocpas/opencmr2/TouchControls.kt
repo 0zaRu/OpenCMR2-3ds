@@ -157,10 +157,11 @@ class TouchControls(private val activity: Activity, parent: ViewGroup) : InputMa
         for (id in pressed.toList()) set(id, false)
     }
 
-    // Phones list built-in keys and sensors as input devices too, some with
-    // gamepad sources, so only an external, non-virtual controller counts.
-    private fun isGamepad(device: InputDevice?) = device != null && !device.isVirtual && device.isExternal &&
-        (device.supportsSource(InputDevice.SOURCE_GAMEPAD) || device.supportsSource(InputDevice.SOURCE_JOYSTICK))
+    // A controller, external or built into a handheld, has gamepad buttons.
+    // Phones list other built-in devices with joystick sources too (the
+    // OnePlus 12's touch panel), but those have no gamepad buttons.
+    private fun isGamepad(device: InputDevice?) = device != null && !device.isVirtual &&
+        device.supportsSource(InputDevice.SOURCE_GAMEPAD) && !device.supportsSource(InputDevice.SOURCE_TOUCHSCREEN)
 
     private fun show(visible: Boolean) {
         if (!visible) releaseAll()
@@ -170,11 +171,15 @@ class TouchControls(private val activity: Activity, parent: ViewGroup) : InputMa
     private fun updateVisibility() =
         show(inputManager.inputDeviceIds.none { isGamepad(inputManager.getInputDevice(it)) })
 
-    /** Hides the controls while a gamepad is played, shows them again on a touch. */
-    fun onInput(device: InputDevice?, source: Int) {
+    /**
+     * Follows what is being played, by the source of each event: a gamepad
+     * button or stick hides the controls, a touch shows them again.
+     */
+    fun onInput(source: Int) {
         if ((source and InputDevice.SOURCE_TOUCHSCREEN) == InputDevice.SOURCE_TOUCHSCREEN) {
             if (!overlay.isVisible) show(true)
-        } else if (overlay.isVisible && isGamepad(device)) {
+        } else if (overlay.isVisible && ((source and InputDevice.SOURCE_GAMEPAD) == InputDevice.SOURCE_GAMEPAD ||
+                (source and InputDevice.SOURCE_JOYSTICK) == InputDevice.SOURCE_JOYSTICK)) {
             show(false)
         }
     }

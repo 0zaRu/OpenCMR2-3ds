@@ -24,7 +24,7 @@ class GameActivity : SDLActivity() {
     // press and release together; the game reads the keyboard once a frame,
     // so the release is held back long enough for it to see the press.
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
-        controls?.onInput(event.device, event.source)
+        controls?.onInput(event.source)
         if (event.keyCode != KeyEvent.KEYCODE_BACK || mBrokenLibraries)
             return super.dispatchKeyEvent(event)
         if (event.action == KeyEvent.ACTION_DOWN && event.repeatCount == 0) {
@@ -35,12 +35,12 @@ class GameActivity : SDLActivity() {
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        controls?.onInput(event.device, event.source)
+        controls?.onInput(event.source)
         return super.dispatchTouchEvent(event)
     }
 
     override fun dispatchGenericMotionEvent(event: MotionEvent): Boolean {
-        controls?.onInput(event.device, event.source)
+        controls?.onInput(event.source)
         return super.dispatchGenericMotionEvent(event)
     }
 

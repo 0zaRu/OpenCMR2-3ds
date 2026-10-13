@@ -109,7 +109,7 @@ device first. On first launch, choose it in the system's folder picker: the
 game files are copied into the app once (about 700 MB), as Android gives
 apps no direct access to other folders. The on-screen controls press the
 default keyboard keys, so they work in the menus and on the stages, and
-hide while an external gamepad is used. Back pauses the game.
+hide while a gamepad is used, external or built into a handheld. Back pauses the game.
 
 The Linux packages are built on Ubuntu 24.04 and need a distribution of
 similar age or newer. The macOS package is not signed: after extracting it,
