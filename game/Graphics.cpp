@@ -3633,7 +3633,8 @@ void Graphics_LoadTextureRecordList(BYTE *param1, char *param2, unsigned int par
                     pName = param2 + *pEntry * 0x104;
                     CGenericFileLoader::StrUpperPolish((BYTE *)pName);
                     strcpy(CFrontend::m_stringDest, CInstallInfo::GetTexturesDirectory());
-                    ((int (__cdecl *)(char *, const char *, char *, char *))sprintf)(fileName, g_fontTgaFormat, CFrontend::m_stringDest,
+                    // PORT: preserve the variadic ABI (macOS ARM64).
+                    sprintf(fileName, g_fontTgaFormat, CFrontend::m_stringDest,
                             strchr(pName, '\\') + 1);
                     if (param4 == 6) {
                         if (Graphics_FindAndEnsureResidentTexture(fileName) != 0)

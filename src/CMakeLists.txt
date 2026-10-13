@@ -23,6 +23,16 @@ target_compile_options(cmr2_game PRIVATE
     -ferror-limit=0)
 target_link_libraries(cmr2_game PUBLIC SDL3::SDL3)
 
+# These units used to call variadic sprintf through fixed-argument casts,
+# which breaks the macOS ARM64 ABI. Reject incompatible function casts here
+# even though other warnings in the decompiled game are disabled. Game.cpp
+# still has legacy state callback casts, so it keeps the general warning policy.
+set_source_files_properties(
+    ${GAME_DIR}/InstallInfo.cpp ${GAME_DIR}/Graphics.cpp
+    ${GAME_DIR}/Input.cpp ${GAME_DIR}/Texture.cpp
+    TARGET_DIRECTORY cmr2_game
+    PROPERTIES COMPILE_OPTIONS "-Wcast-function-type-strict;-Werror=cast-function-type-strict")
+
 # The original builds these with /QIfist: their float-to-integer conversions
 # (FTOI, game/FloatToInt.h) round to nearest like x87 FISTP instead of
 # truncating. Same list as CMR2Decomp's scripts/build.py.

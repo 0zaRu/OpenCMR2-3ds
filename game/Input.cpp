@@ -170,8 +170,9 @@ BOOL CInput::SetupKeyboard(void) {
         m_availableDevices[uVar1].field_0x0 = 1;
         m_availableDevices[uVar1].field_0x18 = FALSE;
 
-        ((int (__cdecl *)(char *, const char *))sprintf)(m_availableDevices[uVar1].deviceInstanceName, m_strKeyboard);
-        ((int (__cdecl *)(char *, const char *))sprintf)(m_availableDevices[m_unk0x0059f8cc.field_0x0].deviceProductName, m_strKeyboard);
+        // PORT: copy text directly; avoid calling sprintf through an incompatible type.
+        strcpy(m_availableDevices[uVar1].deviceInstanceName, m_strKeyboard);
+        strcpy(m_availableDevices[m_unk0x0059f8cc.field_0x0].deviceProductName, m_strKeyboard);
         
         uVar1 = m_unk0x0059f8cc.field_0x0;
         m_availableDevices[uVar1].supportsForceFeedback = FALSE;
@@ -1309,7 +1310,7 @@ void CInput::InitDetectedControllerSlot(DeviceInfo *pDevice, int index)
 
     pController = &m_controllerInfo[index];
     pController->index = (BYTE)index;
-    ((int (__cdecl *)(char *, const char *))sprintf)(pController->name, pDevice->deviceInstanceName);
+    strcpy(pController->name, pDevice->deviceInstanceName);
     pController->field_0x10c = (pDevice->field_0x0 == 3 || pDevice->field_0x0 == 2) ? 1 : 0;
     pController->field_0x110 = (pDevice->field_0x0 == 3 || pDevice->field_0x0 == 2) ? 1 : 0;
     pController->field_0x114 = (pDevice->field_0x0 == 3 || pDevice->field_0x0 == 2) ? 1 : 0;
@@ -1319,43 +1320,43 @@ void CInput::InitDetectedControllerSlot(DeviceInfo *pDevice, int index)
     if (pDevice->field_0x0 == 1) {
         if (index == 0) {
             m_controllerInfo[0].field_0x13e[0] = pDevice->keyboard.field_0x468;
-            ((int (__cdecl *)(char *, const char *))sprintf)(m_controllerInfo[0].keyNames[0], CFrontend::GetTextString(0x1f9));
+            strcpy(m_controllerInfo[0].keyNames[0], CFrontend::GetTextString(0x1f9));
             m_controllerInfo[0].field_0x13e[1] = pDevice->keyboard.field_0x469;
-            ((int (__cdecl *)(char *, const char *))sprintf)(m_controllerInfo[0].keyNames[1], CFrontend::GetTextString(0x1fa));
+            strcpy(m_controllerInfo[0].keyNames[1], CFrontend::GetTextString(0x1fa));
             m_controllerInfo[0].field_0x13e[2] = pDevice->keyboard.field_0x46a;
-            ((int (__cdecl *)(char *, const char *))sprintf)(m_controllerInfo[0].keyNames[2], CFrontend::GetTextString(0x1fb));
+            strcpy(m_controllerInfo[0].keyNames[2], CFrontend::GetTextString(0x1fb));
             m_controllerInfo[0].field_0x13e[3] = pDevice->keyboard.field_0x46b;
-            ((int (__cdecl *)(char *, const char *))sprintf)(m_controllerInfo[0].keyNames[3], CFrontend::GetTextString(0x1fc));
+            strcpy(m_controllerInfo[0].keyNames[3], CFrontend::GetTextString(0x1fc));
             m_controllerInfo[0].field_0x13e[4] = pDevice->keyboard.field_0x46c;
-            ((int (__cdecl *)(char *, const char *))sprintf)(m_controllerInfo[0].keyNames[4], CFrontend::GetTextString(0x1fd));
+            strcpy(m_controllerInfo[0].keyNames[4], CFrontend::GetTextString(0x1fd));
             m_controllerInfo[0].field_0x13e[5] = pDevice->keyboard.field_0x46d;
-            ((int (__cdecl *)(char *, const char *))sprintf)(m_controllerInfo[0].keyNames[5], g_keyCloseBracket);
+            strcpy(m_controllerInfo[0].keyNames[5], g_keyCloseBracket);
             m_controllerInfo[0].field_0x13e[6] = pDevice->keyboard.field_0x46e;
-            ((int (__cdecl *)(char *, const char *))sprintf)(m_controllerInfo[0].keyNames[6], g_keyOpenBracket);
+            strcpy(m_controllerInfo[0].keyNames[6], g_keyOpenBracket);
             m_controllerInfo[0].field_0x13e[7] = pDevice->keyboard.field_0x46f;
-            ((int (__cdecl *)(char *, const char *))sprintf)(m_controllerInfo[0].keyNames[7], g_keyC);
+            strcpy(m_controllerInfo[0].keyNames[7], g_keyC);
             m_controllerInfo[0].field_0x13e[8] = pDevice->keyboard.field_0x470;
-            ((int (__cdecl *)(char *, const char *))sprintf)(m_controllerInfo[0].keyNames[8], g_keyR);
+            strcpy(m_controllerInfo[0].keyNames[8], g_keyR);
             return;
         }
         pController->field_0x13e[0] = pDevice->keyboard.field_0x468;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[0], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad4));
+        strcpy(pController->keyNames[0], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad4));
         pController->field_0x13e[1] = pDevice->keyboard.field_0x469;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[1], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad6));
+        strcpy(pController->keyNames[1], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad6));
         pController->field_0x13e[2] = pDevice->keyboard.field_0x46a;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[2], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad8));
+        strcpy(pController->keyNames[2], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad8));
         pController->field_0x13e[3] = pDevice->keyboard.field_0x46b;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[3], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad2));
+        strcpy(pController->keyNames[3], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad2));
         pController->field_0x13e[4] = pDevice->keyboard.field_0x46c;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[4], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad3));
+        strcpy(pController->keyNames[4], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad3));
         pController->field_0x13e[5] = pDevice->keyboard.field_0x46d;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[5], CFrontend::GetTextString(0x204));
+        strcpy(pController->keyNames[5], CFrontend::GetTextString(0x204));
         pController->field_0x13e[6] = pDevice->keyboard.field_0x46e;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[6], CFrontend::GetTextString(0x205));
+        strcpy(pController->keyNames[6], CFrontend::GetTextString(0x205));
         pController->field_0x13e[7] = pDevice->keyboard.field_0x46f;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[7], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad9));
+        strcpy(pController->keyNames[7], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad9));
         pController->field_0x13e[8] = pDevice->keyboard.field_0x470;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[8], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad7));
+        strcpy(pController->keyNames[8], FormatString(g_keypadFormat, CFrontend::GetTextString(0x203), g_keypad7));
         return;
     }
     if (pDevice->field_0x0 == 2) {
@@ -1375,15 +1376,15 @@ void CInput::InitDetectedControllerSlot(DeviceInfo *pDevice, int index)
         pController->field_0x138 = 0;
         pController->field_0x13a = 0;
         pController->field_0x13e[4] = (BYTE)*(DWORD *)DEVICE_BINDING(pDevice, 0);
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[4], CFrontend::GetTextString(0x1fe));
+        strcpy(pController->keyNames[4], CFrontend::GetTextString(0x1fe));
         pController->field_0x13e[5] = pDevice->keyboard.field_0x46d;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[5], CFrontend::GetTextString(0x1fe));
+        strcpy(pController->keyNames[5], CFrontend::GetTextString(0x1fe));
         pController->field_0x13e[6] = pDevice->keyboard.field_0x46e;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[6], CFrontend::GetTextString(0x1fe));
+        strcpy(pController->keyNames[6], CFrontend::GetTextString(0x1fe));
         pController->field_0x13e[7] = pDevice->keyboard.field_0x46f;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[7], CFrontend::GetTextString(0x1fe));
+        strcpy(pController->keyNames[7], CFrontend::GetTextString(0x1fe));
         pController->field_0x13e[8] = pDevice->keyboard.field_0x470;
-        ((int (__cdecl *)(char *, const char *))sprintf)(pController->keyNames[8], CFrontend::GetTextString(0x1fe));
+        strcpy(pController->keyNames[8], CFrontend::GetTextString(0x1fe));
         return;
     }
     // PORT: a gamepad (Xbox layout, src/input) starts with the right trigger
@@ -1618,8 +1619,8 @@ int Input_PopQueuedKeyPress(int *pOut)
 // GLOBAL: CMR2 0x005334f4
 int g_unk0x005334f4[8][2];
 
-// Turns the joystick's accelerate/brake axes into one-shot "left"/"right"
-// menu presses (bits 2 and 3) when they are pushed past a quarter.
+// Turns separate joystick/wheel pedals into one-shot up/down menu presses
+// (bits 2 and 3). Gamepads use their stick and POV for menu navigation.
 // FUNCTION: CMR2 0x0040bad0
 void Input_TranslatePedalsToMenuKeys(void)
 {
@@ -1628,6 +1629,14 @@ void Input_TranslatePedalsToMenuKeys(void)
 
     for (i = 0; i < 8; i++) {
         pDev = CInput::GetAvailableDeviceRecord(i);
+        // PORT: gamepads navigate with the stick and POV already read by
+        // ReadJoystick. Their separate driving triggers must not replace
+        // those menu presses. Keep pedal navigation for wheels/joysticks.
+        if (pDev->field_0x0 == 3 && pDev->field_0x18 >= 0 && pDev->field_0x18 < 8 &&
+            Input_IsGamepad(CInput::m_unk0x0059f6b0[pDev->field_0x18])) {
+            g_unk0x005334f4[i][0] = g_unk0x005334f4[i][1] = 0;
+            continue;
+        }
         if (pDev->field_0x0 == 3 && CInput::GetEnabledControllerAxisBinding(0, 2) != CInput::GetEnabledControllerAxisBinding(0, 3)) {
             pDev->field_0x8 &= 0xfffffff3;
             if (((int *)pDev)[CInput::GetEnabledControllerAxisBinding(0, 2) * 5 + 0x11f] < 0x3333) {

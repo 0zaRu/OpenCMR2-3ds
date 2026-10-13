@@ -1661,8 +1661,9 @@ void CGame::ResetSessionPlayerTable(bool param1) {
         // The original calls sprintf through a fixed 2-argument prototype; the
         // non-variadic call makes MSVC6 defer the stack cleanup across the pair
         // (the merged `add esp,0x10` of the original).
-        ((int (__cdecl *)(char *, const char *))sprintf)(dest->shortName, CMain::m_logFileBlankLine);
-        ((int (__cdecl *)(char *, const char *))sprintf)(dest->longName, CMain::m_logFileBlankLine);
+        // PORT: copy text directly; avoid calling sprintf through an incompatible type.
+        strcpy(dest->shortName, CMain::m_logFileBlankLine);
+        strcpy(dest->longName, CMain::m_logFileBlankLine);
         dest->playerId = 0;
         dest->active = 0;
         dest++;
@@ -3275,8 +3276,8 @@ void Network_RemoveSessionPlayerByID(NetPlayerID *pId)
         if (CGame::m_sessionPlayers[i].playerId == *pId) {
             // Non-variadic prototype: MSVC6 defers the pair's stack cleanup
             // (merged `add esp,0x10` in the original).
-            ((int (__cdecl *)(char *, const char *))sprintf)(CGame::m_sessionPlayers[i].shortName, CMain::m_logFileBlankLine);
-            ((int (__cdecl *)(char *, const char *))sprintf)(CGame::m_sessionPlayers[i].longName, CMain::m_logFileBlankLine);
+            strcpy(CGame::m_sessionPlayers[i].shortName, CMain::m_logFileBlankLine);
+            strcpy(CGame::m_sessionPlayers[i].longName, CMain::m_logFileBlankLine);
             CGame::m_sessionPlayers[i].playerId = 0;
             CGame::m_sessionPlayers[i].active = 0;
             CGame::m_sessionPlayerCount--;

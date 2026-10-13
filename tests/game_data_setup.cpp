@@ -1,5 +1,7 @@
 // Exercise the actual startup flow with synthetic data and desktop dialogs.
 // No original assets, display server or interaction are needed in CI.
+#include "port/types.h"
+#include "InstallInfo.h"
 #include "platform/platform.h"
 #include "platform/testing.h"
 #include "port/sys.h"
@@ -72,6 +74,32 @@ static void OpenFolder(SDL_DialogFileCallback callback, void *userdata)
     });
 }
 
+static void CheckInstallPaths()
+{
+    // Platform_Init alone stops before the game's install-path setup. Exercise
+    // that next step too: fixed-argument casts of sprintf used to crash here
+    // on macOS ARM64, whose variadic arguments have a different calling ABI.
+    Check(CInstallInfo::LoadInstallPathsFromRegistry() == 1, "load game install paths");
+    const struct { const char *actual, *expected; } paths[] = {
+        {CInstallInfo::GetGameHDPath(), "."},
+        {CInstallInfo::GetGameCDPath(), "."},
+        {CInstallInfo::GetTracksDir(), ".\\Game\\Tracks"},
+        {CInstallInfo::GetCarsDir(), ".\\Game\\Cars"},
+        {CInstallInfo::GetSoundsDir(), ".\\sounds"},
+        {CInstallInfo::GetMusicDir(), ".\\sounds\\music"},
+        {CInstallInfo::GetVideosDir(), ".\\FrontEnd\\Videos"},
+        {CInstallInfo::GetFrontendDir(), ".\\FrontEnd"},
+        {CInstallInfo::GetCountrySpecificDir(), ".\\CountrySpecific"},
+        {CInstallInfo::GetCountrySpecificOtherDir(), ".\\CountrySpecific"},
+        {CInstallInfo::GetSetupRepDir(), ".\\SetupRep"},
+        {CInstallInfo::GetBigFilesDir(), ".\\Game\\BigFiles"},
+        {CInstallInfo::GetTexturesDirectory(), ".\\Textures"},
+        {CInstallInfo::GetFontsDir(), ".\\Fonts"},
+    };
+    for (const auto &path : paths)
+        Check(std::string(path.actual) == path.expected, path.expected);
+}
+
 static bool Start(const fs::path &user, const std::string &explicitData = "")
 {
     // SDL_Quit discards its environment snapshot between startup attempts.
@@ -84,6 +112,8 @@ static bool Start(const fs::path &user, const std::string &explicitData = "")
     for (auto &thread : callbacks)
         thread.join();
     callbacks.clear();
+    if (started)
+        CheckInstallPaths();
     return started;
 }
 
@@ -115,7 +145,8 @@ int main()
           messages.back().find("Sounds/surface.bfl") != std::string::npos, "list missing archives");
     Check(std::string(Platform_GetDataDir()) == game.u8string() + "/", "copy UTF-8 callback path");
     Check(Platform_GetSettingInt("video.fov", 0) == 91, "preserve unrelated settings");
-    SysFile *archive = Sys_OpenFile("Game\\Bigfiles\\common.bfl", SYS_FILE_READ);
+    const std::string archivePath = std::string(CInstallInfo::GetBigFilesDir()) + "\\common.bfl";
+    SysFile *archive = Sys_OpenFile(archivePath.c_str(), SYS_FILE_READ);
     Check(archive != nullptr, "open game archive under selected UTF-8 path");
     char archiveBytes[64]{};
     Check(Sys_ReadFile(archive, archiveBytes, sizeof(archiveBytes)) == 22 &&

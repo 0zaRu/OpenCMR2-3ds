@@ -6,11 +6,16 @@
 #include "port/types.h"
 #include "port/input.h"
 #include "Input.h"
+#include "Menu.h"
 
 #include <SDL3/SDL.h>
 
 #include <cstdio>
 #include <cstring>
+#include <initializer_list>
+
+extern void Input_TranslatePedalsToMenuKeys();
+extern void Input_MergeAssignedJoystickButtons(int slot, DeviceInfo *out);
 
 namespace {
 
@@ -31,6 +36,113 @@ InputJoystickState Read(InputDevice *device)
     InputJoystickState state;
     Check(Input_ReadJoystick(device, &state) != FALSE, "joystick reads");
     return state;
+}
+
+unsigned MenuInput(DeviceInfo *pad)
+{
+    CInput::UpdateDevice(int(pad - CInput::m_availableDevices));
+    Input_TranslatePedalsToMenuKeys();
+    DeviceInfo keyboard{};
+    Input_MergeAssignedJoystickButtons(0, &keyboard);
+    return keyboard.field_0x8;
+}
+
+void CheckMenuNavigation(SDL_Joystick *virt, DeviceInfo *pad)
+{
+    for (int i = 0; i < SDL_GAMEPAD_AXIS_COUNT; ++i)
+        SDL_SetJoystickVirtualAxis(virt, i, i >= SDL_GAMEPAD_AXIS_LEFT_TRIGGER ? SDL_JOYSTICK_AXIS_MIN : 0);
+    for (int i = 0; i < SDL_GAMEPAD_BUTTON_COUNT; ++i)
+        SDL_SetJoystickVirtualButton(virt, i, false);
+    CInput::m_unk0x005168f4[0] = 2;
+    Check((MenuInput(pad) & 0xf) == 0, "centred gamepad does not navigate");
+
+    const struct { SDL_GamepadAxis axis; Sint16 value; unsigned direction; } stick[] = {
+        {SDL_GAMEPAD_AXIS_LEFTY, SDL_JOYSTICK_AXIS_MIN, 4},
+        {SDL_GAMEPAD_AXIS_LEFTY, SDL_JOYSTICK_AXIS_MAX, 8},
+        {SDL_GAMEPAD_AXIS_LEFTX, SDL_JOYSTICK_AXIS_MIN, 1},
+        {SDL_GAMEPAD_AXIS_LEFTX, SDL_JOYSTICK_AXIS_MAX, 2},
+    };
+    for (const auto &move : stick) {
+        SDL_SetJoystickVirtualAxis(virt, move.axis, move.value);
+        Check((MenuInput(pad) & 0xf) == move.direction, "left stick navigates menus in every direction");
+        SDL_SetJoystickVirtualAxis(virt, move.axis, 0);
+        MenuInput(pad);
+    }
+    const struct { SDL_GamepadButton button; unsigned direction; } dpad[] = {
+        {SDL_GAMEPAD_BUTTON_DPAD_UP, 4}, {SDL_GAMEPAD_BUTTON_DPAD_DOWN, 8},
+        {SDL_GAMEPAD_BUTTON_DPAD_LEFT, 1}, {SDL_GAMEPAD_BUTTON_DPAD_RIGHT, 2},
+    };
+    for (const auto &move : dpad) {
+        SDL_SetJoystickVirtualButton(virt, move.button, true);
+        Check((MenuInput(pad) & 0xf) == move.direction, "D-pad navigates menus in every direction");
+        SDL_SetJoystickVirtualButton(virt, move.button, false);
+        MenuInput(pad);
+    }
+
+    Menu menu{};
+    Menu_Init(&menu, nullptr, 0, 0, nullptr, nullptr, 1, 1, 1);
+    for (int i = 0; i < 3; ++i)
+        Menu_AddItemType1(&menu, nullptr, -1, nullptr, short(i));
+    Menu_SetInputStateFlag(0); // no audio resources in this test
+    SDL_SetJoystickVirtualAxis(virt, SDL_GAMEPAD_AXIS_LEFTY, SDL_JOYSTICK_AXIS_MIN);
+    Menu_Update(&menu, MenuInput(pad));
+    Check(menu.cursor == 0, "stick input moves the real menu cursor up");
+    SDL_SetJoystickVirtualAxis(virt, SDL_GAMEPAD_AXIS_LEFTY, 0);
+    MenuInput(pad);
+    SDL_SetJoystickVirtualButton(virt, SDL_GAMEPAD_BUTTON_DPAD_DOWN, true);
+    Menu_Update(&menu, MenuInput(pad));
+    Check(menu.cursor == 1, "D-pad input moves the real menu cursor down");
+    SDL_SetJoystickVirtualButton(virt, SDL_GAMEPAD_BUTTON_DPAD_DOWN, false);
+    MenuInput(pad);
+
+    for (SDL_GamepadAxis trigger : {SDL_GAMEPAD_AXIS_LEFT_TRIGGER, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER}) {
+        SDL_SetJoystickVirtualAxis(virt, trigger, SDL_JOYSTICK_AXIS_MAX);
+        Check((MenuInput(pad) & 0xf) == 0, "a trigger does not navigate menus");
+        SDL_SetJoystickVirtualAxis(virt, SDL_GAMEPAD_AXIS_LEFTY, SDL_JOYSTICK_AXIS_MIN);
+        Check((MenuInput(pad) & 0xf) == 4, "held trigger does not swallow stick navigation");
+        SDL_SetJoystickVirtualAxis(virt, SDL_GAMEPAD_AXIS_LEFTY, 0);
+        SDL_SetJoystickVirtualAxis(virt, trigger, SDL_JOYSTICK_AXIS_MIN);
+        Check((MenuInput(pad) & 0xf) == 0, "releasing a trigger does not navigate menus");
+    }
+    SDL_SetJoystickVirtualAxis(virt, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, SDL_JOYSTICK_AXIS_MAX);
+    SDL_SetJoystickVirtualAxis(virt, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, SDL_JOYSTICK_AXIS_MAX);
+    Check((MenuInput(pad) & 0xf) == 0, "both triggers do not navigate menus");
+    Check(pad->joystick.bindings[2].field_0xc < -39321 && pad->joystick.bindings[5].field_0xc < -39321,
+          "menu polling preserves both driving pedals");
+    SDL_SetJoystickVirtualAxis(virt, SDL_GAMEPAD_AXIS_LEFT_TRIGGER, SDL_JOYSTICK_AXIS_MIN);
+    SDL_SetJoystickVirtualAxis(virt, SDL_GAMEPAD_AXIS_RIGHT_TRIGGER, SDL_JOYSTICK_AXIS_MIN);
+    MenuInput(pad);
+    SDL_SetJoystickVirtualButton(virt, SDL_GAMEPAD_BUTTON_SOUTH, true);
+    Check((MenuInput(pad) & 0x30) == 0x10, "A confirms in menus");
+    SDL_SetJoystickVirtualButton(virt, SDL_GAMEPAD_BUTTON_SOUTH, false);
+    MenuInput(pad);
+    SDL_SetJoystickVirtualButton(virt, SDL_GAMEPAD_BUTTON_EAST, true);
+    Check((MenuInput(pad) & 0x30) == 0x20, "B goes back in menus");
+}
+
+void CheckWheelMenuPedals(InputDevice *wheel, DeviceInfo *info)
+{
+    // A raw wheel keeps the original pedal navigation. Use the game's
+    // polled axis values to exercise press/release latching deterministically.
+    CInput::m_unk0x0059f6b0[info->field_0x18] = wheel;
+    ControllerData &slot = CInput::m_controllerInfo[2];
+    slot.field_0x2d8[2] = 2;
+    slot.field_0x2d8[3] = 1;
+    info->joystick.bindings[2].field_0xc = -0x10000;
+    info->joystick.bindings[1].field_0xc = 0x10000;
+    info->field_0x8 = 0x10;
+    Input_TranslatePedalsToMenuKeys();
+    Check(info->field_0x8 == 0x14, "wheel throttle navigates and preserves confirm");
+    Input_TranslatePedalsToMenuKeys();
+    Check(info->field_0x8 == 0x10, "held wheel pedal is latched once");
+    info->joystick.bindings[2].field_0xc = 0x10000;
+    info->joystick.bindings[1].field_0xc = -0x10000;
+    Input_TranslatePedalsToMenuKeys();
+    Check(info->field_0x8 == 0x18, "wheel brake navigates in the opposite direction");
+    info->joystick.bindings[1].field_0xc = 0x10000;
+    Input_TranslatePedalsToMenuKeys();
+    Check(info->field_0x8 == 0x10, "released wheel pedals do not navigate");
+    CInput::m_unk0x0059f6b0[info->field_0x18] = nullptr;
 }
 
 } // namespace
@@ -112,6 +224,8 @@ int main()
 
     // The game's own detection gives a gamepad throttle on the right trigger
     // (Rz, axis 5) and brake on the left (Z, axis 2), as separate pedals.
+    // As at startup, device slots 0 and 1 are reserved for keyboards.
+    CInput::m_unk0x0059f8cc.field_0x0 = 2;
     CInput::GetAttachedJoysticks();
     DeviceInfo *pad = NULL;
     for (int i = 0; i < 8 && pad == NULL; i++)
@@ -124,6 +238,7 @@ int main()
         Check(slot.field_0x210[0].field_0x0 != 0 && slot.field_0x2d8[0] == 0, "default steering on the left stick");
         Check(slot.field_0x210[2].field_0x0 != 0 && slot.field_0x2d8[2] == 5, "default throttle on the right trigger");
         Check(slot.field_0x210[3].field_0x0 != 0 && slot.field_0x2d8[3] == 2, "default brake on the left trigger");
+        CheckMenuNavigation(virt, pad);
         Input_CloseDevice(CInput::m_unk0x0059f6b0[pad->field_0x18]);
         CInput::m_unk0x0059f6b0[pad->field_0x18] = NULL;
     }
@@ -154,12 +269,14 @@ int main()
     SDL_UpdateJoysticks();
     s = Read(device);
     Check(s.lZ == -kRange, "pressed pedal reads pressed");
+    if (pad != nullptr)
+        CheckWheelMenuPedals(device, pad);
     Input_CloseDevice(device);
     SDL_CloseJoystick(virt);
     SDL_DetachVirtualJoystick(id);
 
     SDL_Quit();
     if (s_failures == 0)
-        puts("gamepad layout: triggers and pedals read as wheel pedals, Xbox buttons and D-pad");
+        puts("gamepad layout: driving pedals, stick/D-pad menus, buttons and wheel navigation passed");
     return s_failures == 0 ? 0 : 1;
 }

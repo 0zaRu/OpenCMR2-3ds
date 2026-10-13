@@ -14,7 +14,8 @@ extern char g_emptyString[4];
 // FUNCTION: CMR2 0x004a9f50
 void Texture_GetPathStem(char *pOut, char *path)
 {
-    ((int (__cdecl *)(char *, const char *))sprintf)(pOut, strrchr(path, '\\') + 1);
+    // PORT: copy text directly; avoid calling sprintf through an incompatible type.
+    strcpy(pOut, strrchr(path, '\\') + 1);
     sprintf(strrchr(pOut, '.'), g_emptyString);
 }
 

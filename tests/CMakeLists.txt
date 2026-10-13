@@ -65,6 +65,11 @@ target_include_directories(gamepad_layout_test PRIVATE ${PROJECT_SOURCE_DIR}/gam
 target_link_libraries(gamepad_layout_test PRIVATE opencmr2_platform)
 add_test(NAME gamepad_layout COMMAND gamepad_layout_test)
 
+add_executable(frontend_language_test frontend_language.cpp)
+target_link_libraries(frontend_language_test PRIVATE opencmr2_platform)
+add_test(NAME frontend_language COMMAND frontend_language_test)
+set_tests_properties(frontend_language PROPERTIES TIMEOUT 30)
+
 add_executable(bink_decode bink_decode.cpp)
 target_link_libraries(bink_decode PRIVATE opencmr2_bink)
 
