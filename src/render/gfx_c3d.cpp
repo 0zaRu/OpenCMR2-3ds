@@ -29,6 +29,8 @@
 #include <algorithm>
 #include <vector>
 
+extern "C" u32 __ctru_heap_size;
+
 namespace {
 
 // ---- texture conversion -----------------------------------------------------
@@ -276,6 +278,34 @@ struct Executor : GfxExecutor {
     C3D_FogLut fogLut;
     float fogKey[6] = { 0, 0, 0, 0, -1, -1 };
 
+    // What was last sent to citro3d, which records every call as commands:
+    // a stage sends thousands of draws, and the command buffer must hold a
+    // whole frame (libctru stops the program when it overflows).
+    struct Sent {
+        bool valid = false;
+        GPU_TESTFUNC depthFunc;
+        int depthMask;
+        float depthScale, depthOffset;
+        GPU_CULLMODE cull;
+        GPU_BLENDFACTOR blend[2];
+        bool alphaTest;
+        GPU_TESTFUNC alphaFunc;
+        int alphaRef;
+        u32 viewport[4];
+        bool fog;
+        u32 fogColor;
+        bool fogLut;
+        C3D_AttrInfo *attr;
+        C3D_TexEnv env[6];
+        C3D_Tex tex[2];
+        bool texBound[2];
+    } sent;
+
+    // Statistics for the log.
+    unsigned drawsThisFrame = 0, maxDraws = 0, dropped = 0;
+    float maxCmdUsage = 0.0f;
+    u64 statsStart = 0;
+
     ~Executor() override
     {
         if (!ready)
@@ -289,7 +319,7 @@ struct Executor : GfxExecutor {
 
     bool Init()
     {
-        if (!C3D_Init(0x100000)) {
+        if (!C3D_Init(0x400000)) {
             Sys_Log("gfx: C3D_Init failed");
             return false;
         }
@@ -600,8 +630,32 @@ struct Executor : GfxExecutor {
 
     void SetB(int id, bool value)
     {
-        if (id >= 0)
+        if (id < 0)
+            return;
+        bool current = (C3D_BoolUnifs[GPU_VERTEX_SHADER] & BIT(id - 0x68)) != 0;
+        if (current != value || !sent.valid)
             C3D_BoolUnifSet(GPU_VERTEX_SHADER, id, value);
+    }
+
+    void SetAttrInfo(C3D_AttrInfo *attr)
+    {
+        if (sent.valid && sent.attr == attr)
+            return;
+        C3D_SetAttrInfo(attr);
+        sent.attr = attr;
+    }
+
+    // Room left in the command buffer for one more draw; when it is short
+    // the rest of the frame is dropped instead of overflowing.
+    bool CommandRoom()
+    {
+        u32 *addr, size, offset;
+        GPUCMD_GetBuffer(&addr, &size, &offset);
+        if (size - offset >= 0x4000)
+            return true;
+        if (dropped++ == 0)
+            Sys_Log("gfx: command buffer full, dropping the rest of the frame");
+        return false;
     }
 
     void Bind(shaderProgram_s *program)
@@ -633,7 +687,7 @@ struct Executor : GfxExecutor {
     }
 
     // A landscape rectangle as the rotated framebuffer's viewport.
-    static void SetViewport(float lx, float ly, float lw, float lh)
+    void SetViewport(float lx, float ly, float lw, float lh)
     {
         int x = (int)lroundf(240 - (ly + lh)), y = (int)lroundf(400 - (lx + lw));
         int w = (int)lroundf(lh), h = (int)lroundf(lw);
@@ -641,7 +695,11 @@ struct Executor : GfxExecutor {
         if (y < 0) { h += y; y = 0; }
         if (w <= 0 || h <= 0)
             w = h = 1;
-        C3D_SetViewport((u32)x, (u32)y, (u32)w, (u32)h);
+        u32 v[4] = { (u32)x, (u32)y, (u32)w, (u32)h };
+        if (sent.valid && memcmp(v, sent.viewport, sizeof(v)) == 0)
+            return;
+        memcpy(sent.viewport, v, sizeof(v));
+        C3D_SetViewport(v[0], v[1], v[2], v[3]);
     }
 
     void SetGameViewport(const GfxViewport &vp, bool stretched)
@@ -666,7 +724,9 @@ struct Executor : GfxExecutor {
         bool linear = s.fog && !transformed &&
                       (s.fogTableMode == GFX_FOG_LINEAR || (s.fogTableMode == GFX_FOG_NONE && s.fogVertexMode == GFX_FOG_LINEAR));
         if (!linear) {
-            C3D_FogGasMode(GPU_NO_FOG, GPU_PLAIN_DENSITY, false);
+            if (sent.fog || !sent.valid)
+                C3D_FogGasMode(GPU_NO_FOG, GPU_PLAIN_DENSITY, false);
+            sent.fog = false;
             return;
         }
         // The LUT maps depth (0 near .. 1 far, from the projection) to the
@@ -689,10 +749,20 @@ struct Executor : GfxExecutor {
                     data[i + 127] = f - data[i - 1];
             }
             FogLut_FromArray(&fogLut, data);
+            sent.fogLut = false;
         }
-        C3D_FogGasMode(GPU_FOG, GPU_PLAIN_DENSITY, false);
-        C3D_FogColor(PicaColor(s.fogColor) & 0xffffff);
-        C3D_FogLutBind(&fogLut);
+        u32 color = PicaColor(s.fogColor) & 0xffffff;
+        if (!sent.fog || sent.fogColor != color) {
+            C3D_FogGasMode(GPU_FOG, GPU_PLAIN_DENSITY, false);
+            C3D_FogColor(color);
+            sent.fog = true;
+            sent.fogColor = color;
+        }
+        // The table is 128 words: sent only when it changes.
+        if (!sent.fogLut) {
+            C3D_FogLutBind(&fogLut);
+            sent.fogLut = true;
+        }
     }
 
     // Direct3D texture stage arguments as TEV sources and operands.
@@ -741,9 +811,8 @@ struct Executor : GfxExecutor {
     }
 
     // One Direct3D stage as one TEV stage; false when it is disabled.
-    bool SetStage(int index, const GfxStageState &st, DWORD textureFactor, bool hasTexture)
+    static bool SetStage(C3D_TexEnv *env, int index, const GfxStageState &st, DWORD textureFactor, bool hasTexture)
     {
-        C3D_TexEnv *env = C3D_GetTexEnv(index);
         C3D_TexEnvInit(env);
         int colorOp = st.colorOp;
         if (colorOp == GFX_TOP_DISABLE || colorOp == GFX_TOP_BUMPENVMAP || colorOp == GFX_TOP_BUMPENVMAPLUMINANCE) {
@@ -789,11 +858,21 @@ struct Executor : GfxExecutor {
         return true;
     }
 
+    // Binds a texture unless that one, with the same parameters, already is.
+    void BindTexture(int unit, C3D_Tex *tex)
+    {
+        if (sent.valid && sent.texBound[unit] && memcmp(&sent.tex[unit], tex, sizeof(C3D_Tex)) == 0)
+            return;
+        C3D_TexBind(unit, tex);
+        sent.tex[unit] = *tex;
+        sent.texBound[unit] = true;
+    }
+
     void SetTexture(int unit, const GfxStageState &st, CtrTexture *g)
     {
         if (g == NULL) {
             if (white.valid)
-                C3D_TexBind(unit, &white.tex);
+                BindTexture(unit, &white.tex);
             return;
         }
         C3D_Tex *tex = &g->tex;
@@ -804,28 +883,50 @@ struct Executor : GfxExecutor {
         C3D_TexSetWrap(tex, Wrap(st.address), Wrap(st.address));
         // Without a mip filter only the top level is used.
         tex->maxLevel = st.mipFilter == GFX_MIPFILTER_NONE ? 0 : g->maxLevel;
-        C3D_TexBind(unit, tex);
+        BindTexture(unit, tex);
     }
 
     void SetCommonState(const GfxDrawState &s, bool transformed, int colorMask)
     {
         bool depthTest = s.depthTest;
-        GPU_WRITEMASK mask = (GPU_WRITEMASK)(colorMask | ((depthTest && s.depthWrite) ? GPU_WRITE_DEPTH : 0));
-        C3D_DepthTest(true, depthTest ? TestFunc(s.depthFunc) : GPU_ALWAYS, mask);
-        if (transformed)
-            C3D_DepthMap(true, -1.0f, 0.0f);
-        else
-            C3D_DepthMap(true, -(s.viewport.maxZ - s.viewport.minZ), s.viewport.minZ);
+        int mask = colorMask | ((depthTest && s.depthWrite) ? GPU_WRITE_DEPTH : 0);
+        GPU_TESTFUNC depthFunc = depthTest ? TestFunc(s.depthFunc) : GPU_ALWAYS;
+        if (!sent.valid || sent.depthFunc != depthFunc || sent.depthMask != mask) {
+            C3D_DepthTest(true, depthFunc, (GPU_WRITEMASK)mask);
+            sent.depthFunc = depthFunc;
+            sent.depthMask = mask;
+        }
+        float scale = transformed ? -1.0f : -(s.viewport.maxZ - s.viewport.minZ);
+        float offset = transformed ? 0.0f : s.viewport.minZ;
+        if (!sent.valid || sent.depthScale != scale || sent.depthOffset != offset) {
+            C3D_DepthMap(true, scale, offset);
+            sent.depthScale = scale;
+            sent.depthOffset = offset;
+        }
         // Direct3D's front faces are clockwise on screen; the rotation of the
         // 3DS screen keeps the winding.
-        C3D_CullFace(s.cull == GFX_CULL_CCW ? GPU_CULL_FRONT_CCW
-                                            : s.cull == GFX_CULL_CW ? GPU_CULL_BACK_CCW : GPU_CULL_NONE);
-        if (s.alphaBlend)
-            C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, BlendFactor(s.srcBlend), BlendFactor(s.destBlend),
-                           BlendFactor(s.srcBlend), BlendFactor(s.destBlend));
-        else
-            C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, GPU_ONE, GPU_ZERO, GPU_ONE, GPU_ZERO);
-        C3D_AlphaTest(s.alphaTest, TestFunc(s.alphaFunc), (int)(s.alphaRef & 0xff));
+        GPU_CULLMODE cull = s.cull == GFX_CULL_CCW ? GPU_CULL_FRONT_CCW
+                                                   : s.cull == GFX_CULL_CW ? GPU_CULL_BACK_CCW : GPU_CULL_NONE;
+        if (!sent.valid || sent.cull != cull) {
+            C3D_CullFace(cull);
+            sent.cull = cull;
+        }
+        GPU_BLENDFACTOR src = s.alphaBlend ? BlendFactor(s.srcBlend) : GPU_ONE;
+        GPU_BLENDFACTOR dst = s.alphaBlend ? BlendFactor(s.destBlend) : GPU_ZERO;
+        if (!sent.valid || sent.blend[0] != src || sent.blend[1] != dst) {
+            C3D_AlphaBlend(GPU_BLEND_ADD, GPU_BLEND_ADD, src, dst, src, dst);
+            sent.blend[0] = src;
+            sent.blend[1] = dst;
+        }
+        GPU_TESTFUNC alphaFunc = TestFunc(s.alphaFunc);
+        int alphaRef = (int)(s.alphaRef & 0xff);
+        if (!sent.valid || sent.alphaTest != s.alphaTest ||
+            (s.alphaTest && (sent.alphaFunc != alphaFunc || sent.alphaRef != alphaRef))) {
+            C3D_AlphaTest(s.alphaTest, alphaFunc, alphaRef);
+            sent.alphaTest = s.alphaTest;
+            sent.alphaFunc = alphaFunc;
+            sent.alphaRef = alphaRef;
+        }
 
         // Texture stages.
         GfxStageState st0 = s.stages[0], st1 = s.stages[1];
@@ -834,15 +935,21 @@ struct Executor : GfxExecutor {
             st1.colorOp = st1.alphaOp = GFX_TOP_DISABLE;
         CtrTexture *tex0 = StageTexture(st0), *tex1 = StageTexture(st1);
         SetTexture(0, st0, tex0);
-        int stages = 1;
-        SetStage(0, st0, s.textureFactor, tex0 != NULL);
-        if (st0.colorOp != GFX_TOP_DISABLE && SetStage(1, st1, s.textureFactor, tex1 != NULL)) {
+        C3D_TexEnv env[6];
+        for (int i = 0; i < 6; i++)
+            C3D_TexEnvInit(&env[i]);
+        SetStage(&env[0], 0, st0, s.textureFactor, tex0 != NULL);
+        if (st0.colorOp != GFX_TOP_DISABLE && SetStage(&env[1], 1, st1, s.textureFactor, tex1 != NULL))
             SetTexture(1, st1, tex1);
-            stages = 2;
-        }
-        for (int i = stages; i < 6; i++)
-            C3D_TexEnvInit(C3D_GetTexEnv(i));
+        else
+            C3D_TexEnvInit(&env[1]);
+        for (int i = 0; i < 6; i++)
+            if (!sent.valid || memcmp(&env[i], &sent.env[i], sizeof(C3D_TexEnv)) != 0) {
+                C3D_SetTexEnv(i, &env[i]);
+                sent.env[i] = env[i];
+            }
         SetFog(s, transformed);
+        sent.valid = true;
     }
 
     // The vertex shader's uniforms for a 3D draw.
@@ -923,7 +1030,9 @@ struct Executor : GfxExecutor {
             count = 1;
         }
         SetF(u3d.ambient, ar, ag, ab, 0.0f);
-        C3D_IVUnifSet(GPU_VERTEX_SHADER, u3d.lightLoop, count - 1, 0, 3, 0);
+        C3D_IVec loop = IVec_Pack(count - 1, 0, 3, 0);
+        if (C3D_IVUnif[GPU_VERTEX_SHADER][u3d.lightLoop - 0x60] != loop || !sent.valid)
+            C3D_IVUnifSet(GPU_VERTEX_SHADER, u3d.lightLoop, count - 1, 0, 3, 0);
     }
 
     void SetTLUniforms()
@@ -960,7 +1069,7 @@ struct Executor : GfxExecutor {
         }
         GSPGPU_FlushDataCache(v, 4 * sizeof(GfxTLVertex));
         Bind(&programTL);
-        C3D_SetAttrInfo(&attrTL);
+        SetAttrInfo(&attrTL);
         SetTLUniforms();
         C3D_BufInfo buf;
         BufInfo_Init(&buf);
@@ -978,8 +1087,6 @@ struct Executor : GfxExecutor {
         s.stages[1].colorOp = GFX_TOP_DISABLE;
         s.stages[1].texture = NULL;
         SetCommonState(s, true, color ? GPU_WRITE_COLOR : 0);
-        if (!depth)
-            C3D_DepthTest(true, GPU_ALWAYS, color ? GPU_WRITE_COLOR : (GPU_WRITEMASK)0);
         C3D_DrawArrays(GPU_TRIANGLE_STRIP, 0, 4);
     }
 
@@ -993,6 +1100,12 @@ struct Executor : GfxExecutor {
         C3D_RenderTargetClear(top, C3D_CLEAR_ALL, 0x000000ff, 0xffffffff);
         C3D_FrameDrawOn(top);
         bound = NULL;
+        // Everything is sent again once a frame (C3D_FrameDrawOn also sets
+        // the viewport).
+        sent.valid = false;
+        sent.fogLut = false;
+        sent.texBound[0] = sent.texBound[1] = false;
+        drawsThisFrame = 0;
         inFrame = true;
     }
 
@@ -1030,6 +1143,8 @@ struct Executor : GfxExecutor {
             }
             if (skipping)
                 continue;
+            if (!CommandRoom())
+                break;
             if (c.type == GFX_CMD_CLEAR) {
                 Clear(c, stretched);
                 continue;
@@ -1044,13 +1159,13 @@ struct Executor : GfxExecutor {
             BufInfo_Init(&buf);
             if (c.transformed) {
                 Bind(&programTL);
-                C3D_SetAttrInfo(&attrTL);
+                SetAttrInfo(&attrTL);
                 SetTLUniforms();
                 BufInfo_Add(&buf, vertices + c.firstVertexByte, sizeof(GfxTLVertex), 4, 0x3210);
                 SetPictureViewport(stretched);
             } else {
                 Bind(&program3D);
-                C3D_SetAttrInfo(&attr3D);
+                SetAttrInfo(&attr3D);
                 Set3DUniforms(s);
                 BufInfo_Add(&buf, vertices + c.firstVertexByte, sizeof(GfxVertex), 6, 0x543210);
                 SetGameViewport(s.viewport, stretched);
@@ -1061,6 +1176,7 @@ struct Executor : GfxExecutor {
                 C3D_DrawElements(Primitive(c.primitive), (int)c.indexCount, C3D_UNSIGNED_SHORT, indices + c.firstIndex);
             else
                 C3D_DrawArrays(Primitive(c.primitive), 0, (int)c.vertexCount);
+            drawsThisFrame++;
         }
 
         if (!present)
@@ -1068,10 +1184,20 @@ struct Executor : GfxExecutor {
         C3D_FrameEnd(0);
         inFrame = false;
         lastFrameEnd = osGetTime();
-        if (++frames % 600 == 1)
-            Sys_Log("mem: heap %u KB used, linear %u KB, VRAM %u KB free; %.0f%% of the command buffer",
-                    (unsigned)(mallinfo().uordblks / 1024), (unsigned)(linearSpaceFree() / 1024),
-                    (unsigned)(vramSpaceFree() / 1024), C3D_GetCmdBufUsage() * 100.0f);
+        maxDraws = std::max(maxDraws, drawsThisFrame);
+        maxCmdUsage = std::max(maxCmdUsage, C3D_GetCmdBufUsage());
+        if (++frames % 600 == 1) {
+            float seconds = (lastFrameEnd - statsStart) / 1000.0f;
+            Sys_Log("mem: heap %u of %u KB used, linear %u KB, VRAM %u KB free", (unsigned)(mallinfo().uordblks / 1024),
+                    (unsigned)(__ctru_heap_size / 1024), (unsigned)(linearSpaceFree() / 1024),
+                    (unsigned)(vramSpaceFree() / 1024));
+            Sys_Log("gfx: %.1f fps, up to %u draws and %.0f%% of the command buffer a frame, %u frames cut short",
+                    frames > 1 && seconds > 0 ? 599 / seconds : 0.0f, maxDraws, maxCmdUsage * 100.0f, dropped);
+            statsStart = lastFrameEnd;
+            maxDraws = 0;
+            maxCmdUsage = 0.0f;
+            dropped = 0;
+        }
         // No reads of the screen (the sun's visibility test): it reads as
         // covered, so there is no lens flare.
         if (readback.requested) {
