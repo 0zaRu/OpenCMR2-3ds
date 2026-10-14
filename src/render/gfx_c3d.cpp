@@ -349,6 +349,16 @@ struct Executor : GfxExecutor {
     unsigned drawsThisFrame = 0, maxDraws = 0, dropped = 0;
     float maxCmdUsage = 0.0f;
     u64 statsStart = 0;
+    // Where the frames' time went (system ticks): the game between frames,
+    // translating them, waiting for the GPU; and the GPU's own time (ms).
+    u64 executeStart = 0, executeEnd = 0;
+    u64 gameTicks = 0, executeTicks = 0, waitTicks = 0;
+    float gpuMs = 0.0f;
+    unsigned timedFrames = 0;
+    size_t vertexBytes = 0;
+    // [3ds] vsync = 1: each frame starts on a vblank, so the frame rate is
+    // 60, 30, 20, 15... Off, a frame starts as soon as the GPU is done.
+    bool vsync = false;
 
     ~Executor() override
     {
@@ -443,6 +453,7 @@ struct Executor : GfxExecutor {
 
         textureMax = std::max(8, std::min(1024, Platform_GetSettingInt("3ds.texture_max", 128)));
         stretch = Platform_GetSettingInt("3ds.stretch", 0) != 0;
+        vsync = Platform_GetSettingInt("3ds.vsync", 0) != 0;
         useLighting = Platform_GetSettingInt("3ds.debug_lighting", 1) != 0;
         useFog = Platform_GetSettingInt("3ds.debug_fog", 1) != 0;
         useMipmaps = Platform_GetSettingInt("3ds.debug_mipmaps", 1) != 0;
@@ -635,6 +646,9 @@ struct Executor : GfxExecutor {
             C3D_TexFlush(&g->tex);
         return true;
     }
+
+    // Draws into textures are dropped (see Execute).
+    bool RendersToTextures() override { return false; }
 
     bool Upload(GfxTexture *t) override
     {
@@ -1204,9 +1218,11 @@ struct Executor : GfxExecutor {
     void BeginFrame()
     {
         Ctr_Breadcrumb("starting frame %u: waiting for the GPU", frames + 1);
-        u64 start = osGetTime();
+        u64 start = osGetTime(), startTicks = svcGetSystemTick();
         bool reported = false;
-        while (!C3D_FrameBegin(C3D_FRAME_SYNCDRAW | C3D_FRAME_NONBLOCK)) {
+        if (vsync)
+            C3D_FrameSync();
+        while (!C3D_FrameBegin(C3D_FRAME_NONBLOCK)) {
             if (!reported && osGetTime() - start > 3000) {
                 // The GPU has not finished the last frame: what was in it.
                 Sys_Log("gfx: the GPU is stuck on frame %u: %u draws (%u 3D, %u lit, %u fogged, %u TL, %u clears), "
@@ -1217,6 +1233,7 @@ struct Executor : GfxExecutor {
             }
             svcSleepThread(1000000);
         }
+        waitTicks += svcGetSystemTick() - startTicks;
         last = Stats();
         FreeRetired();
         arenaUsed = 0;
@@ -1237,9 +1254,13 @@ struct Executor : GfxExecutor {
     {
         if (!ready)
             return;
+        executeStart = svcGetSystemTick();
+        if (executeEnd != 0)
+            gameTicks += executeStart - executeEnd;
         UploadDirty(textures);
         if (!inFrame)
             BeginFrame();
+        vertexBytes += frame.vertices.size();
         minimalShader = minimalSetting || s_minimalShader;
         Ctr_Breadcrumb("frame %u: %u commands, %u vertex bytes%s", frames + 1, (unsigned)frame.commands.size(),
                        (unsigned)frame.vertices.size(), present ? "" : " (flush)");
@@ -1312,10 +1333,16 @@ struct Executor : GfxExecutor {
             last.maxIndices = std::max<unsigned>(last.maxIndices, c.indexCount);
         }
 
-        if (!present)
+        if (!present) {
+            executeEnd = svcGetSystemTick();
+            executeTicks += executeEnd - executeStart;
             return;
-        Ctr_Breadcrumb("frame %u: ending, waiting for vblank", frames + 1);
-        C3D_FrameEnd(0);
+        }
+        Ctr_Breadcrumb("frame %u: ending", frames + 1);
+        // Everything the GPU reads is flushed where it is written (vertices,
+        // indices, textures): without the flag, citro3d would flush the
+        // whole linear heap from the data cache every frame.
+        C3D_FrameEnd(GX_CMDLIST_FLUSH);
         inFrame = false;
         u64 previous = lastFrameEnd;
         lastFrameEnd = osGetTime();
@@ -1328,18 +1355,32 @@ struct Executor : GfxExecutor {
         convertMs = 0;
         maxDraws = std::max(maxDraws, drawsThisFrame);
         maxCmdUsage = std::max(maxCmdUsage, C3D_GetCmdBufUsage());
-        if (++frames % 600 == 1) {
+        gpuMs += C3D_GetDrawingTime();
+        timedFrames++;
+        if (++frames % 600 == 0) {
             float seconds = (lastFrameEnd - statsStart) / 1000.0f;
+            float perFrame = 1000.0f / SYSCLOCK_ARM11 / timedFrames;
             Sys_Log("mem: heap %u of %u KB used, linear %u KB, VRAM %u KB free", (unsigned)(mallinfo().uordblks / 1024),
                     (unsigned)(__ctru_heap_size / 1024), (unsigned)(linearSpaceFree() / 1024),
                     (unsigned)(vramSpaceFree() / 1024));
             Sys_Log("gfx: %.1f fps, up to %u draws and %.0f%% of the command buffer a frame, %u frames cut short",
-                    frames > 1 && seconds > 0 ? 599 / seconds : 0.0f, maxDraws, maxCmdUsage * 100.0f, dropped);
-            statsStart = lastFrameEnd;
+                    seconds > 0 ? timedFrames / seconds : 0.0f, maxDraws, maxCmdUsage * 100.0f, dropped);
+            Sys_Log("time: a frame %.1f ms game, %.1f ms renderer, %.1f ms waiting for the GPU (GPU %.1f ms); "
+                    "%u KB of vertices", gameTicks * perFrame, (executeTicks - waitTicks) * perFrame, waitTicks * perFrame,
+                    gpuMs / timedFrames, (unsigned)(vertexBytes / timedFrames / 1024));
             maxDraws = 0;
             maxCmdUsage = 0.0f;
             dropped = 0;
         }
+        if (frames % 600 == 0 || statsStart == 0) {
+            statsStart = lastFrameEnd;
+            gameTicks = executeTicks = waitTicks = 0;
+            gpuMs = 0.0f;
+            timedFrames = 0;
+            vertexBytes = 0;
+        }
+        executeEnd = svcGetSystemTick();
+        executeTicks += executeEnd - executeStart;
         // No reads of the screen (the sun's visibility test): it reads as
         // covered, so there is no lens flare.
         if (readback.requested) {

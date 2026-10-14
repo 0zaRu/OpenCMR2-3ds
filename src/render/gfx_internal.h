@@ -153,6 +153,8 @@ struct GfxExecutor {
     // The top level of a texture taken by Upload, as BGRA pixels at the
     // texture's size (from the executor's smaller copy).
     virtual bool ReadPixels(GfxTexture *, std::vector<uint32_t> &) { return false; }
+    // Whether draws into a texture target are carried out.
+    virtual bool RendersToTextures() { return true; }
 };
 
 GfxExecutor *Gfx_CreateGpuExecutor(void);

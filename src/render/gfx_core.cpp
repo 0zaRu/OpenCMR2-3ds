@@ -72,8 +72,8 @@ uint32_t RecordState()
 uint32_t AppendVertices(const void *data, size_t bytes)
 {
     size_t offset = s_frame.vertices.size();
-    s_frame.vertices.resize(offset + bytes);
-    memcpy(s_frame.vertices.data() + offset, data, bytes);
+    const uint8_t *p = (const uint8_t *)data;
+    s_frame.vertices.insert(s_frame.vertices.end(), p, p + bytes);
     return (uint32_t)offset;
 }
 
@@ -141,13 +141,31 @@ void RecordDraw(int primitive, bool transformed, const void *vertices, DWORD ver
     cmd.type = GFX_CMD_DRAW;
     cmd.primitive = primitive;
     cmd.transformed = transformed;
-    cmd.vertexCount = vertexCount;
-    cmd.firstVertexByte = AppendVertices(vertices, vertexCount * (transformed ? sizeof(GfxTLVertex) : sizeof(GfxVertex)));
+    size_t stride = transformed ? sizeof(GfxTLVertex) : sizeof(GfxVertex);
     if (indices != NULL) {
+        // Only the vertices the indices use: the game passes a whole mesh's
+        // vertices with each of its batches.
+        unsigned lo = 0xffff, hi = 0;
+        for (DWORD i = 0; i < indexCount; i++) {
+            lo = std::min<unsigned>(lo, indices[i]);
+            hi = std::max<unsigned>(hi, indices[i]);
+        }
+        if (lo > hi || hi >= vertexCount)
+            lo = 0;
+        else
+            vertexCount = hi + 1;
+        cmd.vertexCount = vertexCount - lo;
+        cmd.firstVertexByte = AppendVertices((const uint8_t *)vertices + lo * stride, cmd.vertexCount * stride);
         cmd.firstIndex = (uint32_t)s_frame.indices.size();
         cmd.indexCount = indexCount;
-        s_frame.indices.insert(s_frame.indices.end(), indices, indices + indexCount);
+        size_t first = s_frame.indices.size();
+        s_frame.indices.resize(first + indexCount);
+        uint16_t *out = s_frame.indices.data() + first;
+        for (DWORD i = 0; i < indexCount; i++)
+            out[i] = (uint16_t)(indices[i] - lo);
     } else {
+        cmd.vertexCount = vertexCount;
+        cmd.firstVertexByte = AppendVertices(vertices, vertexCount * stride);
         cmd.firstIndex = ~0u;
         cmd.indexCount = 0;
     }
@@ -442,6 +460,7 @@ static void Present(BOOL vsync, bool stretch)
 }
 
 extern "C" void Gfx_Present(BOOL vsync) { Present(vsync, false); }
+extern "C" BOOL Gfx_CanRenderToTextures(void) { return s_executor == NULL || s_executor->RendersToTextures(); }
 extern "C" void Gfx_PresentStretched(BOOL vsync) { Present(vsync, true); }
 
 // Runs what is recorded so far without ending the frame.

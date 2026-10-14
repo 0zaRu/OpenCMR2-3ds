@@ -2348,6 +2348,11 @@ int Graphics_RenderNodeCubeMapFaces(SceneNode *pNode, int bit)
     int i;
     unsigned int sectorIndex;
 
+    // PORT: a renderer that drops draws into textures (3DS) skips the six
+    // views of the world, which would only cost time.
+    if (!Gfx_CanRenderToTextures())
+        return 1;
+
     farPlane = CGraphics::m_farPlaneFixed;
     pCurrent = &pNode->current;
     pNodeMesh = (Mesh *)pNode->pObject;

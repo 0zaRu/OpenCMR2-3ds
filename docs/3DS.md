@@ -94,19 +94,26 @@ addition to the [general settings](../README.md#configuration):
 | `texture_max` | `128` | Largest texture side, 8 to 1024. Higher is sharper and needs more memory |
 | `movies` | `0` | `1` plays the Bink videos |
 | `stretch` | `0` | `1` stretches the 4:3 picture over the whole top screen |
+| `vsync` | `0` | `1` starts each frame on the screen's refresh: steadier, but the frame rate drops in steps (60, 30, 20, 15) |
 | `console` | `1` | `0` stops writing the log on the bottom screen |
 | `debug_lighting`, `debug_fog`, `debug_mipmaps` | `1` | `0` draws without lighting, fog or mipmaps, to find a feature the GPU does not take |
 | `debug_shader` | `0` | `1` draws 3D with the minimal vertex shader (`fixedmin.v.pica`: no lighting or texture matrices) |
 
 ## Problems
 
-The log is `sd:/3ds/OpenCMR2/opencmr2.log`. Every 600 frames it gets two
-lines on memory and drawing:
+The log is `sd:/3ds/OpenCMR2/opencmr2.log`. Every 600 frames it gets three
+lines on memory, drawing and where a frame's time goes (the game's own work,
+the renderer, waiting for the GPU, and the GPU's drawing time):
 
 ```
 mem: heap 7072 of 65268 KB used, linear 26040 KB, VRAM 5343 KB free
 gfx: 24.0 fps, up to 3006 draws and 30% of the command buffer a frame, 0 frames cut short
+time: a frame 30.1 ms game, 9.2 ms renderer, 0.4 ms waiting for the GPU (GPU 12.0 ms); 410 KB of vertices
 ```
+
+On a stage, the game's graphics options (draw distance, effects, shadows,
+reflections) change most of the game's and the GPU's share. Car reflections
+of the "environment" kind are not drawn on the 3DS, so they cost nothing.
 
 Files of 512 KB or more are logged when they are opened, with the heap in use
 then (`file Game/Bigfiles/....bfl: ... KB, heap ... of ... KB used`). A frame

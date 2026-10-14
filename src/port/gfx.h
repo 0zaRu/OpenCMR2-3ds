@@ -229,6 +229,9 @@ void Gfx_GetDisplayMode(int index, int *width, int *height);
    display's aspect ratio at 720 lines (540 on Android), or the display's own
    when smaller. */
 void Gfx_GetDefaultDisplayMode(int *width, int *height);
+/* Whether drawing into textures shows (not on the 3DS: car reflections that
+   render the world into a cube map are then skipped). */
+BOOL Gfx_CanRenderToTextures(void);
 
 /* A frame is BeginScene...EndScene blocks (any number) and one Present. */
 void Gfx_BeginScene(void);
