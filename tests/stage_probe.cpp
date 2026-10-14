@@ -453,7 +453,10 @@ int main(int argc, char **argv) {
         // discovery, lobby and race-start packets.
         if (lanRole) {
             SDL_Delay(10);
-            if (SDL_GetTicks() - lanOrigin > 40000) break;
+            // OPENCMR2_PROBE_LAN_SECONDS: longer for an emulated console.
+            static const Uint64 lanLimit =
+                getenv("OPENCMR2_PROBE_LAN_SECONDS") ? 1000 * strtoull(getenv("OPENCMR2_PROBE_LAN_SECONDS"), NULL, 10) : 40000;
+            if (SDL_GetTicks() - lanOrigin > lanLimit) break;
         }
         SDL_PumpEvents();
         // The dummy driver does not focus windows. This test dispatches frames

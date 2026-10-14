@@ -165,17 +165,26 @@ shows the keyboard:
 | B | Back | Brake |
 | Y | | Handbrake |
 | R / L | | Gear up / down |
-| X | | Camera |
+| X | System keyboard (typing) | Camera |
 | START | Confirm | Pause |
 | SELECT, touch screen | | Confirm |
 
-The results after a stage, its replay and the pause menu are menus.
+The results after a stage, its replay and the pause menu are menus. While
+driving, the bottom screen shows a map of the stage with your car and the
+others; in the menus it shows the log.
+
+**Network play** (new on the 3DS, being tested) works over wifi, with other 3DS consoles and with the PC
+version on the same network: choose the game's network mode as on the PC.
+To type a name or a chat message, press X in the menu for the system
+keyboard. Details in [NETWORK.md](docs/NETWORK.md).
 
 Settings, saves and the log are in `sd:/3ds/OpenCMR2/`. `opencmr2.ini` is
 written with comments on the first launch; its `[3ds]` section sets the
-texture size, the videos, stretching the picture over the whole screen and the log on the
-bottom screen. For more speed on a stage, lower the game's own draw distance
-and effects in its graphics options.
+texture size, the sharp menus, the map, the videos, stretching the picture
+over the whole screen and the log on the bottom screen. For more speed on a
+stage, lower the game's own draw distance and effects in its graphics
+options. Every 600 frames the log notes the frame rate and where a frame's
+time goes (`gfx:` and `time:` lines): send them with reports on speed.
 
 ### 6. If something goes wrong
 
@@ -187,8 +196,8 @@ and effects in its graphics options.
   `sd:/3ds/OpenCMR2/opencmr2.log` and what you were doing. With Luma3DS, a
   crash dump from `sd:/luma/dumps/arm11/` helps too.
 
-What is left out on the 3DS (car reflections, videos by default, network
-play) and how the port is put together is in [3DS.md](docs/3DS.md).
+What is left out on the 3DS (car reflections, videos by default) and how
+the port is put together is in [3DS.md](docs/3DS.md).
 
 ## Approach
 

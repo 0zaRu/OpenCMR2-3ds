@@ -32,9 +32,14 @@ fixed-function pipeline.
 | Expected speed | slow; stages may run well below 30 fps | better |
 
 The game keeps its 640x480 picture and draws it at half size, 320x240 in 4:3,
-in the middle of the 400x240 top screen. The bottom screen shows the log.
+in the middle of the 400x240 top screen. The menus are drawn at the full
+640x480 and halved smoothly by the display transfer, so their text stays
+readable; the fonts are never shrunk. On a stage the bottom screen shows a
+map of the stage (the route, splits, start and finish, the player's arrow
+and the other cars); elsewhere it shows the log.
 
-To fit the memory, textures are shrunk (to at most 128x128 by default) and
+To fit the memory, stage textures are shrunk (to at most 128x128 by default,
+256x256 for the menus') and
 stored in 16-bit formats. The full-size copy in main memory is released once
 a texture is on the GPU; a 16-bit copy of the shrunk texture stays, so that
 the textures the game changes later (car lights, for example) are rebuilt
@@ -44,8 +49,12 @@ from it. Some effects are left out:
 * the intro and country videos are skipped by default (decoding Bink is too
   slow);
 * there is no specular light, no bump mapping and no lens flare, and spot
-  lights are lit as point lights;
-* there is no network play.
+  lights are lit as point lights.
+
+Network play (new, being tested) works over the console's wifi, with other 3DS consoles and with
+the PC versions on the same network (LAN search) or by address
+(`[net] peers`, see [NETWORK.md](NETWORK.md)). Text, such as a player's name
+or the chat, is typed on the system keyboard: press X in a menu.
 
 ## Installing
 
@@ -75,7 +84,7 @@ shows the keyboard. In menus and on a stage they mean different things:
 | B | Back | Brake |
 | Y | | Handbrake |
 | R / L | | Gear up / down |
-| X | | Camera |
+| X | System keyboard (typing) | Camera |
 | START | Confirm | Pause |
 | SELECT | | Confirm |
 | ZR (New 3DS) | | Key R of the keyboard controls |
@@ -91,7 +100,10 @@ addition to the [general settings](../README.md#configuration):
 
 | Setting | Default | Description |
 | --- | --- | --- |
-| `texture_max` | `128` | Largest texture side, 8 to 1024. Higher is sharper and needs more memory |
+| `texture_max` | `128` | Largest texture side on a stage, 8 to 1024. Higher is sharper and needs more memory |
+| `texture_max_menu` | `256` | The same for textures loaded in the menus |
+| `menu_supersample` | `1` | `1` draws the menus at 640x480 and halves them (sharper text); `0` draws them at half size |
+| `map` | `1` | `1` shows the stage map on the bottom screen while driving; `0` keeps the log there |
 | `movies` | `0` | `1` plays the Bink videos |
 | `stretch` | `0` | `1` stretches the 4:3 picture over the whole top screen |
 | `vsync` | `0` | `1` starts each frame on the screen's refresh: steadier, but the frame rate drops in steps (60, 30, 20, 15) |
@@ -103,12 +115,12 @@ addition to the [general settings](../README.md#configuration):
 
 The log is `sd:/3ds/OpenCMR2/opencmr2.log`. Every 600 frames it gets three
 lines on memory, drawing and where a frame's time goes (the game's own work,
-the renderer, waiting for the GPU, and the GPU's drawing time):
+the renderer, waiting for the GPU or the screen refresh (at most 60 fps), and the GPU's drawing time):
 
 ```
 mem: heap 7072 of 65268 KB used, linear 26040 KB, VRAM 5343 KB free
 gfx: 24.0 fps, up to 3006 draws and 30% of the command buffer a frame, 0 frames cut short
-time: a frame 30.1 ms game, 9.2 ms renderer, 0.4 ms waiting for the GPU (GPU 12.0 ms); 410 KB of vertices
+time: a frame 30.1 ms game, 9.2 ms renderer, 0.4 ms waiting for the GPU or the refresh (GPU 12.0 ms); 410 KB of vertices
 ```
 
 On a stage, the game's graphics options (draw distance, effects, shadows,

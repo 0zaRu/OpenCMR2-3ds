@@ -1421,7 +1421,7 @@ struct Executor : GfxExecutor {
                     (unsigned)(vramSpaceFree() / 1024));
             Sys_Log("gfx: %.1f fps, up to %u draws and %.0f%% of the command buffer a frame, %u frames cut short",
                     seconds > 0 ? timedFrames / seconds : 0.0f, maxDraws, maxCmdUsage * 100.0f, dropped);
-            Sys_Log("time: a frame %.1f ms game, %.1f ms renderer, %.1f ms waiting for the GPU (GPU %.1f ms); "
+            Sys_Log("time: a frame %.1f ms game, %.1f ms renderer, %.1f ms waiting for the GPU or the refresh (GPU %.1f ms); "
                     "%u KB of vertices", gameTicks * perFrame, (executeTicks - waitTicks) * perFrame, waitTicks * perFrame,
                     gpuMs / timedFrames, (unsigned)(vertexBytes / timedFrames / 1024));
             maxDraws = 0;
