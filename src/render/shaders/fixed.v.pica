@@ -7,6 +7,9 @@
 ;   position (w 1 point/spot, 0 directional: then xyz is -direction),
 ;   diffuse colour, attenuation (a0, a1, a2, range squared).
 ; Spot lights are lit as point lights and specular light is not computed.
+; Up to four lights: the first always (black when there is none), the others
+; when light1..light3 are set. No loop or relative addressing, which the
+; hardware is touchier about than emulators.
 
 .fvec projection[4]
 .fvec modelView[4]
@@ -16,9 +19,7 @@
 .fvec materialAmbient
 .fvec materialEmissive
 .fvec ambient
-.fvec lights[24]
-
-.ivec lightLoop
+.fvec lights[12]
 
 .bool lighting
 .bool diffuseFromVertex
@@ -29,6 +30,9 @@
 .bool tex0FromUV1
 .bool tex1FromUV1
 .bool normalizeNormals
+.bool light1
+.bool light2
+.bool light3
 
 .constf consts(0.0, 1.0, 0.00392156862745, 2.0)
 .alias zeros consts.xxxx
@@ -76,30 +80,27 @@
 
     ifu lighting
         mov r6, zeros
-        for lightLoop
-            ; to the light: position - eye * w
-            mov r7, lights[aL]
-            mul r8, r7.wwww, r1
-            add r8, r7, -r8
-            dp3 r9.x, r8, r8
-            rsq r9.y, r9.x
-            mul r8.xyz, r9.yyyy, r8
-            dp3 r10.x, r2, r8
-            max r10.x, zeros, r10.x
-            ; attenuation 1 / (a0 + a1 d + a2 d^2), 0 beyond the range
-            rcp r9.z, r9.y
-            mov r11, lights[aL+2]
-            mul r12.x, r11.y, r9.z
-            add r12.x, r11.x, r12.x
-            mul r13.x, r11.z, r9.x
-            add r12.x, r12.x, r13.x
-            rcp r12.x, r12.x
-            slt r13.x, r9.x, r11.w
-            mul r12.x, r12.x, r13.x
-            mul r10.x, r10.x, r12.x
-            mov r14, lights[aL+1]
-            mul r14, r10.xxxx, r14
-            add r6, r6, r14
+        mov r7, lights[0]
+        mov r11, lights[2]
+        mov r14, lights[1]
+        call addLight
+        ifu light1
+            mov r7, lights[3]
+            mov r11, lights[5]
+            mov r14, lights[4]
+            call addLight
+        .end
+        ifu light2
+            mov r7, lights[6]
+            mov r11, lights[8]
+            mov r14, lights[7]
+            call addLight
+        .end
+        ifu light3
+            mov r7, lights[9]
+            mov r11, lights[11]
+            mov r14, lights[10]
+            call addLight
         .end
 
         mov r15, materialDiffuse
@@ -168,4 +169,29 @@
     mul r9.xyz, r9.xxxx, r2
     add r9.xyz, r9, -r8
     mov r9.w, ones
+.end
+
+; r6 += the diffuse light of one light: r7 position (w: point 1, directional
+; 0), r14 diffuse colour, r11 attenuation (a0, a1, a2, range squared); eye
+; position r1, eye normal r2.
+.proc addLight
+    mul r8, r7.wwww, r1
+    add r8, r7, -r8
+    dp3 r9.x, r8, r8
+    rsq r9.y, r9.x
+    mul r8.xyz, r9.yyyy, r8
+    dp3 r10.x, r2, r8
+    max r10.x, zeros, r10.x
+    ; attenuation 1 / (a0 + a1 d + a2 d^2), 0 beyond the range
+    rcp r9.z, r9.y
+    mul r12.x, r11.y, r9.z
+    add r12.x, r11.x, r12.x
+    mul r13.x, r11.z, r9.x
+    add r12.x, r12.x, r13.x
+    rcp r12.x, r12.x
+    slt r13.x, r9.x, r11.w
+    mul r12.x, r12.x, r13.x
+    mul r10.x, r10.x, r12.x
+    mul r14, r10.xxxx, r14
+    add r6, r6, r14
 .end

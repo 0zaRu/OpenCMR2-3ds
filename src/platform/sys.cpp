@@ -325,6 +325,10 @@ const char s_defaultSettings[] =
     "; stretch = 0\n"
     "; 1 = keep the log on the bottom screen.\n"
     "; console = 1\n"
+    "; Debugging: 0 draws without lighting, fog or mipmaps.\n"
+    "; debug_lighting = 1\n"
+    "; debug_fog = 1\n"
+    "; debug_mipmaps = 1\n"
 #endif
     ;
 

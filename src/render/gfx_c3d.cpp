@@ -267,7 +267,7 @@ inline float At(const GfxMatrix &m, int row, int col)
 struct Uniforms3D {
     int projection, modelView, tex0Matrix, tex1Matrix;
     int materialDiffuse, materialAmbient, materialEmissive, ambient, lights;
-    int lightLoop;
+    int light1, light2, light3;
     int lighting, diffuseFromVertex, ambientFromVertex, emissiveFromVertex;
     int reflect0, reflect1, tex0FromUV1, tex1FromUV1, normalizeNormals;
 };
@@ -285,6 +285,9 @@ struct Executor : GfxExecutor {
 
     int gameWidth = 640, gameHeight = 480;
     bool stretch = false;
+    // [3ds] debug_lighting, debug_fog, debug_mipmaps = 0: without them, to
+    // find which feature a console's GPU does not take.
+    bool useLighting = true, useFog = true, useMipmaps = true;
     int textureMax = 128;
 
     // Vertices and indices of the frame, in linear memory.
@@ -329,6 +332,12 @@ struct Executor : GfxExecutor {
         C3D_Tex tex[2];
         bool texBound[2];
     } sent;
+
+    // What the frame being drawn holds, for a GPU that does not finish it.
+    struct Stats {
+        unsigned draws = 0, draws3D = 0, drawsTL = 0, lit = 0, fogged = 0, clears = 0;
+        unsigned maxVertices = 0, maxIndices = 0, uploads = 0, cutViewports = 0;
+    } last;
 
     // Statistics for the log.
     unsigned drawsThisFrame = 0, maxDraws = 0, dropped = 0;
@@ -384,7 +393,9 @@ struct Executor : GfxExecutor {
         u3d.materialEmissive = shaderInstanceGetUniformLocation(vs, "materialEmissive");
         u3d.ambient = shaderInstanceGetUniformLocation(vs, "ambient");
         u3d.lights = shaderInstanceGetUniformLocation(vs, "lights");
-        u3d.lightLoop = shaderInstanceGetUniformLocation(vs, "lightLoop");
+        u3d.light1 = shaderInstanceGetUniformLocation(vs, "light1");
+        u3d.light2 = shaderInstanceGetUniformLocation(vs, "light2");
+        u3d.light3 = shaderInstanceGetUniformLocation(vs, "light3");
         u3d.lighting = shaderInstanceGetUniformLocation(vs, "lighting");
         u3d.diffuseFromVertex = shaderInstanceGetUniformLocation(vs, "diffuseFromVertex");
         u3d.ambientFromVertex = shaderInstanceGetUniformLocation(vs, "ambientFromVertex");
@@ -422,6 +433,12 @@ struct Executor : GfxExecutor {
 
         textureMax = std::max(8, std::min(1024, Platform_GetSettingInt("3ds.texture_max", 128)));
         stretch = Platform_GetSettingInt("3ds.stretch", 0) != 0;
+        useLighting = Platform_GetSettingInt("3ds.debug_lighting", 1) != 0;
+        useFog = Platform_GetSettingInt("3ds.debug_fog", 1) != 0;
+        useMipmaps = Platform_GetSettingInt("3ds.debug_mipmaps", 1) != 0;
+        if (!useLighting || !useFog || !useMipmaps)
+            Sys_Log("gfx: debugging without%s%s%s", useLighting ? "" : " lighting", useFog ? "" : " fog",
+                    useMipmaps ? "" : " mipmaps");
         Sys_Log("gfx: citro3d, textures up to %d", textureMax);
         ready = true;
         return true;
@@ -552,12 +569,16 @@ struct Executor : GfxExecutor {
         std::vector<uint32_t>().swap(pixels);
 
         int maxLevel = 0;
-        if (t->mipLevels > 1)
+        if (t->mipLevels > 1 && useMipmaps)
             while ((tw >> (maxLevel + 1)) >= 8 && (th >> (maxLevel + 1)) >= 8)
                 maxLevel++;
 
+        // Inside a frame a copy to VRAM goes through citro3d's queue (32
+        // entries, two a texture): there, textures go to linear memory.
+        uintptr_t current = g->valid ? (uintptr_t)g->tex.data : 0;
+        bool inVram = current >= OS_VRAM_VADDR && current < OS_VRAM_VADDR + OS_VRAM_SIZE;
         if (g->valid && (g->tex.width != tw || g->tex.height != th || g->tex.fmt != format ||
-                         g->maxLevel != maxLevel)) {
+                         g->maxLevel != maxLevel || (inFrame && inVram))) {
             Retire(g->tex);
             g->valid = false;
         }
@@ -568,7 +589,7 @@ struct Executor : GfxExecutor {
             params.maxLevel = (u8)maxLevel;
             params.format = format;
             params.type = GPU_TEX_2D;
-            params.onVram = true;
+            params.onVram = !inFrame;
             if (!C3D_TexInitWithParams(&g->tex, NULL, params)) {
                 params.onVram = false;
                 if (!C3D_TexInitWithParams(&g->tex, NULL, params)) {
@@ -591,6 +612,8 @@ struct Executor : GfxExecutor {
                 lw = nw;
                 lh = nh;
             }
+            if (m == 0 && inFrame)
+                last.uploads++;
             if (!UploadLevel(g->tex, m, src, lw, lh, format))
                 return false;
             if (m == 0)
@@ -752,15 +775,23 @@ struct Executor : GfxExecutor {
     {
         int x = (int)lroundf(240 - (ly + lh)), y = (int)lroundf(400 - (lx + lw));
         int w = (int)lroundf(lh), h = (int)lroundf(lw);
+        // Within the framebuffer: the GPU would draw outside its memory.
         if (x < 0) { w += x; x = 0; }
         if (y < 0) { h += y; y = 0; }
-        if (w <= 0 || h <= 0)
+        if (x + w > 240 || y + h > 400)
+            last.cutViewports++;
+        if (x + w > 240) w = 240 - x;
+        if (y + h > 400) h = 400 - y;
+        if (w <= 0 || h <= 0) {
+            x = y = 0;
             w = h = 1;
+        }
         u32 v[4] = { (u32)x, (u32)y, (u32)w, (u32)h };
         if (sent.valid && memcmp(v, sent.viewport, sizeof(v)) == 0)
             return;
         memcpy(sent.viewport, v, sizeof(v));
         C3D_SetViewport(v[0], v[1], v[2], v[3]);
+        C3D_SetScissor(GPU_SCISSOR_NORMAL, v[0], v[1], v[0] + v[2], v[1] + v[3]);
     }
 
     void SetGameViewport(const GfxViewport &vp, bool stretched)
@@ -782,7 +813,7 @@ struct Executor : GfxExecutor {
 
     void SetFog(const GfxDrawState &s, bool transformed)
     {
-        bool linear = s.fog && !transformed &&
+        bool linear = useFog && s.fog && !transformed &&
                       (s.fogTableMode == GFX_FOG_LINEAR || (s.fogTableMode == GFX_FOG_NONE && s.fogVertexMode == GFX_FOG_LINEAR));
         if (!linear) {
             if (sent.fog || !sent.valid)
@@ -1043,8 +1074,9 @@ struct Executor : GfxExecutor {
             SetB(stage == 0 ? u3d.tex0FromUV1 : u3d.tex1FromUV1, (st.texCoordIndex & 0xffff) == 1);
         }
         SetB(u3d.normalizeNormals, s.normalizeNormals);
-        SetB(u3d.lighting, s.lighting);
-        if (!s.lighting)
+        bool lighting = s.lighting && useLighting;
+        SetB(u3d.lighting, lighting);
+        if (!lighting)
             return;
 
         const GfxMaterial &m = s.material;
@@ -1059,7 +1091,7 @@ struct Executor : GfxExecutor {
               ab = (s.ambient & 0xff) / 255.0f;
         int count = 0;
         for (int i = 0; i < 8; i++) {
-            if (!s.lightEnabled[i])
+            if (!s.lightEnabled[i] || count == 4)
                 continue;
             const GfxLight &l = s.lights[i];
             ar += l.ambient.r;
@@ -1084,16 +1116,15 @@ struct Executor : GfxExecutor {
             count++;
         }
         if (count == 0) {
-            // The loop runs at least once: a light that adds nothing.
+            // The first light is always lit: one that adds nothing.
             SetF(u3d.lights, 0, 0, 1, 0);
             SetF(u3d.lights + 1, 0, 0, 0, 0);
             SetF(u3d.lights + 2, 1, 0, 0, 1e30f);
-            count = 1;
         }
         SetF(u3d.ambient, ar, ag, ab, 0.0f);
-        C3D_IVec loop = IVec_Pack(count - 1, 0, 3, 0);
-        if (C3D_IVUnif[GPU_VERTEX_SHADER][u3d.lightLoop - 0x60] != loop || !sent.valid)
-            C3D_IVUnifSet(GPU_VERTEX_SHADER, u3d.lightLoop, count - 1, 0, 3, 0);
+        SetB(u3d.light1, count > 1);
+        SetB(u3d.light2, count > 2);
+        SetB(u3d.light3, count > 3);
     }
 
     void SetTLUniforms()
@@ -1156,7 +1187,20 @@ struct Executor : GfxExecutor {
     void BeginFrame()
     {
         Ctr_Breadcrumb("starting frame %u: waiting for the GPU", frames + 1);
-        C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
+        u64 start = osGetTime();
+        bool reported = false;
+        while (!C3D_FrameBegin(C3D_FRAME_SYNCDRAW | C3D_FRAME_NONBLOCK)) {
+            if (!reported && osGetTime() - start > 3000) {
+                // The GPU has not finished the last frame: what was in it.
+                Sys_Log("gfx: the GPU is stuck on frame %u: %u draws (%u 3D, %u lit, %u fogged, %u TL, %u clears), "
+                        "up to %u vertices and %u indices a draw, %u textures uploaded in it, %u viewports cut",
+                        frames, last.draws, last.draws3D, last.lit, last.fogged, last.drawsTL, last.clears,
+                        last.maxVertices, last.maxIndices, last.uploads, last.cutViewports);
+                reported = true;
+            }
+            svcSleepThread(1000000);
+        }
+        last = Stats();
         FreeRetired();
         arenaUsed = 0;
         C3D_RenderTargetClear(top, C3D_CLEAR_ALL, 0x000000ff, 0xffffffff);
@@ -1211,6 +1255,7 @@ struct Executor : GfxExecutor {
                 break;
             if (c.type == GFX_CMD_CLEAR) {
                 Clear(c, stretched);
+                last.clears++;
                 continue;
             }
             if (vertices == NULL || c.primitive == GFX_POINTLIST || c.primitive == GFX_LINELIST ||
@@ -1241,6 +1286,12 @@ struct Executor : GfxExecutor {
             else
                 C3D_DrawArrays(Primitive(c.primitive), 0, (int)c.vertexCount);
             drawsThisFrame++;
+            last.draws++;
+            (c.transformed ? last.drawsTL : last.draws3D)++;
+            last.lit += !c.transformed && s.lighting;
+            last.fogged += !c.transformed && s.fog;
+            last.maxVertices = std::max<unsigned>(last.maxVertices, c.vertexCount);
+            last.maxIndices = std::max<unsigned>(last.maxIndices, c.indexCount);
         }
 
         if (!present)
