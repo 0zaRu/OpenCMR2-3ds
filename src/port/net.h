@@ -146,6 +146,9 @@ enum NetOpenFlags {
 /* Hosts (desc fully filled) or joins (guidInstance and password). */
 HRESULT Net_Open(const NetSessionDesc *desc, DWORD flags);
 HRESULT Net_Close(void);
+/* At exit: leaves the session and stops the network thread (before the
+   platform's sockets go, on the 3DS). */
+void Net_Shutdown(void);
 /* Copies the session description; the name and password pointers point
    into storage owned by the network layer. */
 HRESULT Net_GetSessionDesc(NetSessionDesc *desc);

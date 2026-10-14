@@ -2,6 +2,7 @@
 
 #include "platform/platform.h"
 #include "platform/testing.h"
+#include "port/net.h"
 #include "port/sys.h"
 
 #include <stdarg.h>
@@ -741,6 +742,8 @@ void Platform_Shutdown(void)
         s_logFile = NULL;
     }
 #ifdef __3DS__
+    // The network thread stops before Ctr_Shutdown closes the sockets.
+    Net_Shutdown();
     // Not SDL_Quit: closing SDL's audio device can wait forever for its
     // thread (see Audio_Shutdown). The system ends the threads with the
     // program; Ctr_Shutdown releases the DSP.

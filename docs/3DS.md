@@ -180,7 +180,9 @@ The CI job `nintendo-3ds` builds them in the same container and uploads
 * `src/render/gfx_core.cpp`: hands finished textures to the executor and
   releases their CPU copies (`ReleaseTextureCopies`). Vertex buffers get
   their memory on the first lock.
-* `src/net/net_none.cpp`: no network connection is offered.
+* `src/net/`: network play as on the PC, ENet on the console's sockets
+  (`third_party/enet/unix.c` gathers the buffers for `sendto`/`recvfrom`,
+  which libctru has instead of `sendmsg`/`recvmsg`).
 * `res/3ds/`: icon, banner and the makerom settings (`opencmr2.rsf`).
 
 The game builds with GCC here, with `-fms-extensions -fpermissive` and empty

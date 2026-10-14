@@ -126,6 +126,14 @@ extern "C" HRESULT Net_Close(void)
     return s_session ? s_session->Close() : NET_OK;
 }
 
+extern "C" void Net_Shutdown(void)
+{
+    if (s_session) {
+        s_session->Close();
+        s_session.reset();      // joins its thread
+    }
+}
+
 extern "C" HRESULT Net_GetSessionDesc(NetSessionDesc *desc)
 {
     return s_session ? s_session->GetSessionDesc(desc) : NET_ERR_NOCONNECTION;
