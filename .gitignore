@@ -7,3 +7,5 @@
 *.swo
 *.py[cod]
 __pycache__/
+# Test packages handed out for a console.
+/*.zip

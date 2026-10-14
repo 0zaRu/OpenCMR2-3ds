@@ -77,11 +77,12 @@ shows the keyboard. In menus and on a stage they mean different things:
 | R / L | | Gear up / down |
 | X | | Camera |
 | START | Confirm | Pause |
-| SELECT | | Confirm (results screens) |
+| SELECT | | Confirm |
 | ZR (New 3DS) | | Key R of the keyboard controls |
 | Touch screen | Confirm | Confirm |
 
-The pause menu is a menu: there A and B confirm and go back.
+The pause menu, the results after a stage and its replay are menus: there A
+or START confirm and B goes back.
 
 ## Settings
 

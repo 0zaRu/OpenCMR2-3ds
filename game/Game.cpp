@@ -168,8 +168,9 @@ BOOL CGame::DispatchFrontendResourceState(void)
     m_unk0x00523c5c = GetFrontendResourceMode();
     if (m_unk0x00523c5c != m_unk0x00523c58)
         m_unk0x00523c58 = m_unk0x00523c5c;
-    // PORT: the platform maps handheld buttons to driving or menu keys.
-    Input_SetDrivingContext(m_unk0x00523c5c == 3);
+    // PORT: the platform maps handheld buttons to driving or menu keys. The
+    // results, replay and in-race menus switch the keyboard to menu keys.
+    Input_SetDrivingContext(m_unk0x00523c5c == 3 && CGameInfo::m_unk0x0059f8d0 == 0);
 
     switch (m_unk0x00523c5c)
     {

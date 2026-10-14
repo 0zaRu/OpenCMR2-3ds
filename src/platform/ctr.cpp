@@ -251,5 +251,7 @@ bool Ctr_IsKeyDown(int dik)
 
 void Ctr_SetDrivingContext(bool driving)
 {
+    if (driving != s_driving)
+        Sys_Log("input: %s keys", driving ? "driving" : "menu");
     s_driving = driving;
 }
