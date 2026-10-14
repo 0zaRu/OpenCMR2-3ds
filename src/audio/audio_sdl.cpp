@@ -207,6 +207,15 @@ extern "C" void Audio_ReleaseStream(AudioStream *stream)
 
 extern "C" void Audio_Shutdown(void)
 {
+#ifdef __3DS__
+    // SDL's 3DS audio thread can wait forever for the DSP while its device
+    // closes (it is woken only after the close waits for it), which froze
+    // the game between the menus and a stage, where the game restarts its
+    // sound. The device stays open and silent; Audio_Init reuses it.
+    if (s_stream != NULL)
+        SDL_ClearAudioStream(s_stream);
+    return;
+#endif
     if (s_stream != NULL) {
         SDL_DestroyAudioStream(s_stream);
         s_stream = NULL;

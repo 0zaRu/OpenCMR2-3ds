@@ -95,7 +95,9 @@ namespace {
 
 volatile u64 s_lastFrame;
 volatile unsigned s_polls;      // event polls since the last frame
-char s_breadcrumb[160] = "starting";
+// The last breadcrumbs, the newest at s_crumbIndex.
+char s_breadcrumbs[8][160] = { "starting" };
+volatile unsigned s_crumbIndex;
 volatile bool s_watching;
 
 void Watchdog(void *)
@@ -105,11 +107,20 @@ void Watchdog(void *)
         svcSleepThread(1000000000LL);
         u64 now = osGetTime();
         if (s_lastFrame != 0 && now - s_lastFrame >= 3000 && now - lastReport >= 5000) {
-            char crumb[sizeof(s_breadcrumb)];
-            memcpy(crumb, s_breadcrumb, sizeof(crumb));
+            unsigned newest = s_crumbIndex;
+            char crumb[160];
+            memcpy(crumb, s_breadcrumbs[newest % 8], sizeof(crumb));
             crumb[sizeof(crumb) - 1] = 0;
             Sys_Log("watchdog: no frame for %u s, %u event polls; last: %s", (unsigned)((now - s_lastFrame) / 1000),
                     s_polls, crumb);
+            // The first time, what led there.
+            if (lastReport == 0 || now - s_lastFrame < 5000)
+                for (unsigned i = 7; i >= 1; i--) {
+                    memcpy(crumb, s_breadcrumbs[(newest - i) % 8], sizeof(crumb));
+                    crumb[sizeof(crumb) - 1] = 0;
+                    if (crumb[0])
+                        Sys_Log("watchdog:   before: %s", crumb);
+                }
             lastReport = now;
         }
     }
@@ -136,12 +147,12 @@ void Ctr_FrameShown(void)
 
 void Ctr_Breadcrumb(const char *format, ...)
 {
-    char text[sizeof(s_breadcrumb)];
+    unsigned next = (s_crumbIndex + 1) % 8;
     va_list args;
     va_start(args, format);
-    vsnprintf(text, sizeof(text), format, args);
+    vsnprintf(s_breadcrumbs[next], sizeof(s_breadcrumbs[next]), format, args);
     va_end(args);
-    memcpy(s_breadcrumb, text, sizeof(text));
+    s_crumbIndex = next;
 }
 
 bool Ctr_Init(void)
@@ -156,6 +167,9 @@ bool Ctr_Init(void)
 
 void Ctr_Shutdown(void)
 {
+    // The DSP that SDL's audio opened (a no-op when it did not).
+    ndspChnReset(0);
+    ndspExit();
     if (s_console) {
         s_console = false;
         gfxExit();

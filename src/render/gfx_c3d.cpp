@@ -520,6 +520,7 @@ struct Executor : GfxExecutor {
         Ctr_Breadcrumb("converting a %dx%d texture (format %d), %u since the last frame", t->width, t->height,
                        t->format, converted);
         bool done = ConvertLevels(t);
+        Ctr_Breadcrumb("converted a %dx%d texture, %u since the last frame", t->width, t->height, converted + 1);
         converted++;
         convertMs += osGetTime() - start;
         return done;
@@ -1153,6 +1154,7 @@ struct Executor : GfxExecutor {
 
     void BeginFrame()
     {
+        Ctr_Breadcrumb("starting frame %u: waiting for the GPU", frames + 1);
         C3D_FrameBegin(C3D_FRAME_SYNCDRAW);
         FreeRetired();
         arenaUsed = 0;
@@ -1176,6 +1178,8 @@ struct Executor : GfxExecutor {
         UploadDirty(textures);
         if (!inFrame)
             BeginFrame();
+        Ctr_Breadcrumb("frame %u: %u commands, %u vertex bytes%s", frames + 1, (unsigned)frame.commands.size(),
+                       (unsigned)frame.vertices.size(), present ? "" : " (flush)");
 
         uint8_t *vertices = NULL;
         uint16_t *indices = NULL;
@@ -1240,6 +1244,7 @@ struct Executor : GfxExecutor {
 
         if (!present)
             return;
+        Ctr_Breadcrumb("frame %u: ending, waiting for vblank", frames + 1);
         C3D_FrameEnd(0);
         inFrame = false;
         u64 previous = lastFrameEnd;

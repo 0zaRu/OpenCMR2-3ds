@@ -725,9 +725,13 @@ void Platform_Shutdown(void)
         fclose(s_logFile);
         s_logFile = NULL;
     }
-    SDL_Quit();
 #ifdef __3DS__
+    // Not SDL_Quit: closing SDL's audio device can wait forever for its
+    // thread (see Audio_Shutdown). The system ends the threads with the
+    // program; Ctr_Shutdown releases the DSP.
     Ctr_Shutdown();
+#else
+    SDL_Quit();
 #endif
 }
 
