@@ -263,7 +263,10 @@ inline float At(const GfxMatrix &m, int row, int col)
     return (&m._11)[row * 4 + col];
 }
 
-// Uniform locations of the two programs.
+// Gfx_CtrSetMinimalShader (the GPU test).
+bool s_minimalShader;
+
+// Uniform locations of the 3D program.
 struct Uniforms3D {
     int projection, modelView, tex0Matrix, tex1Matrix;
     int materialDiffuse, materialAmbient, materialEmissive, ambient, lights;
@@ -277,9 +280,9 @@ struct Executor : GfxExecutor {
     C3D_RenderTarget *top = nullptr;
     DVLB_s *dvlb = nullptr;
     std::vector<uint32_t> shaderCode;       // the DVLB, word-aligned
-    shaderProgram_s program3D, programTL;
+    shaderProgram_s program3D, programTL, programMin;
     Uniforms3D u3d = {};
-    int uScreen = -1;
+    int uScreen = -1, uMinProjection = -1, uMinModelView = -1;
     C3D_AttrInfo attr3D, attrTL;
     shaderProgram_s *bound = nullptr;
 
@@ -288,6 +291,9 @@ struct Executor : GfxExecutor {
     // [3ds] debug_lighting, debug_fog, debug_mipmaps = 0: without them, to
     // find which feature a console's GPU does not take.
     bool useLighting = true, useFog = true, useMipmaps = true;
+    // [3ds] debug_shader = 1: 3D draws with fixedmin.v.pica (no lighting or
+    // texture matrices), to tell the full shader from the vertex layout.
+    bool minimalShader = false, minimalSetting = false;
     int textureMax = 128;
 
     // Vertices and indices of the frame, in linear memory.
@@ -374,7 +380,7 @@ struct Executor : GfxExecutor {
         shaderCode.resize((sizeof(g_fixed_shbin) + 3) / 4);
         memcpy(shaderCode.data(), g_fixed_shbin, sizeof(g_fixed_shbin));
         dvlb = DVLB_ParseFile((u32 *)shaderCode.data(), (u32)sizeof(g_fixed_shbin));
-        if (dvlb == NULL || dvlb->numDVLE < 2) {
+        if (dvlb == NULL || dvlb->numDVLE < 3) {
             Sys_Log("gfx: bad shader binary");
             return false;
         }
@@ -382,6 +388,8 @@ struct Executor : GfxExecutor {
         shaderProgramSetVsh(&program3D, &dvlb->DVLE[0]);
         shaderProgramInit(&programTL);
         shaderProgramSetVsh(&programTL, &dvlb->DVLE[1]);
+        shaderProgramInit(&programMin);
+        shaderProgramSetVsh(&programMin, &dvlb->DVLE[2]);
 
         shaderInstance_s *vs = program3D.vertexShader;
         u3d.projection = shaderInstanceGetUniformLocation(vs, "projection");
@@ -406,6 +414,8 @@ struct Executor : GfxExecutor {
         u3d.tex1FromUV1 = shaderInstanceGetUniformLocation(vs, "tex1FromUV1");
         u3d.normalizeNormals = shaderInstanceGetUniformLocation(vs, "normalizeNormals");
         uScreen = shaderInstanceGetUniformLocation(programTL.vertexShader, "screen");
+        uMinProjection = shaderInstanceGetUniformLocation(programMin.vertexShader, "minProjection");
+        uMinModelView = shaderInstanceGetUniformLocation(programMin.vertexShader, "minModelView");
 
         // GfxVertex: position, normal, diffuse, specular, uv0, uv1 (48 bytes).
         AttrInfo_Init(&attr3D);
@@ -436,9 +446,10 @@ struct Executor : GfxExecutor {
         useLighting = Platform_GetSettingInt("3ds.debug_lighting", 1) != 0;
         useFog = Platform_GetSettingInt("3ds.debug_fog", 1) != 0;
         useMipmaps = Platform_GetSettingInt("3ds.debug_mipmaps", 1) != 0;
-        if (!useLighting || !useFog || !useMipmaps)
-            Sys_Log("gfx: debugging without%s%s%s", useLighting ? "" : " lighting", useFog ? "" : " fog",
-                    useMipmaps ? "" : " mipmaps");
+        minimalSetting = Platform_GetSettingInt("3ds.debug_shader", 0) == 1;
+        if (!useLighting || !useFog || !useMipmaps || minimalSetting)
+            Sys_Log("gfx: debugging without%s%s%s%s", useLighting ? "" : " lighting", useFog ? "" : " fog",
+                    useMipmaps ? "" : " mipmaps", minimalSetting ? " the full 3D shader" : "");
         Sys_Log("gfx: citro3d, textures up to %d", textureMax);
         ready = true;
         return true;
@@ -706,6 +717,8 @@ struct Executor : GfxExecutor {
 
     void SetF(int id, float x, float y, float z, float w)
     {
+        if (id < 0)
+            return;
         C3D_FVec &v = C3D_FVUnif[GPU_VERTEX_SHADER][id];
         if (v.x == x && v.y == y && v.z == z && v.w == w)
             return;
@@ -1050,14 +1063,18 @@ struct Executor : GfxExecutor {
         // Projection, column-vector rows, rotated for the screen (x' = y,
         // y' = -x) and with depth to [-1, 0] (z' = -z).
         const GfxMatrix &p = s.projection;
-        SetF(u3d.projection + 0, At(p, 0, 1), At(p, 1, 1), At(p, 2, 1), At(p, 3, 1));
-        SetF(u3d.projection + 1, -At(p, 0, 0), -At(p, 1, 0), -At(p, 2, 0), -At(p, 3, 0));
-        SetF(u3d.projection + 2, -At(p, 0, 2), -At(p, 1, 2), -At(p, 2, 2), -At(p, 3, 2));
-        SetF(u3d.projection + 3, At(p, 0, 3), At(p, 1, 3), At(p, 2, 3), At(p, 3, 3));
+        int projection = minimalShader ? uMinProjection : u3d.projection;
+        int modelView = minimalShader ? uMinModelView : u3d.modelView;
+        SetF(projection + 0, At(p, 0, 1), At(p, 1, 1), At(p, 2, 1), At(p, 3, 1));
+        SetF(projection + 1, -At(p, 0, 0), -At(p, 1, 0), -At(p, 2, 0), -At(p, 3, 0));
+        SetF(projection + 2, -At(p, 0, 2), -At(p, 1, 2), -At(p, 2, 2), -At(p, 3, 2));
+        SetF(projection + 3, At(p, 0, 3), At(p, 1, 3), At(p, 2, 3), At(p, 3, 3));
         GfxMatrix mv;
         Multiply(s.world, s.view, mv);
         for (int r = 0; r < 4; r++)
-            SetF(u3d.modelView + r, At(mv, 0, r), At(mv, 1, r), At(mv, 2, r), At(mv, 3, r));
+            SetF(modelView + r, At(mv, 0, r), At(mv, 1, r), At(mv, 2, r), At(mv, 3, r));
+        if (minimalShader)
+            return;
         for (int stage = 0; stage < 2; stage++) {
             int id = stage == 0 ? u3d.tex0Matrix : u3d.tex1Matrix;
             const GfxStageState &st = s.stages[stage];
@@ -1223,6 +1240,7 @@ struct Executor : GfxExecutor {
         UploadDirty(textures);
         if (!inFrame)
             BeginFrame();
+        minimalShader = minimalSetting || s_minimalShader;
         Ctr_Breadcrumb("frame %u: %u commands, %u vertex bytes%s", frames + 1, (unsigned)frame.commands.size(),
                        (unsigned)frame.vertices.size(), present ? "" : " (flush)");
 
@@ -1273,7 +1291,7 @@ struct Executor : GfxExecutor {
                 BufInfo_Add(&buf, vertices + c.firstVertexByte, sizeof(GfxTLVertex), 4, 0x3210);
                 SetPictureViewport(stretched);
             } else {
-                Bind(&program3D);
+                Bind(minimalShader ? &programMin : &program3D);
                 SetAttrInfo(&attr3D);
                 Set3DUniforms(s);
                 BufInfo_Add(&buf, vertices + c.firstVertexByte, sizeof(GfxVertex), 6, 0x543210);
@@ -1335,6 +1353,11 @@ struct Executor : GfxExecutor {
 };
 
 } // namespace
+
+void Gfx_CtrSetMinimalShader(bool on)
+{
+    s_minimalShader = on;
+}
 
 GfxExecutor *Gfx_CreateGpuExecutor(void)
 {

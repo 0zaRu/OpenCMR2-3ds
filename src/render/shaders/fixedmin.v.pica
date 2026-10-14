@@ -1,0 +1,43 @@
+; The smallest 3D vertex shader for render/gfx_c3d.cpp ([3ds] debug_shader
+; = 1): position, vertex colour and the texture coordinates as given, with
+; no lighting, texture matrices or flow control. It tells whether a
+; console's GPU stops on fixed.v.pica or on the 3D vertex layout.
+
+.fvec minProjection[4]
+.fvec minModelView[4]
+
+.constf minConsts(0.0, 1.0, 0.00392156862745, 0.0)
+.alias ones minConsts.yyyy
+.alias inv255 minConsts.zzzz
+
+.out outpos position
+.out outclr color
+.out outtc0 texcoord0.xy
+.out outtc1 texcoord1.xy
+
+.alias inpos v0
+.alias inclr v2
+.alias inuv0 v4
+.alias inuv1 v5
+
+.entry minmain
+.proc minmain
+    mov r0.xyz, inpos
+    mov r0.w, ones
+    dp4 r1.x, minModelView[0], r0
+    dp4 r1.y, minModelView[1], r0
+    dp4 r1.z, minModelView[2], r0
+    mov r1.w, ones
+    dp4 r2.x, minProjection[0], r1
+    dp4 r2.y, minProjection[1], r1
+    dp4 r2.z, minProjection[2], r1
+    dp4 r2.w, minProjection[3], r1
+    mov outpos, r2
+    mul outclr, inv255, inclr.zyxw
+    mov r3, ones
+    mov r3.xy, inuv0
+    mov outtc0, r3
+    mov r3.xy, inuv1
+    mov outtc1, r3
+    end
+.end

@@ -15,8 +15,8 @@
 
 .out outpos position
 .out outclr color
-.out outtc0 texcoord0
-.out outtc1 texcoord1
+.out outtc0 texcoord0.xy
+.out outtc1 texcoord1.xy
 
 .alias inpos v0
 .alias inclr v1

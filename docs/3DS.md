@@ -94,6 +94,8 @@ addition to the [general settings](../README.md#configuration):
 | `movies` | `0` | `1` plays the Bink videos |
 | `stretch` | `0` | `1` stretches the 4:3 picture over the whole top screen |
 | `console` | `1` | `0` stops writing the log on the bottom screen |
+| `debug_lighting`, `debug_fog`, `debug_mipmaps` | `1` | `0` draws without lighting, fog or mipmaps, to find a feature the GPU does not take |
+| `debug_shader` | `0` | `1` draws 3D with the minimal vertex shader (`fixedmin.v.pica`: no lighting or texture matrices) |
 
 ## Problems
 
@@ -135,6 +137,7 @@ used; its video is not). The results are in `build/3ds/src/`:
 | `opencmr2.3dsx` | Homebrew Launcher application |
 | `opencmr2_gfx_scene.3dsx` | Renderer test scene (`tests/3ds/gfx_scene.cpp`) |
 | `opencmr2_gfx_stress.3dsx` | The test scene with 3000 more draws a frame, about a stage's load |
+| `opencmr2_gpu_bisect.3dsx` | Draws one feature at a time, from the simplest up, and writes each phase that worked to `sd:/opencmr2-gpu.log`; the phase after the last one logged stops the GPU |
 | `opencmr2_test_math_tables.3dsx`, `opencmr2_test_car_scheduler.3dsx` | Host tests that run game code; their output goes to `sd:/opencmr2-test.log` (the math tables test needs `tests/reference/finland-stage1/math-tables.bin` at `sd:/math-tables.bin`) |
 
 The CI job `nintendo-3ds` builds them in the same container and uploads
@@ -148,7 +151,11 @@ The CI job `nintendo-3ds` builds them in the same container and uploads
   in `CGame::DispatchFrontendResourceState` and in the pause menu).
 * `src/render/gfx_c3d.cpp`: the executor of the recorded frames on citro3d,
   with the vertex shaders `src/render/shaders/fixed.v.pica` (lighting, up to
-  8 lights, texture coordinates) and `fixedtl.v.pica` (pre-transformed 2D).
+  4 lights, texture coordinates), `fixedtl.v.pica` (pre-transformed 2D) and
+  `fixedmin.v.pica` (3D without lighting, for debugging). The shaders write
+  their outputs whole and declare the texture coordinates with two
+  components (`texcoord0.xy`): an emulator accepts a shader that leaves
+  output components unwritten, a console's GPU may not.
   Fog uses the PICA's fog table, and the texture stages use its combiners.
 * `src/render/gfx_core.cpp`: hands finished textures to the executor and
   releases their CPU copies (`ReleaseTextureCopies`). Vertex buffers get

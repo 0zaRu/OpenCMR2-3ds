@@ -9,7 +9,11 @@
 ; Spot lights are lit as point lights and specular light is not computed.
 ; Up to four lights: the first always (black when there is none), the others
 ; when light1..light3 are set. No loop or relative addressing, which the
-; hardware is touchier about than emulators.
+; hardware is touchier about than emulators. The outputs are written whole
+; and the texture coordinates are declared with two components: the
+; unwritten components of a four-component texcoord0 would land on the
+; texcoord1 and texcoord0w slots of the output map, with whatever the
+; register held.
 
 .fvec projection[4]
 .fvec modelView[4]
@@ -42,8 +46,8 @@
 
 .out outpos position
 .out outclr color
-.out outtc0 texcoord0
-.out outtc1 texcoord1
+.out outtc0 texcoord0.xy
+.out outtc1 texcoord1.xy
 
 .alias inpos v0
 .alias innrm v1
@@ -139,8 +143,10 @@
         .end
         mov r10.zw, ones
     .end
-    dp4 outtc0.x, tex0Matrix[0], r10
-    dp4 outtc0.y, tex0Matrix[1], r10
+    mov r12, ones
+    dp4 r12.x, tex0Matrix[0], r10
+    dp4 r12.y, tex0Matrix[1], r10
+    mov outtc0, r12
 
     ifu reflect1
         call reflection
@@ -152,8 +158,10 @@
         .end
         mov r10.zw, ones
     .end
-    dp4 outtc1.x, tex1Matrix[0], r10
-    dp4 outtc1.y, tex1Matrix[1], r10
+    mov r12, ones
+    dp4 r12.x, tex1Matrix[0], r10
+    dp4 r12.y, tex1Matrix[1], r10
+    mov outtc1, r12
 
     end
 .end

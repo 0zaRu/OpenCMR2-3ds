@@ -71,21 +71,40 @@ GfxVertex V(float x, float y, float z, float u, float v)
     return t;
 }
 
+// Phases 4 and 5 draw with the minimal 3D shader (fixedmin.v.pica), the
+// later ones with the full one (fixed.v.pica).
 const char *s_phases[] = {
     "1 clear only",
     "2 2D untextured strip",
     "3 2D textured strip",
-    "4 3D strip, no texture, no lighting (DrawArrays)",
-    "5 3D indexed triangles, no texture, no lighting (DrawElements)",
-    "6 3D indexed, textured",
-    "7 3D indexed, textured with mipmaps",
-    "8 3D indexed, lit",
-    "9 3D indexed, fog",
-    "10 3D indexed, alpha blending and alpha test",
-    "11 everything together",
+    "4 3D strip, minimal shader",
+    "5 3D indexed, textured, minimal shader",
+    "6 3D strip, full shader, no texture, no lighting (DrawArrays)",
+    "7 3D indexed triangles, no texture, no lighting (DrawElements)",
+    "8 3D indexed, textured",
+    "9 3D indexed, textured with mipmaps",
+    "10 3D indexed, lit",
+    "11 3D indexed, fog",
+    "12 3D indexed, alpha blending and alpha test",
+    "13 everything together",
 };
 
+// Draws a feature phase, numbered as without the minimal shader's phases
+// (4: 3D strip, 5: indexed, 6: textured, ... 11: everything).
+void DrawFeatures(int phase, GfxTexture *plain, GfxTexture *mipped);
+
 void Draw(int phase, GfxTexture *plain, GfxTexture *mipped)
+{
+    Gfx_CtrSetMinimalShader(phase == 4 || phase == 5);
+    if (phase == 4)
+        DrawFeatures(4, plain, mipped);
+    else if (phase == 5)
+        DrawFeatures(6, plain, mipped);
+    else
+        DrawFeatures(phase <= 3 ? phase : phase - 2, plain, mipped);
+}
+
+void DrawFeatures(int phase, GfxTexture *plain, GfxTexture *mipped)
 {
     GfxViewport vp = { 0, 0, 640, 480, 0.0f, 1.0f };
     Gfx_SetViewport(&vp);

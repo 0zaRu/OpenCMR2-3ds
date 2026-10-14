@@ -223,7 +223,8 @@ target_link_libraries(opencmr2_platform PRIVATE opencmr2_bink)
 if(NINTENDO_3DS)
     # citro3d renderer; its vertex shader is assembled by picasso and embedded.
     set(PICA_SHADER ${CMAKE_CURRENT_SOURCE_DIR}/render/shaders/fixed.v.pica
-                    ${CMAKE_CURRENT_SOURCE_DIR}/render/shaders/fixedtl.v.pica)
+                    ${CMAKE_CURRENT_SOURCE_DIR}/render/shaders/fixedtl.v.pica
+                    ${CMAKE_CURRENT_SOURCE_DIR}/render/shaders/fixedmin.v.pica)
     set(PICA_BINARY ${CMAKE_CURRENT_BINARY_DIR}/shaders/fixed.shbin)
     set(PICA_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/shaders_pica.h)
     add_custom_command(

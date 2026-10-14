@@ -29,4 +29,7 @@ void Ctr_StartWatchdog(void);
 void Ctr_FrameShown(void);
 void Ctr_Breadcrumb(const char *format, ...);
 
+// render/gfx_c3d.cpp: 3D draws with the minimal vertex shader (the GPU test).
+void Gfx_CtrSetMinimalShader(bool on);
+
 #endif

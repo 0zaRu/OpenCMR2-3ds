@@ -329,6 +329,8 @@ const char s_defaultSettings[] =
     "; debug_lighting = 1\n"
     "; debug_fog = 1\n"
     "; debug_mipmaps = 1\n"
+    "; 1 = 3D draws with the minimal vertex shader (no lighting).\n"
+    "; debug_shader = 0\n"
 #endif
     ;
 
