@@ -4,7 +4,7 @@
 
 # OpenCMR2
 
-[![Build](https://github.com/pablocpas/OpenCMR2/actions/workflows/build.yml/badge.svg)](https://github.com/pablocpas/OpenCMR2/actions/workflows/build.yml)
+[![Build](https://github.com/0zaRu/OpenCMR2-ds/actions/workflows/build.yml/badge.svg)](https://github.com/0zaRu/OpenCMR2-ds/actions/workflows/build.yml)
 
 OpenCMR2 is a work-in-progress native port of **Colin McRae Rally 2.0** (PC, 2000)
 to modern platforms, built on the [CMR2Decomp](https://github.com/pablocpas/CMR2Decomp)
@@ -12,6 +12,10 @@ decompilation. It runs the original game code natively on Linux, Windows,
 macOS and Android, and experimentally on the Nintendo 3DS. There is no emulation and no Wine or DirectX wrapper: DirectDraw,
 Direct3D 7, DirectSound, DirectInput, DirectPlay and Bink are replaced with
 SDL3, the SDL GPU API (Vulkan, Metal) and the port's own code.
+
+**OpenCMR2-ds** is the fork that brings the game to the **Nintendo 3DS**
+family, as an installable CIA or a Homebrew Launcher application, with
+citro3d instead of the SDL GPU API. See [Nintendo 3DS](#nintendo-3ds) below.
 
 https://github.com/user-attachments/assets/3c7322dc-576b-4fb0-8d6a-4d17de6fe17d
 
@@ -37,7 +41,7 @@ as it is made.
 | Windows | x86-64 | Plays stages and matches the original physics (tested under Wine) |
 | macOS | ARM64 | Builds and passes the tests, gameplay not yet tested |
 | Android | ARM64, x86-64 | Plays stages with on-screen controls (Android 10 or later, Vulkan) |
-| Nintendo 3DS | ARM11 | Experimental: builds and starts, gameplay not yet tested ([3DS.md](docs/3DS.md)) |
+| Nintendo 3DS | ARM11 | Plays the menus and stages on an Old 3DS (CIA); being tuned ([3DS.md](docs/3DS.md)) |
 
 ### Features
 
@@ -62,6 +66,52 @@ are built in as well:
 * Configurable field of view
 * High and variable frame rates without changing the game speed or the
   physics, verified against the original game
+
+## Nintendo 3DS
+
+The whole game runs on the console: the same game code, built for its 32-bit
+ARM11, with its own renderer on the PICA200 GPU. It works on the Old 3DS /
+2DS and the New 3DS / New 2DS XL; the New models are faster.
+
+**What you need**
+
+* A console with custom firmware ([Luma3DS](https://github.com/LumaTeam/Luma3DS))
+  and a title manager such as FBI, or the Homebrew Launcher
+* Your own PC copy of Colin McRae Rally 2.0, installed on a PC
+* For sound, the DSP firmware dump `sd:/3ds/dspfirm.cdc` (run DSP1 once)
+
+**Installing**
+
+1. Get `OpenCMR2-3DS.zip` from this repository's
+   [Actions](https://github.com/0zaRu/OpenCMR2-ds/actions/workflows/build.yml)
+   (job `nintendo-3ds`) and install `OpenCMR2.cia` with FBI. The `.3dsx` runs
+   from the Homebrew Launcher instead, with less memory.
+2. Copy the installed game's folders (`Game`, `FrontEnd`, `Sounds`, ...) to
+   `sd:/3ds/OpenCMR2/Data/`, so that
+   `sd:/3ds/OpenCMR2/Data/Game/Bigfiles/common.bfl` exists. The movies can be
+   left out: they are skipped.
+
+**Controls**
+
+| Button | Menus | Stage |
+| --- | --- | --- |
+| Circle Pad, D-Pad | Move | Steer |
+| A | Confirm | Accelerate |
+| B | Back | Brake |
+| Y | | Handbrake |
+| R / L | | Gear up / down |
+| X | | Camera |
+| START | Confirm | Pause |
+
+The results after a stage, its replay and the pause menu are menus.
+
+**Settings and problems.** Settings, saves and the log are in
+`sd:/3ds/OpenCMR2/` (`opencmr2.ini`, section `[3ds]`: texture size, menus
+at full resolution, vsync, ...). The log, `opencmr2.log`, gets the frame rate
+and where a frame's time goes every 600 frames; please attach it to reports.
+For more speed on a stage, lower the game's own draw distance and effects in
+its graphics options. The details, the limits (no car reflections, no
+videos by default) and how to build are in [3DS.md](docs/3DS.md).
 
 ## Approach
 
@@ -96,7 +146,7 @@ Download the package for your platform from
 | Linux 32-bit | `OpenCMR2-Linux-i686.tar.gz` |
 | macOS (Apple silicon) | `OpenCMR2-macOS-arm64.zip` |
 | Android | `OpenCMR2-Android.apk` |
-| Nintendo 3DS | `OpenCMR2-3DS.zip` (`.cia` and `.3dsx`, see [3DS.md](docs/3DS.md)) |
+| Nintendo 3DS | `OpenCMR2-3DS.zip` (`.cia` and `.3dsx`), from this fork's CI: see [Nintendo 3DS](#nintendo-3ds) |
 
 Extract it and run `opencmr2`. On first launch, choose the folder of your PC
 installation. The installation itself, a folder inside it or a parent folder
