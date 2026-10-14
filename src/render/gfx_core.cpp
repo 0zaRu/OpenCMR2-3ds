@@ -348,8 +348,84 @@ extern "C" void Gfx_EndScene(void)
 {
 }
 
+// video.dump_frame = n (or OPENCMR2_GFX_DUMP_FRAME): the state of every draw
+// of the n-th presented frame in the log, to compare renderers.
+static void DescribeTexture(const GfxTexture *t, char *out, size_t size)
+{
+    if (t == NULL) {
+        snprintf(out, size, "-");
+        return;
+    }
+    const GfxTexture *root = t->cube != NULL ? t->cube : t;
+    snprintf(out, size, "%dx%d/f%d/fl%lx", root->width, root->height, root->format, (unsigned long)root->flags);
+}
+
+static void DumpFrame(const GfxFrame &frame)
+{
+    for (const GfxCommand &c : frame.commands) {
+        if (c.type == GFX_CMD_TARGET) {
+            Sys_Log("target %s", c.target != NULL ? "texture" : "screen");
+            continue;
+        }
+        if (c.type == GFX_CMD_CLEAR) {
+            Sys_Log("clear %lx %08lx %.2f", (unsigned long)c.clearFlags, (unsigned long)c.clearColor, c.clearZ);
+            continue;
+        }
+        const GfxDrawState &s = frame.states[c.state];
+        char t0[48], t1[48];
+        DescribeTexture(s.stages[0].texture, t0, sizeof(t0));
+        DescribeTexture(s.stages[1].texture, t1, sizeof(t1));
+        int lights = 0;
+        for (int i = 0; i < 8; i++)
+            lights += s.lightEnabled[i];
+        Sys_Log("draw %s p%d v%u i%u | s0 c%d(%x,%x) a%d(%x,%x) tci%lx tt%d %s | s1 c%d(%x,%x) a%d(%x,%x) tci%lx tt%d %s | "
+                "blend %d %d,%d test %d,%d,%lu z %d%d cull %d | light %d cv%d src%d%d%d%d mat %.2f,%.2f,%.2f/%.2f,%.2f,%.2f "
+                "amb %08lx L%d spec %d | tf %08lx fog %d,%d,%d %.0f-%.0f %08lx",
+                c.transformed ? "TL" : "3D", c.primitive, c.vertexCount, c.indexCount, s.stages[0].colorOp,
+                s.stages[0].colorArg1, s.stages[0].colorArg2, s.stages[0].alphaOp, s.stages[0].alphaArg1,
+                s.stages[0].alphaArg2, (unsigned long)s.stages[0].texCoordIndex, s.stages[0].textureTransform, t0,
+                s.stages[1].colorOp, s.stages[1].colorArg1, s.stages[1].colorArg2, s.stages[1].alphaOp,
+                s.stages[1].alphaArg1, s.stages[1].alphaArg2, (unsigned long)s.stages[1].texCoordIndex,
+                s.stages[1].textureTransform, t1, s.alphaBlend, s.srcBlend, s.destBlend, s.alphaTest, s.alphaFunc,
+                (unsigned long)s.alphaRef, s.depthTest, s.depthWrite, s.cull, s.lighting, s.colorVertex,
+                s.diffuseSource, s.specularSource, s.ambientSource, s.emissiveSource, s.material.diffuse.r,
+                s.material.diffuse.g, s.material.diffuse.b, s.material.ambient.r, s.material.ambient.g,
+                s.material.ambient.b, (unsigned long)s.ambient, lights, s.specular, (unsigned long)s.textureFactor,
+                s.fog, s.fogVertexMode, s.fogTableMode, s.fogStart, s.fogEnd, (unsigned long)s.fogColor);
+        if (!s.lighting || c.transformed)
+            continue;
+        Sys_Log("  power %.1f emissive %.2f,%.2f,%.2f specular %.2f,%.2f,%.2f normalize %d", s.material.power,
+                s.material.emissive.r, s.material.emissive.g, s.material.emissive.b, s.material.specular.r,
+                s.material.specular.g, s.material.specular.b, s.normalizeNormals);
+        for (int i = 0; i < 8; i++)
+            if (s.lightEnabled[i]) {
+                const GfxLight &l = s.lights[i];
+                Sys_Log("  light %d type %d diffuse %.2f,%.2f,%.2f specular %.2f,%.2f,%.2f ambient %.2f,%.2f,%.2f "
+                        "dir %.2f,%.2f,%.2f pos %.1f,%.1f,%.1f range %.1f att %.3f,%.3f,%.3f",
+                        i, l.type, l.diffuse.r, l.diffuse.g, l.diffuse.b, l.specular.r, l.specular.g, l.specular.b,
+                        l.ambient.r, l.ambient.g, l.ambient.b, l.direction.x, l.direction.y, l.direction.z,
+                        l.position.x, l.position.y, l.position.z, l.range, l.attenuation0, l.attenuation1,
+                        l.attenuation2);
+            }
+    }
+}
+
+static unsigned s_presented;
+
+static bool DumpingFrame()
+{
+    static int dumpFrame = getenv("OPENCMR2_GFX_DUMP_FRAME") ? atoi(getenv("OPENCMR2_GFX_DUMP_FRAME"))
+                                                             : Platform_GetSettingInt("video.dump_frame", -1);
+    return (int)s_presented + 1 == dumpFrame;
+}
+
 static void Present(BOOL vsync, bool stretch)
 {
+    if (DumpingFrame()) {
+        Sys_Log("frame %u:", s_presented + 1);
+        DumpFrame(s_frame);
+    }
+    s_presented++;
     if (FILE *trace = TraceFile())
         fprintf(trace, "F %u\n", s_traceFrame++);
     if (Diagnostics::observer)
@@ -371,6 +447,10 @@ extern "C" void Gfx_PresentStretched(BOOL vsync) { Present(vsync, true); }
 // Runs what is recorded so far without ending the frame.
 static void Flush(void)
 {
+    if (DumpingFrame()) {
+        Sys_Log("frame %u, flushed:", s_presented + 1);
+        DumpFrame(s_frame);
+    }
     if (s_executor != NULL)
         s_executor->Execute(s_frame, s_textures, s_readback, false, false);
     s_frame.Reset();

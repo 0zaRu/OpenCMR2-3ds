@@ -2,11 +2,14 @@
 // Finland stage and runs it with a controlled clock, with the game files in
 // sdmc:/3ds/OpenCMR2/Data. The trace goes to sdmc:/3ds/OpenCMR2/probe/, with
 // the game's log (opencmr2.log) and the probe's output (probe.txt).
+// sdmc:/3ds/OpenCMR2/probe.env can set the probe's variables, one NAME=value
+// a line (the scenarios of tests/runtime_scenarios.py), and PROBE_TICKS.
 
 #include <3ds.h>
 
 #include <stdio.h>
 #include <stdlib.h>
+#include <string.h>
 #include <sys/stat.h>
 #include <unistd.h>
 
@@ -24,8 +27,21 @@ int main(int, char **)
     freopen("sdmc:/3ds/OpenCMR2/probe/probe.txt", "w", stderr);
     setvbuf(stderr, NULL, _IONBF, 0);
     setenv("XDG_DATA_HOME", "sdmc:/3ds/OpenCMR2/probe", 1);
+    if (FILE *env = fopen("sdmc:/3ds/OpenCMR2/probe.env", "r")) {
+        char line[512];
+        while (fgets(line, sizeof(line), env)) {
+            line[strcspn(line, "\r\n")] = 0;
+            char *eq = strchr(line, '=');
+            if (eq != NULL) {
+                *eq = 0;
+                setenv(line, eq + 1, 1);
+            }
+        }
+        fclose(env);
+    }
+    const char *ticks = getenv("PROBE_TICKS") ? getenv("PROBE_TICKS") : PROBE_TICKS;
     char *argv[] = { (char *)"stage_probe", (char *)"sdmc:/3ds/OpenCMR2/Data",
-                     (char *)"sdmc:/3ds/OpenCMR2/probe/trace.jsonl", (char *)"30", (char *)PROBE_TICKS, NULL };
+                     (char *)"sdmc:/3ds/OpenCMR2/probe/trace.jsonl", (char *)"30", (char *)ticks, NULL };
     int code = test_main(5, argv);
     fprintf(stderr, "probe: exit code %d\n", code);
     fclose(stderr);
