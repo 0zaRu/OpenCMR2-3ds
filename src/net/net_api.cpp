@@ -48,6 +48,7 @@ std::vector<std::string> Split(const char *list)
 std::vector<std::string> TailscalePeers()
 {
     std::vector<std::string> peers;
+#ifndef __3DS__ // no other programs to ask there
 #ifdef _WIN32
     FILE *f = _popen("tailscale status 2>NUL", "r");
 #else
@@ -70,6 +71,7 @@ std::vector<std::string> TailscalePeers()
     _pclose(f);
 #else
     pclose(f);
+#endif
 #endif
     if (!peers.empty())
         Sys_Log("net: %u Tailscale peers online", (unsigned)peers.size());

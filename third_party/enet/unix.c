@@ -61,6 +61,20 @@ typedef int socklen_t;
 #define MSG_NOSIGNAL 0
 #endif
 
+#ifdef __3DS__
+/* OpenCMR2: options the Nintendo 3DS's sockets do not have (setting them
+   fails, which ENet's hosts do not need). */
+#ifndef SOMAXCONN
+#define SOMAXCONN 8
+#endif
+#ifndef SO_RCVTIMEO
+#define SO_RCVTIMEO -1
+#endif
+#ifndef SO_SNDTIMEO
+#define SO_SNDTIMEO -1
+#endif
+#endif
+
 static enet_uint32 timeBase = 0;
 
 int
@@ -436,6 +450,90 @@ enet_socket_destroy (ENetSocket socket)
       close (socket);
 }
 
+#ifdef __3DS__
+/* OpenCMR2: the Nintendo 3DS's sockets (libctru) have no sendmsg/recvmsg,
+   so the buffers are gathered into one datagram for sendto/recvfrom. */
+int
+enet_socket_send (ENetSocket socket,
+                  const ENetAddress * address,
+                  const ENetBuffer * buffers,
+                  size_t bufferCount)
+{
+    enet_uint8 data [ENET_PROTOCOL_MAXIMUM_MTU];
+    struct sockaddr_in sin;
+    size_t length = 0, i;
+    int sentLength;
+
+    for (i = 0; i < bufferCount; ++ i)
+    {
+        if (length + buffers [i].dataLength > sizeof (data))
+          return -1;
+        memcpy (data + length, buffers [i].data, buffers [i].dataLength);
+        length += buffers [i].dataLength;
+    }
+
+    memset (& sin, 0, sizeof (struct sockaddr_in));
+    if (address != NULL)
+    {
+        sin.sin_family = AF_INET;
+        sin.sin_port = ENET_HOST_TO_NET_16 (address -> port);
+        sin.sin_addr.s_addr = address -> host;
+    }
+
+    sentLength = sendto (socket, data, length, 0, address != NULL ? (struct sockaddr *) & sin : NULL,
+                         address != NULL ? sizeof (struct sockaddr_in) : 0);
+    if (sentLength == -1)
+    {
+       if (errno == EWOULDBLOCK)
+         return 0;
+
+       return -1;
+    }
+
+    return sentLength;
+}
+
+int
+enet_socket_receive (ENetSocket socket,
+                     ENetAddress * address,
+                     ENetBuffer * buffers,
+                     size_t bufferCount)
+{
+    enet_uint8 data [ENET_PROTOCOL_MAXIMUM_MTU];
+    struct sockaddr_in sin;
+    socklen_t sinLength = sizeof (struct sockaddr_in);
+    size_t offset = 0, i;
+    int recvLength;
+
+    recvLength = recvfrom (socket, data, sizeof (data), 0, (struct sockaddr *) & sin, & sinLength);
+    if (recvLength == -1)
+    {
+       if (errno == EWOULDBLOCK)
+         return 0;
+
+       return -1;
+    }
+
+    for (i = 0; i < bufferCount && offset < (size_t) recvLength; ++ i)
+    {
+        size_t part = buffers [i].dataLength;
+        if (part > (size_t) recvLength - offset)
+          part = (size_t) recvLength - offset;
+        memcpy (buffers [i].data, data + offset, part);
+        offset += part;
+    }
+    if (offset < (size_t) recvLength)
+      return -2;
+
+    if (address != NULL)
+    {
+        address -> host = (enet_uint32) sin.sin_addr.s_addr;
+        address -> port = ENET_NET_TO_HOST_16 (sin.sin_port);
+    }
+
+    return recvLength;
+}
+#else
 int
 enet_socket_send (ENetSocket socket,
                   const ENetAddress * address,
@@ -520,6 +618,7 @@ enet_socket_receive (ENetSocket socket,
 
     return recvLength;
 }
+#endif
 
 int
 enet_socketset_select (ENetSocket maxSocket, ENetSocketSet * readSet, ENetSocketSet * writeSet, enet_uint32 timeout)

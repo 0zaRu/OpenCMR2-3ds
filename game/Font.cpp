@@ -116,7 +116,10 @@ void Font_Load(char *name, GenericFile *pFile, unsigned int index)
 
     if (index < g_fontCount) {
         sprintf(path, g_fontTgaFormat, CInstallInfo::GetFontsDir(), name);
+        // PORT: the fonts keep their size where textures are shrunk (3DS).
+        Gfx_KeepTextureSize(TRUE);
         pTexture = CTexture::FindLoadTexture(pFile, path, NULL, NULL, 0, 0);
+        Gfx_KeepTextureSize(FALSE);
         if (pTexture != NULL) {
             sprintf(path + strlen(path) - 4, g_fontPcfExtension);
             pData = CGenericFileLoader::FindFile(pFile, path, &bInArchive, NULL, 0);

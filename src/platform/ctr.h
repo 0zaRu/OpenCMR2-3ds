@@ -20,8 +20,17 @@ bool Ctr_Update(void);
 // in menus).
 bool Ctr_TakeKeyEvent(int *dik, bool *repeat);
 bool Ctr_IsKeyDown(int dik);
+// Text typed on the system keyboard (X in a menu), one Windows-1252
+// character at a time.
+bool Ctr_TakeText(int *character);
 // Driving on a stage, or in a menu: the buttons press different keys.
 void Ctr_SetDrivingContext(bool driving);
+bool Ctr_IsDriving(void);
+
+// The stage map (platform/ctr_map.cpp) takes the bottom screen while a stage
+// is driven: the log pauses (and is cleared when it comes back).
+void Ctr_PauseConsole(bool paused);
+void Ctr_MapHide(void);
 
 // The watchdog: when no frame has been shown for a few seconds, the log
 // gets what the game was last doing (the breadcrumb), every few seconds.

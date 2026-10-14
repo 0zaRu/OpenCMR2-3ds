@@ -373,6 +373,9 @@ enum GfxTextureFlags {
 
 /* mipLevels counts the top level (1 = no mipmaps). */
 GfxTexture *Gfx_CreateTexture(int width, int height, int format, int mipLevels, DWORD flags);
+/* Textures created while this is on keep their full size where the renderer
+   shrinks textures to save memory (3DS): the fonts. */
+void Gfx_KeepTextureSize(BOOL keep);
 void Gfx_DestroyTexture(GfxTexture *texture);
 int Gfx_GetTextureMipCount(GfxTexture *texture);
 

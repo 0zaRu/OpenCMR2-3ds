@@ -3,6 +3,7 @@
 #include <windows.h>
 #include "Game.h"
 #include "port/diagnostics.h"
+#include "port/stagemap.h"
 #include "RallyData.h"
 #include "GameInfo.h"
 #include "StageUI.h"
@@ -5216,6 +5217,33 @@ void Dash_Update(int player);
 // original; the layout of GameInfo0xa4.rallyStageRecordTimes (0x1214 in the
 // original vs 0x654 in our struct) is a separate data-model gap reported to the
 // integrator.
+// PORT: the stage map of a handheld's second screen (port/stagemap.h): the
+// route, and where the cars are, the player's first.
+static void Race_UpdateStageMap(void)
+{
+    int cars[16];
+    int count = 1;
+    int i;
+    short *pOrder = Car_GetOrder();
+    Car *pPlayer = Car_Get(0);
+    Car *pCar;
+    RallyRouteNode *pRoute = RallyData_GetAvailableRouteNodeRecord(0);
+
+    cars[0] = pPlayer->position.x;
+    cars[1] = pPlayer->position.z;
+    for (i = 0; i < Car_GetOrderCount() && count < 8; i++) {
+        pCar = Car_Get(pOrder[i]);
+        if (pCar == pPlayer)
+            continue;
+        cars[count * 2] = pCar->position.x;
+        cars[count * 2 + 1] = pCar->position.z;
+        count++;
+    }
+    StageMap_Update(pRoute != NULL ? &pRoute->position.x : NULL, pRoute != NULL ? &pRoute->flags : NULL,
+                    RallyData_GetRouteAvailabilityState(), sizeof(RallyRouteNode), cars, count, pPlayer->forward.x,
+                    pPlayer->forward.z);
+}
+
 // FUNCTION: CMR2 0x0041c5a0
 void Race_UpdatePlayerViewAndDrivenCars(BYTE param1, int param2)
 {
@@ -5478,6 +5506,8 @@ void Race_UpdatePlayerViewAndDrivenCars(BYTE param1, int param2)
     if (first != 0)
         g_unk0x00537f28 = 0x10000;
     Race_UpdateFrameEffects(g_unk0x00537f28);
+    // PORT: the stage map on a handheld's second screen.
+    Race_UpdateStageMap();
     for (g_unk0x00537f04 = 0; g_unk0x00537f04 < (BYTE)RallyDataState(); g_unk0x00537f04++) {
         View_BlendCameraStates((BYTE)g_unk0x00537f04,
                      Car_Get((BYTE)View_GetActiveCameraFlags((BYTE)g_unk0x00537f04))->simulationInterpolation);

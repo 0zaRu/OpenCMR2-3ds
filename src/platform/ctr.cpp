@@ -9,8 +9,10 @@
 
 #include <3ds.h>
 
+#include <malloc.h>
 #include <stdarg.h>
 #include <stdio.h>
+#include <stdlib.h>
 #include <string.h>
 
 #include "port/sys.h"
@@ -38,6 +40,7 @@ const int s_circleThreshold = 48;
 const u64 s_repeatDelay = 400, s_repeatInterval = 110;
 
 bool s_console;
+bool s_consolePaused;
 bool s_driving;
 bool s_down[256];
 u64 s_nextRepeat[256];
@@ -48,6 +51,42 @@ struct KeyEvent {
 };
 KeyEvent s_events[64];
 int s_eventHead, s_eventCount;
+// Typed text (Windows-1252), from the system keyboard.
+unsigned char s_text[128];
+int s_textHead, s_textCount;
+// The sockets' service (network play) and its buffer.
+u32 *s_socBuffer;
+const u32 s_socSize = 0x100000;
+
+// X in a menu: the system keyboard, whose text the game gets as typed
+// (names, the network chat).
+void TypeText()
+{
+    SwkbdState keyboard;
+    swkbdInit(&keyboard, SWKBD_TYPE_NORMAL, 2, 63);
+    swkbdSetHintText(&keyboard, "Text for the game");
+    char text[256];
+    if (swkbdInputText(&keyboard, text, sizeof(text)) != SWKBD_BUTTON_CONFIRM)
+        return;
+    // UTF-8 to Windows-1252: ASCII and Latin-1 (all the game's fonts have).
+    for (const unsigned char *p = (const unsigned char *)text; *p && s_textCount < 128;) {
+        int c;
+        if (*p < 0x80) {
+            c = *p++;
+        } else if ((*p & 0xe0) == 0xc0 && (p[1] & 0xc0) == 0x80) {
+            c = ((*p & 0x1f) << 6) | (p[1] & 0x3f);
+            p += 2;
+            if (c > 0xff)
+                continue;
+        } else {
+            p++;
+            while ((*p & 0xc0) == 0x80)
+                p++;
+            continue;
+        }
+        s_text[(s_textHead + s_textCount++) % 128] = (unsigned char)c;
+    }
+}
 
 void Push(int dik, bool repeat)
 {
@@ -162,11 +201,22 @@ bool Ctr_Init(void)
     consoleInit(GFX_BOTTOM, NULL);
     s_console = true;
     printf("\x1b[1;1HOpenCMR2 for Nintendo 3DS\n\n");
+    // Sockets for network play; without them the game has no network.
+    s_socBuffer = (u32 *)memalign(0x1000, s_socSize);
+    if (s_socBuffer != NULL && R_FAILED(socInit(s_socBuffer, s_socSize))) {
+        free(s_socBuffer);
+        s_socBuffer = NULL;
+    }
     return true;
 }
 
 void Ctr_Shutdown(void)
 {
+    if (s_socBuffer != NULL) {
+        socExit();
+        free(s_socBuffer);
+        s_socBuffer = NULL;
+    }
     // The DSP that SDL's audio opened (a no-op when it did not).
     ndspChnReset(0);
     ndspExit();
@@ -178,7 +228,7 @@ void Ctr_Shutdown(void)
 
 void Ctr_Print(const char *line)
 {
-    if (s_console) {
+    if (s_console && !s_consolePaused) {
         // 40 columns: long lines wrap, which keeps them readable.
         printf("%s\n", line);
     }
@@ -219,6 +269,8 @@ bool Ctr_Update(void)
     hidCircleRead(&circle);
     bool down[256];
     MapButtons(hidKeysHeld(), circle, (hidKeysHeld() & KEY_TOUCH) != 0, down);
+    if (!s_driving && (hidKeysDown() & KEY_X))
+        TypeText();
     u64 now = osGetTime();
     for (int dik = 0; dik < 256; dik++) {
         if (down[dik] && !s_down[dik]) {
@@ -244,9 +296,33 @@ bool Ctr_TakeKeyEvent(int *dik, bool *repeat)
     return true;
 }
 
+bool Ctr_TakeText(int *character)
+{
+    if (s_textCount == 0)
+        return false;
+    *character = s_text[s_textHead];
+    s_textHead = (s_textHead + 1) % 128;
+    s_textCount--;
+    return true;
+}
+
 bool Ctr_IsKeyDown(int dik)
 {
     return dik >= 0 && dik < 256 && s_down[dik];
+}
+
+void Ctr_PauseConsole(bool paused)
+{
+    if (s_consolePaused == paused)
+        return;
+    s_consolePaused = paused;
+    if (!paused && s_console)
+        consoleClear();
+}
+
+bool Ctr_IsDriving(void)
+{
+    return s_driving;
 }
 
 void Ctr_SetDrivingContext(bool driving)
@@ -254,4 +330,6 @@ void Ctr_SetDrivingContext(bool driving)
     if (driving != s_driving)
         Sys_Log("input: %s keys", driving ? "driving" : "menu");
     s_driving = driving;
+    if (!driving)
+        Ctr_MapHide();
 }

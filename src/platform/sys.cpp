@@ -319,6 +319,12 @@ const char s_defaultSettings[] =
     "; Largest texture side kept, 32 to 1024: textures are halved until they\n"
     "; fit, which saves memory and time (256 = original sharpness for most).\n"
     "; texture_max = 128\n"
+    "; The same for the menus' textures (the fonts are never shrunk).\n"
+    "; texture_max_menu = 256\n"
+    "; 1 = draw the menus at 640x480 and halve them smoothly (sharper text).\n"
+    "; menu_supersample = 1\n"
+    "; 1 = the stage map on the bottom screen while driving (0 = the log).\n"
+    "; map = 1\n"
     "; 1 = play the intro and country videos (slow on a 3DS / 2DS).\n"
     "; movies = 0\n"
     "; 1 = stretch the 4:3 picture over the whole top screen.\n"
@@ -902,6 +908,11 @@ static int PollConsole(SysEvent *event)
     }
     int dik;
     bool repeat;
+    if (Ctr_TakeText(&dik)) {
+        event->type = SYS_EVENT_TEXT;
+        event->character = dik;
+        return 1;
+    }
     if (Ctr_TakeKeyEvent(&dik, &repeat)) {
         event->type = SYS_EVENT_KEY_DOWN;
         event->key = dik;

@@ -186,9 +186,6 @@ endif()
 target_link_libraries(opencmr2_platform PUBLIC opencmr2_shortcut)
 
 # ---- network (UDP with ENet, third_party/enet) -------------------------------------
-if(NINTENDO_3DS)
-    target_sources(opencmr2_platform PRIVATE net/net_none.cpp)
-else()
 set(ENET_DIR ${PROJECT_SOURCE_DIR}/third_party/enet)
 add_library(enet STATIC
     ${ENET_DIR}/callbacks.c ${ENET_DIR}/compress.c ${ENET_DIR}/host.c ${ENET_DIR}/list.c
@@ -196,6 +193,12 @@ add_library(enet STATIC
 target_include_directories(enet PUBLIC ${ENET_DIR}/include)
 if(WIN32)
     target_link_libraries(enet PUBLIC ws2_32 winmm)
+elseif(NINTENDO_3DS)
+    # libctru's sockets (soc:u): no sendmsg/recvmsg (unix.c gathers the
+    # buffers itself there) and no msg_flags.
+    target_compile_definitions(enet PRIVATE HAS_FCNTL=1 HAS_GETADDRINFO=1 HAS_GETNAMEINFO=1
+        HAS_INET_PTON=1 HAS_INET_NTOP=1 HAS_SOCKLEN_T=1)
+    target_link_libraries(enet PUBLIC ctru)
 else()
     target_compile_definitions(enet PRIVATE HAS_FCNTL=1 HAS_POLL=1 HAS_GETADDRINFO=1 HAS_GETNAMEINFO=1
         HAS_INET_PTON=1 HAS_INET_NTOP=1 HAS_MSGHDR_FLAGS=1 HAS_SOCKLEN_T=1)
@@ -208,7 +211,6 @@ find_package(Threads REQUIRED)
 target_link_libraries(opencmr2_net PUBLIC enet Threads::Threads)
 target_sources(opencmr2_platform PRIVATE net/net_api.cpp)
 target_link_libraries(opencmr2_platform PRIVATE opencmr2_net)
-endif()
 
 # ---- platform subsystems ---------------------------------------------------------
 target_sources(opencmr2_platform PRIVATE
@@ -217,6 +219,9 @@ target_sources(opencmr2_platform PRIVATE
     audio/audio_sdl.cpp
     input/input_sdl.cpp
     video/movie.cpp)
+if(NOT NINTENDO_3DS)
+    target_sources(opencmr2_platform PRIVATE platform/stagemap_none.cpp)
+endif()
 target_include_directories(opencmr2_platform PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
 target_link_libraries(opencmr2_platform PRIVATE opencmr2_bink)
 
@@ -239,7 +244,7 @@ if(NINTENDO_3DS)
         VERBATIM
         DEPENDS ${PICA_BINARY} ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
         COMMENT "Embedding the PICA shader")
-    target_sources(opencmr2_platform PRIVATE platform/ctr.cpp render/gfx_c3d.cpp ${PICA_HEADER})
+    target_sources(opencmr2_platform PRIVATE platform/ctr.cpp platform/ctr_map.cpp render/gfx_c3d.cpp ${PICA_HEADER})
     target_link_libraries(opencmr2_platform PUBLIC citro3d ctru m)
 
     # Homebrew Launcher package (.3dsx with its .smdh) and the installable CIA.

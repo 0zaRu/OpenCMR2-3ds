@@ -824,6 +824,13 @@ bool RestoreTexture(GfxTexture *t)
 
 } // namespace
 
+static bool s_keepTextureSize;
+
+extern "C" void Gfx_KeepTextureSize(BOOL keep)
+{
+    s_keepTextureSize = keep != FALSE;
+}
+
 extern "C" GfxTexture *Gfx_CreateTexture(int width, int height, int format, int mipLevels, DWORD flags)
 {
     if (width <= 0 || height <= 0)
@@ -846,6 +853,7 @@ extern "C" GfxTexture *Gfx_CreateTexture(int width, int height, int format, int 
     t->format = format;
     t->mipLevels = mipLevels;
     t->flags = flags;
+    t->keepSize = s_keepTextureSize;
     t->cube = NULL;
     t->face = 0;
     t->dirty = true;

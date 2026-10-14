@@ -278,6 +278,13 @@ struct Uniforms3D {
 struct Executor : GfxExecutor {
     bool ready = false;
     C3D_RenderTarget *top = nullptr;
+    // [3ds] menu_supersample: menus are drawn at 640x480 on a target twice
+    // the screen's size, which the display transfer halves (2x2 average).
+    C3D_RenderTarget *big = nullptr;
+    C3D_RenderTarget *target = nullptr;     // the frame's
+    int scale = 1;                          // its size over the screen's
+    int textureMaxMenu = 256;
+    bool supersample = false, bigFailed = false;
     DVLB_s *dvlb = nullptr;
     std::vector<uint32_t> shaderCode;       // the DVLB, word-aligned
     shaderProgram_s program3D, programTL, programMin;
@@ -359,6 +366,7 @@ struct Executor : GfxExecutor {
     // [3ds] vsync = 1: each frame starts on a vblank, so the frame rate is
     // 60, 30, 20, 15... Off, a frame starts as soon as the GPU is done.
     bool vsync = false;
+    u32 lastRefresh = ~0u;                 // C3D_FrameCounter when the last frame began
 
     ~Executor() override
     {
@@ -371,6 +379,42 @@ struct Executor : GfxExecutor {
 
     // ---- setup ----
 
+    // Outside a frame: the big target in the menus, made when there is VRAM
+    // for it, and freed on a stage, whose textures then get that VRAM.
+    void ChooseTarget()
+    {
+        bool menu = supersample && !Ctr_IsDriving();
+        if (menu && big == NULL && !bigFailed) {
+            big = C3D_RenderTargetCreate(480, 800, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
+            if (big == NULL) {
+                bigFailed = true;       // tried again after the next stage
+                Sys_Log("gfx: no VRAM for drawing the menus at full size");
+            }
+        }
+        if (!menu && big != NULL) {
+            Output(top);
+            C3D_RenderTargetDelete(big);
+            big = NULL;
+        }
+        if (!menu)
+            bigFailed = false;
+        C3D_RenderTarget *wanted = menu && big != NULL ? big : top;
+        if (wanted != target)
+            Output(wanted);
+    }
+
+    // The target shown on the top screen (halved when it is the big one).
+    void Output(C3D_RenderTarget *t)
+    {
+        C3D_RenderTargetSetOutput(t, GFX_TOP, GFX_LEFT,
+                                  GX_TRANSFER_FLIP_VERT(0) | GX_TRANSFER_OUT_TILED(0) | GX_TRANSFER_RAW_COPY(0) |
+                                      GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) |
+                                      GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) |
+                                      GX_TRANSFER_SCALING(t == big ? GX_TRANSFER_SCALE_XY : GX_TRANSFER_SCALE_NO));
+        target = t;
+        scale = t == big ? 2 : 1;
+    }
+
     bool Init()
     {
         if (!C3D_Init(0x400000)) {
@@ -382,10 +426,11 @@ struct Executor : GfxExecutor {
             Sys_Log("gfx: no render target");
             return false;
         }
-        C3D_RenderTargetSetOutput(top, GFX_TOP, GFX_LEFT,
-                                  GX_TRANSFER_FLIP_VERT(0) | GX_TRANSFER_OUT_TILED(0) | GX_TRANSFER_RAW_COPY(0) |
-                                      GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) |
-                                      GX_TRANSFER_OUT_FORMAT(GX_TRANSFER_FMT_RGB8) | GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
+        Output(top);
+        supersample = Platform_GetSettingInt("3ds.menu_supersample", 1) != 0;
+        // Before any texture takes the VRAM.
+        if (supersample)
+            ChooseTarget();
 
         shaderCode.resize((sizeof(g_fixed_shbin) + 3) / 4);
         memcpy(shaderCode.data(), g_fixed_shbin, sizeof(g_fixed_shbin));
@@ -452,6 +497,7 @@ struct Executor : GfxExecutor {
         }
 
         textureMax = std::max(8, std::min(1024, Platform_GetSettingInt("3ds.texture_max", 128)));
+        textureMaxMenu = std::max(8, std::min(1024, Platform_GetSettingInt("3ds.texture_max_menu", 256)));
         stretch = Platform_GetSettingInt("3ds.stretch", 0) != 0;
         vsync = Platform_GetSettingInt("3ds.vsync", 0) != 0;
         useLighting = Platform_GetSettingInt("3ds.debug_lighting", 1) != 0;
@@ -579,9 +625,11 @@ struct Executor : GfxExecutor {
         AlphaKind alpha = Alpha(t, pixels);
         GPU_TEXCOLOR format = TexColor(alpha);
 
-        // Halve until it fits texture_max; at least 8 (the PICA's minimum).
+        // Halve until it fits texture_max (texture_max_menu for the menus',
+        // 1024 for the fonts); at least 8 (the PICA's minimum).
+        int limit = t->keepSize ? 1024 : Ctr_IsDriving() ? textureMax : textureMaxMenu;
         int w = t->width, h = t->height;
-        while (w > textureMax || h > textureMax) {
+        while (w > limit || h > limit) {
             w = std::max(1, w / 2);
             h = std::max(1, h / 2);
         }
@@ -800,15 +848,16 @@ struct Executor : GfxExecutor {
     // A landscape rectangle as the rotated framebuffer's viewport.
     void SetViewport(float lx, float ly, float lw, float lh)
     {
-        int x = (int)lroundf(240 - (ly + lh)), y = (int)lroundf(400 - (lx + lw));
-        int w = (int)lroundf(lh), h = (int)lroundf(lw);
+        const int fw = 240 * scale, fh = 400 * scale;
+        int x = (int)lroundf((240 - (ly + lh)) * scale), y = (int)lroundf((400 - (lx + lw)) * scale);
+        int w = (int)lroundf(lh * scale), h = (int)lroundf(lw * scale);
         // Within the framebuffer: the GPU would draw outside its memory.
         if (x < 0) { w += x; x = 0; }
         if (y < 0) { h += y; y = 0; }
-        if (x + w > 240 || y + h > 400)
+        if (x + w > fw || y + h > fh)
             last.cutViewports++;
-        if (x + w > 240) w = 240 - x;
-        if (y + h > 400) h = 400 - y;
+        if (x + w > fw) w = fw - x;
+        if (y + h > fh) h = fh - y;
         if (w <= 0 || h <= 0) {
             x = y = 0;
             w = h = 1;
@@ -1053,6 +1102,10 @@ struct Executor : GfxExecutor {
         if (IsCube(st1))
             st1.colorOp = st1.alphaOp = GFX_TOP_DISABLE;
         CtrTexture *tex0 = StageTexture(st0), *tex1 = StageTexture(st1);
+        // The 2D at half size samples linearly (the game asks for points,
+        // right at its own size).
+        if (transformed && scale == 1)
+            st0.minFilter = st0.magFilter = GFX_FILTER_LINEAR;
         SetTexture(0, st0, tex0);
         C3D_TexEnv env[6];
         for (int i = 0; i < 6; i++)
@@ -1220,8 +1273,11 @@ struct Executor : GfxExecutor {
         Ctr_Breadcrumb("starting frame %u: waiting for the GPU", frames + 1);
         u64 start = osGetTime(), startTicks = svcGetSystemTick();
         bool reported = false;
-        if (vsync)
+        ChooseTarget();
+        // At most one frame a refresh (60 fps); with vsync, each on one.
+        if (vsync || C3D_FrameCounter(0) == lastRefresh)
             C3D_FrameSync();
+        lastRefresh = C3D_FrameCounter(0);
         while (!C3D_FrameBegin(C3D_FRAME_NONBLOCK)) {
             if (!reported && osGetTime() - start > 3000) {
                 // The GPU has not finished the last frame: what was in it.
@@ -1237,8 +1293,8 @@ struct Executor : GfxExecutor {
         last = Stats();
         FreeRetired();
         arenaUsed = 0;
-        C3D_RenderTargetClear(top, C3D_CLEAR_ALL, 0x000000ff, 0xffffffff);
-        C3D_FrameDrawOn(top);
+        C3D_RenderTargetClear(target, C3D_CLEAR_ALL, 0x000000ff, 0xffffffff);
+        C3D_FrameDrawOn(target);
         bound = NULL;
         // Everything is sent again once a frame (C3D_FrameDrawOn also sets
         // the viewport).

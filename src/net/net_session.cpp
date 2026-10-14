@@ -29,6 +29,10 @@
 #include <stdio.h>
 #include <string.h>
 
+#ifdef __3DS__
+#include <3ds.h>
+#endif
+
 #include <algorithm>
 #include <chrono>
 #include <random>
@@ -150,6 +154,18 @@ void SetTimeouts(ENetPeer *peer, uint32_t timeoutMs)
 uint8_t MachineOf(ENetPeer *peer)
 {
     return (uint8_t)(uintptr_t)peer->data;
+}
+
+// The Nintendo 3DS's sockets send nothing to 255.255.255.255: there, the
+// local network's own broadcast address.
+uint32_t BroadcastAddress()
+{
+#ifdef __3DS__
+    struct in_addr ip, mask, broadcast;
+    if (SOCU_GetIPInfo(&ip, &mask, &broadcast) == 0 && broadcast.s_addr != 0)
+        return broadcast.s_addr;
+#endif
+    return ENET_HOST_BROADCAST;
 }
 
 void SendRaw(ENetHost *host, uint32_t address, uint16_t port, const std::vector<uint8_t> &data)
@@ -388,7 +404,7 @@ void Session::Search(uint32_t now)
     w.U32(queryNonce);
     w.Bytes(searchApplication.bytes, 16);
     if (config.broadcast)
-        SendRaw(host, ENET_HOST_BROADCAST, config.port, w.data);
+        SendRaw(host, BroadcastAddress(), config.port, w.data);
     for (const auto &peer : peerAddresses)
         SendRaw(host, peer.first, peer.second, w.data);
 }

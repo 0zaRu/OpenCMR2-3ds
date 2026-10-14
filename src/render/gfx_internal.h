@@ -28,6 +28,7 @@ struct GfxTexture {
     bool released;              // CPU copy released after an Upload
     bool keepCopy;              // locked again too often: keep the copy
     int restores;               // locks and copies after a release
+    bool keepSize;              // created under Gfx_KeepTextureSize
     void *gpu;                  // executor's object
 };
 
