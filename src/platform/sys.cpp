@@ -23,6 +23,8 @@
 #endif
 #ifdef __3DS__
 #include "platform/ctr.h"
+#include <malloc.h>
+extern "C" unsigned long __ctru_heap_size;
 #endif
 
 namespace {
@@ -1111,6 +1113,17 @@ extern "C" SysFile *Sys_OpenFile(const char *path, int mode)
     FILE *f = OpenHostFile(host, mode == SYS_FILE_WRITE ? "wb" : "rb");
     if (f == NULL)
         return NULL;
+#ifdef __3DS__
+    // Large reads (archives are read whole) with the memory in use then,
+    // to find where a stage's loading peaks.
+    if (mode != SYS_FILE_WRITE && fseek(f, 0, SEEK_END) == 0) {
+        long size = ftell(f);
+        if (size >= 512 * 1024)
+            Sys_Log("file %s: %ld KB, heap %u of %u KB used", path, size / 1024,
+                    (unsigned)(mallinfo().uordblks / 1024), (unsigned)(__ctru_heap_size / 1024));
+        fseek(f, 0, SEEK_SET);
+    }
+#endif
     SysFile *file = new SysFile;
     file->f = f;
     return file;

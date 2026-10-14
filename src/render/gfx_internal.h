@@ -26,7 +26,8 @@ struct GfxTexture {
     bool renderedTo;            // the GPU copy is newer (render targets)
     int locks;                  // Gfx_LockTexture calls not yet unlocked
     bool released;              // CPU copy released after an Upload
-    bool keepCopy;              // locked again after a release: keep the copy
+    bool keepCopy;              // locked again too often: keep the copy
+    int restores;               // locks and copies after a release
     void *gpu;                  // executor's object
 };
 
@@ -149,6 +150,9 @@ struct GfxExecutor {
     // Takes a texture's contents now, so that its CPU copy can be released
     // (true), for executors short of memory (3DS); see gfx_core.cpp.
     virtual bool Upload(GfxTexture *) { return false; }
+    // The top level of a texture taken by Upload, as BGRA pixels at the
+    // texture's size (from the executor's smaller copy).
+    virtual bool ReadPixels(GfxTexture *, std::vector<uint32_t> &) { return false; }
 };
 
 GfxExecutor *Gfx_CreateGpuExecutor(void);
@@ -156,5 +160,8 @@ GfxExecutor *Gfx_CreateNullExecutor(void);
 
 // Decodes a BC1/BC3 4x4 block into 16 BGRA pixels.
 void Gfx_DecodeBlock(int format, const uint8_t *block, uint32_t out[16]);
+// Encodes 16 BGRA pixels as a BC1/BC3 block (simple endpoints, for textures
+// rebuilt from the executor's copy).
+void Gfx_EncodeBlock(int format, const uint32_t in[16], uint8_t *block);
 
 #endif

@@ -8,10 +8,10 @@ built for the 3DS's 32-bit ARM11, so its data structures keep the original
 layout. Only the platform layer and the renderer are specific to the 3DS.
 
 > [!IMPORTANT]
-> The 3DS port is experimental and has not yet been played on hardware. The
-> renderer has been checked against a test scene in an emulator, and the
-> game's fixed-point maths against the original, but no stage has run yet.
-> Reports with the log (see [Problems](#problems)) are welcome.
+> The 3DS port is experimental. On an Old 3DS the menus work; stages are
+> being brought up. The renderer is checked against a test scene in an
+> emulator, and the game's fixed-point maths against the original. Reports
+> with the log (see [Problems](#problems)) are welcome.
 
 ## Why the 3DS and not the DS
 
@@ -35,8 +35,10 @@ The game keeps its 640x480 picture and draws it at half size, 320x240 in 4:3,
 in the middle of the 400x240 top screen. The bottom screen shows the log.
 
 To fit the memory, textures are shrunk (to at most 128x128 by default) and
-stored in 16-bit formats. The copy in main memory is released once a texture
-is on the GPU. Some effects are left out:
+stored in 16-bit formats. The full-size copy in main memory is released once
+a texture is on the GPU; a 16-bit copy of the shrunk texture stays, so that
+the textures the game changes later (car lights, for example) are rebuilt
+from it. Some effects are left out:
 
 * car reflections (a cube map the game renders every frame) are not drawn;
 * the intro and country videos are skipped by default (decoding Bink is too
@@ -95,9 +97,18 @@ addition to the [general settings](../README.md#configuration):
 
 ## Problems
 
-The log is `sd:/3ds/OpenCMR2/opencmr2.log`. The game also writes a line
-about free memory every 600 frames:
-`mem: heap ... KB used, linear ... KB, VRAM ... KB free`. If the game stops or
+The log is `sd:/3ds/OpenCMR2/opencmr2.log`. Every 600 frames it gets two
+lines on memory and drawing:
+
+```
+mem: heap 7072 of 65268 KB used, linear 26040 KB, VRAM 5343 KB free
+gfx: 24.0 fps, up to 3006 draws and 30% of the command buffer a frame, 0 frames cut short
+```
+
+Files of 512 KB or more are logged when they are opened, with the heap in use
+then (`file Game/Bigfiles/....bfl: ... KB, heap ... of ... KB used`). A frame
+that would overflow the GPU's command buffer is cut short instead, and
+logged (`gfx: command buffer full`). If the game stops or
 returns to the HOME menu, please send that file with a description of what
 you were doing. With Luma3DS, a crash screen or dump (`sd:/luma/dumps/`)
 helps too.
@@ -123,6 +134,7 @@ used; its video is not). The results are in `build/3ds/src/`:
 | `OpenCMR2.cia` | Installable title (only with makerom and bannertool) |
 | `opencmr2.3dsx` | Homebrew Launcher application |
 | `opencmr2_gfx_scene.3dsx` | Renderer test scene (`tests/3ds/gfx_scene.cpp`) |
+| `opencmr2_gfx_stress.3dsx` | The test scene with 3000 more draws a frame, about a stage's load |
 | `opencmr2_test_math_tables.3dsx`, `opencmr2_test_car_scheduler.3dsx` | Host tests that run game code; their output goes to `sd:/opencmr2-test.log` (the math tables test needs `tests/reference/finland-stage1/math-tables.bin` at `sd:/math-tables.bin`) |
 
 The CI job `nintendo-3ds` builds them in the same container and uploads
@@ -161,4 +173,10 @@ aliasing, signed `char`, no fused multiply-add).
   (counter-clockwise, culled);
 * a white cube lit from the upper left, whose front face has the value 133 of
   255. L turns it;
-* a checkered ground that fades into grey fog with distance.
+* a checkered ground that fades into grey fog with distance;
+* bottom left, a copy of the corners texture made after its CPU copy was
+  released (the same four colours), while the original's green quarter has
+  turned magenta, changed through a lock after the release.
+
+`opencmr2_gfx_stress.3dsx` adds 3000 small fogged, lit triangles, each with
+its own world matrix; the log shows the command buffer use (about 30%).

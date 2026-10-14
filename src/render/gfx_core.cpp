@@ -659,6 +659,70 @@ void ReleaseTextureCopies()
     }
 }
 
+// Blank levels for a texture whose CPU copy was released.
+void AllocateLevels(GfxTexture *t)
+{
+    for (int m = 0; m < t->mipLevels; m++) {
+        int w = std::max(1, t->width >> m), h = std::max(1, t->height >> m);
+        t->levels[0][m].assign(Gfx_LevelSize(t->format, w, h, NULL), 0);
+    }
+    t->released = false;
+    // Changed again and again (a texture the game draws into): keep it.
+    if (++t->restores >= 3)
+        t->keepCopy = true;
+}
+
+// Writes BGRA pixels of the texture's size into its top level, in its format.
+void StorePixels(GfxTexture *t, const std::vector<uint32_t> &pixels)
+{
+    uint8_t *out = t->levels[0][0].data();
+    size_t n = (size_t)t->width * t->height;
+    switch (t->format) {
+    case GFX_FORMAT_BGRX8:
+    case GFX_FORMAT_BGRA8:
+        memcpy(out, pixels.data(), n * 4);
+        break;
+    case GFX_FORMAT_BUMP_DUDVL:
+        for (size_t i = 0; i < n; i++) {
+            out[i * 3] = (uint8_t)pixels[i];
+            out[i * 3 + 1] = (uint8_t)(pixels[i] >> 8);
+            out[i * 3 + 2] = (uint8_t)(pixels[i] >> 16);
+        }
+        break;
+    case GFX_FORMAT_BC1:
+    case GFX_FORMAT_BC3: {
+        int blockBytes = t->format == GFX_FORMAT_BC1 ? 8 : 16;
+        int bw = (t->width + 3) / 4, bh = (t->height + 3) / 4;
+        uint32_t block[16];
+        for (int by = 0; by < bh; by++)
+            for (int bx = 0; bx < bw; bx++) {
+                for (int y = 0; y < 4; y++)
+                    for (int x = 0; x < 4; x++) {
+                        int px = std::min(t->width - 1, bx * 4 + x), py = std::min(t->height - 1, by * 4 + y);
+                        block[y * 4 + x] = pixels[(size_t)py * t->width + px];
+                    }
+                Gfx_EncodeBlock(t->format, block, out + (by * bw + bx) * blockBytes);
+            }
+        break;
+    }
+    }
+}
+
+// Gives a released texture its CPU copy back, from the executor's smaller
+// copy of the top level; the lower levels are rebuilt from it.
+bool RestoreTexture(GfxTexture *t)
+{
+    std::vector<uint32_t> pixels;
+    bool read = s_executor != NULL && s_executor->ReadPixels(t, pixels);
+    AllocateLevels(t);
+    if (!read) {
+        Sys_Log("gfx: the %dx%d texture's contents are lost", t->width, t->height);
+        return false;
+    }
+    StorePixels(t, pixels);
+    return true;
+}
+
 } // namespace
 
 extern "C" GfxTexture *Gfx_CreateTexture(int width, int height, int format, int mipLevels, DWORD flags)
@@ -761,15 +825,10 @@ extern "C" BOOL Gfx_LockTexture(GfxTexture *texture, int face, int mip, GfxLocke
         texture = texture->cube;
     }
     if (texture->released) {
-        // Its copy went to the executor: start again from blank levels, and
-        // keep them from now on.
-        Sys_Log("gfx: %dx%d texture locked after its release", texture->width, texture->height);
-        for (int m = 0; m < texture->mipLevels; m++) {
-            int w = std::max(1, texture->width >> m), h = std::max(1, texture->height >> m);
-            texture->levels[0][m].assign(Gfx_LevelSize(texture->format, w, h, NULL), 0);
-        }
-        texture->released = false;
-        texture->keepCopy = true;
+        // The game changes a texture it loaded earlier (RemapTextureAlpha):
+        // its copy went to the executor, get it back.
+        if (RestoreTexture(texture))
+            Gfx_GenerateMipmaps(texture);
     }
     if (mip < 0 || mip >= texture->mipLevels || face < 0 || face > 5 || texture->levels[face][mip].empty())
         return FALSE;
@@ -845,38 +904,39 @@ extern "C" void Gfx_CopyTexture(GfxTexture *dst, GfxTexture *src)
 {
     dst = Root(dst);
     src = Root(src);
-    if (dst == NULL || src == NULL || src->released || dst->released)
+    if (dst == NULL || src == NULL)
         return;
+    if (dst->released)
+        AllocateLevels(dst);    // fully overwritten below
     if (src->renderedTo && s_executor != NULL) {
         s_executor->ReadTexture(src);
         src->renderedTo = false;
     }
-    if (dst->format == src->format && dst->width == src->width && dst->height == src->height) {
+    if (!src->released && dst->format == src->format && dst->width == src->width && dst->height == src->height) {
         dst->levels[0][0] = src->levels[0][0];
         dst->dirty = true;
         return;
     }
-    if (dst->format == GFX_FORMAT_BC1 || dst->format == GFX_FORMAT_BC3) {
-        Sys_Log("gfx: cannot convert a texture to a compressed format");
-        return;
-    }
-    std::vector<uint32_t> pixels = ToBGRA(src);
-    uint8_t *out = dst->levels[0][0].data();
-    for (int y = 0; y < dst->height; y++) {
-        int sy = y * src->height / dst->height;
-        for (int x = 0; x < dst->width; x++) {
-            int sx = x * src->width / dst->width;
-            uint32_t p = pixels[(size_t)sy * src->width + sx];
-            size_t i = (size_t)y * dst->width + x;
-            if (dst->format == GFX_FORMAT_BUMP_DUDVL) {
-                out[i * 3] = (uint8_t)p;
-                out[i * 3 + 1] = (uint8_t)(p >> 8);
-                out[i * 3 + 2] = (uint8_t)(p >> 16);
-            } else {
-                ((uint32_t *)out)[i] = p;
-            }
+    // A released source: the executor's copy of it.
+    std::vector<uint32_t> pixels;
+    if (src->released) {
+        if (s_executor == NULL || !s_executor->ReadPixels(src, pixels)) {
+            Sys_Log("gfx: cannot copy the %dx%d texture, its contents are lost", src->width, src->height);
+            return;
         }
+    } else {
+        pixels = ToBGRA(src);
     }
+    if (dst->width != src->width || dst->height != src->height) {
+        std::vector<uint32_t> scaled((size_t)dst->width * dst->height);
+        for (int y = 0; y < dst->height; y++) {
+            int sy = y * src->height / dst->height;
+            for (int x = 0; x < dst->width; x++)
+                scaled[(size_t)y * dst->width + x] = pixels[(size_t)sy * src->width + x * src->width / dst->width];
+        }
+        pixels.swap(scaled);
+    }
+    StorePixels(dst, pixels);
     dst->dirty = true;
 }
 
@@ -985,6 +1045,126 @@ void Gfx_DecodeBlock(int format, const uint8_t *block, uint32_t out[16])
             abits |= (uint64_t)block[2 + i] << (8 * i);
         for (int i = 0; i < 16; i++)
             out[i] = (out[i] & 0x00ffffff) | (uint32_t)alphas[(abits >> (3 * i)) & 7] << 24;
+    }
+}
+
+namespace {
+
+uint16_t To565(uint32_t c)
+{
+    return (uint16_t)((((c >> 16) & 0xff) >> 3) << 11 | (((c >> 8) & 0xff) >> 2) << 5 | ((c & 0xff) >> 3));
+}
+
+int Distance(uint32_t a, uint32_t b)
+{
+    int d = 0;
+    for (int s = 0; s < 24; s += 8) {
+        int x = (int)((a >> s) & 0xff) - (int)((b >> s) & 0xff);
+        d += x * x;
+    }
+    return d;
+}
+
+} // namespace
+
+void Gfx_EncodeBlock(int format, const uint32_t in[16], uint8_t *block)
+{
+    uint8_t *colour = format == GFX_FORMAT_BC3 ? block + 8 : block;
+    // Endpoints: the two opaque pixels farthest apart.
+    bool transparent = false;
+    uint32_t lo = 0, hi = 0;
+    int farthest = -1;
+    for (int i = 0; i < 16; i++) {
+        if (format == GFX_FORMAT_BC1 && (in[i] >> 24) < 128) {
+            transparent = true;
+            continue;
+        }
+        for (int j = i; j < 16; j++) {
+            if (format == GFX_FORMAT_BC1 && (in[j] >> 24) < 128)
+                continue;
+            int d = Distance(in[i], in[j]);
+            if (d > farthest) {
+                farthest = d;
+                hi = in[i];
+                lo = in[j];
+            }
+        }
+    }
+    uint16_t c0 = To565(hi), c1 = To565(lo);
+    // Four colours need c0 > c1, three (and transparency) c0 <= c1.
+    if (transparent ? c0 > c1 : c0 < c1)
+        std::swap(c0, c1);
+    if (!transparent && c0 == c1 && c0 > 0)
+        c1 = (uint16_t)(c0 - 1);
+    colour[0] = (uint8_t)c0;
+    colour[1] = (uint8_t)(c0 >> 8);
+    colour[2] = (uint8_t)c1;
+    colour[3] = (uint8_t)(c1 >> 8);
+    // The palette as the decoder builds it: a block of the endpoints with
+    // every index k, decoded.
+    uint32_t palette[4];
+    uint8_t probe[16] = {};
+    memcpy(format == GFX_FORMAT_BC3 ? probe + 8 : probe, colour, 4);
+    uint32_t bits = 0;
+    for (int k = 0; k < 4; k++) {
+        uint8_t *pb = format == GFX_FORMAT_BC3 ? probe + 12 : probe + 4;
+        uint32_t all = 0;
+        for (int i = 0; i < 16; i++)
+            all |= (uint32_t)k << (i * 2);
+        pb[0] = (uint8_t)all; pb[1] = (uint8_t)(all >> 8); pb[2] = (uint8_t)(all >> 16); pb[3] = (uint8_t)(all >> 24);
+        uint32_t out[16];
+        Gfx_DecodeBlock(format, probe, out);
+        palette[k] = out[0];
+    }
+    for (int i = 0; i < 16; i++) {
+        int best = 0, bestDistance = 1 << 30;
+        for (int k = 0; k < 4; k++) {
+            if (format == GFX_FORMAT_BC1 && transparent && k == 3)
+                continue;
+            int d = Distance(in[i], palette[k]);
+            if (d < bestDistance) {
+                bestDistance = d;
+                best = k;
+            }
+        }
+        if (format == GFX_FORMAT_BC1 && transparent && (in[i] >> 24) < 128)
+            best = 3;
+        bits |= (uint32_t)best << (i * 2);
+    }
+    colour[4] = (uint8_t)bits;
+    colour[5] = (uint8_t)(bits >> 8);
+    colour[6] = (uint8_t)(bits >> 16);
+    colour[7] = (uint8_t)(bits >> 24);
+
+    if (format == GFX_FORMAT_BC3) {
+        // Alpha: eight steps between the extremes (a0 > a1).
+        uint8_t a0 = 0, a1 = 255;
+        for (int i = 0; i < 16; i++) {
+            a0 = std::max(a0, (uint8_t)(in[i] >> 24));
+            a1 = std::min(a1, (uint8_t)(in[i] >> 24));
+        }
+        if (a0 == a1) {
+            if (a0 < 255) a0++; else a1--;
+        }
+        uint8_t alphas[8] = { a0, a1 };
+        for (int i = 1; i < 7; i++)
+            alphas[i + 1] = (uint8_t)(((7 - i) * a0 + i * a1) / 7);
+        uint64_t abits = 0;
+        for (int i = 0; i < 16; i++) {
+            int a = (int)(in[i] >> 24), best = 0, bestDistance = 1 << 30;
+            for (int k = 0; k < 8; k++) {
+                int d = (a - alphas[k]) * (a - alphas[k]);
+                if (d < bestDistance) {
+                    bestDistance = d;
+                    best = k;
+                }
+            }
+            abits |= (uint64_t)best << (3 * i);
+        }
+        block[0] = a0;
+        block[1] = a1;
+        for (int i = 0; i < 6; i++)
+            block[2 + i] = (uint8_t)(abits >> (8 * i));
     }
 }
 

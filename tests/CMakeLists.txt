@@ -34,6 +34,12 @@ add_executable(movie_render_state_test movie_render_state.cpp
 target_link_libraries(movie_render_state_test PRIVATE opencmr2_bink SDL3::SDL3)
 add_test(NAME movie_render_state COMMAND movie_render_state_test)
 
+add_executable(texture_release_test texture_release.cpp
+    ${PROJECT_SOURCE_DIR}/src/diagnostics/observer.cpp ${PROJECT_SOURCE_DIR}/src/render/gfx_core.cpp)
+target_include_directories(texture_release_test PRIVATE ${PROJECT_SOURCE_DIR}/src)
+target_link_libraries(texture_release_test PRIVATE SDL3::SDL3)
+add_test(NAME texture_release COMMAND texture_release_test)
+
 # FTOI vs a real x87 FISTP (the /QIfist conversion of the original).
 if(CMAKE_SYSTEM_PROCESSOR MATCHES "i[3-6]86|x86|AMD64|amd64")
     add_executable(ftoi_fistp_test ftoi_fistp.cpp)

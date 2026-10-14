@@ -161,7 +161,32 @@ struct CtrTexture {
     bool valid = false;
     int maxLevel = 0;           // mip levels below the top one
     bool bump = false;          // dU/dV maps: no equivalent, sampled as white
+    // The top level as uploaded (tiled, 16-bit), for the game's locks and
+    // copies of a texture whose CPU copy was released (ReadPixels).
+    std::vector<uint16_t> shadow;
 };
+
+// One PICA 16-bit pixel as BGRA (0xAARRGGBB).
+inline uint32_t Unpack(uint16_t p, GPU_TEXCOLOR format)
+{
+    uint32_t r, g, b, a;
+    switch (format) {
+    case GPU_RGB565:
+        r = (p >> 11) & 31; g = (p >> 5) & 63; b = p & 31;
+        r = (r << 3) | (r >> 2); g = (g << 2) | (g >> 4); b = (b << 3) | (b >> 2);
+        a = 255;
+        break;
+    case GPU_RGBA5551:
+        r = (p >> 11) & 31; g = (p >> 6) & 31; b = (p >> 1) & 31;
+        r = (r << 3) | (r >> 2); g = (g << 3) | (g >> 2); b = (b << 3) | (b >> 2);
+        a = (p & 1) ? 255 : 0;
+        break;
+    default:
+        r = ((p >> 12) & 15) * 17; g = ((p >> 8) & 15) * 17; b = ((p >> 4) & 15) * 17; a = (p & 15) * 17;
+        break;
+    }
+    return a << 24 | r << 16 | g << 8 | b;
+}
 
 // ---- state translation ----------------------------------------------------------
 
@@ -552,6 +577,8 @@ struct Executor : GfxExecutor {
             }
             if (!UploadLevel(g->tex, m, src, lw, lh, format))
                 return false;
+            if (m == 0)
+                g->shadow.assign(scratch, scratch + (size_t)lw * lh);
         }
         uintptr_t address = (uintptr_t)g->tex.data;
         if (address < OS_VRAM_VADDR || address >= OS_VRAM_VADDR + OS_VRAM_SIZE)
@@ -580,6 +607,24 @@ struct Executor : GfxExecutor {
     }
 
     void ReadTexture(GfxTexture *) override {}
+
+    bool ReadPixels(GfxTexture *t, std::vector<uint32_t> &bgra) override
+    {
+        CtrTexture *g = (CtrTexture *)t->gpu;
+        if (g == NULL || !g->valid || g->shadow.empty())
+            return false;
+        int tw = g->tex.width, th = g->tex.height;
+        GPU_TEXCOLOR format = g->tex.fmt;
+        bgra.resize((size_t)t->width * t->height);
+        for (int y = 0; y < t->height; y++) {
+            int sy = (int)((long long)y * th / t->height);
+            for (int x = 0; x < t->width; x++) {
+                int sx = (int)((long long)x * tw / t->width);
+                bgra[(size_t)y * t->width + x] = Unpack(g->shadow[TiledOffset(sx, sy, tw, th)], format);
+            }
+        }
+        return true;
+    }
 
     void UploadDirty(std::vector<GfxTexture *> &textures)
     {
