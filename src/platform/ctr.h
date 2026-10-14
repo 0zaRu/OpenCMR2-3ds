@@ -23,4 +23,10 @@ bool Ctr_IsKeyDown(int dik);
 // Driving on a stage, or in a menu: the buttons press different keys.
 void Ctr_SetDrivingContext(bool driving);
 
+// The watchdog: when no frame has been shown for a few seconds, the log
+// gets what the game was last doing (the breadcrumb), every few seconds.
+void Ctr_StartWatchdog(void);
+void Ctr_FrameShown(void);
+void Ctr_Breadcrumb(const char *format, ...);
+
 #endif

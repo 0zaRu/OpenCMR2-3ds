@@ -24,6 +24,7 @@
 #ifdef __3DS__
 #include "platform/ctr.h"
 #include <malloc.h>
+#include <sys/stat.h>
 extern "C" unsigned long __ctru_heap_size;
 #endif
 
@@ -629,6 +630,9 @@ bool Platform_Init(int argc, char **argv)
             MoveOldUserDir(s_userDir);
     }
     s_logFile = OpenHostFile((s_userDir + "opencmr2.log").c_str(), "w");
+#ifdef __3DS__
+    Ctr_StartWatchdog();
+#endif
 
     std::string settingsFile = s_userDir + "opencmr2.ini";
     if (!SDL_GetPathInfo(settingsFile.c_str(), NULL)) {
@@ -1098,6 +1102,16 @@ extern "C" BOOL Sys_ResolvePath(const char *path, BOOL forWriting, char *out, si
         host = ResolveForReading(path);
         if (host.empty())
             return FALSE;
+#ifdef __3DS__
+        // Large reads (archives are read whole, through zlib) with the
+        // memory in use then, to find where a stage's loading peaks.
+        struct stat info;
+        if (stat(host.c_str(), &info) == 0 && info.st_size >= 512 * 1024) {
+            Sys_Log("file %s: %ld KB, heap %u of %u KB used", path, (long)(info.st_size / 1024),
+                    (unsigned)(mallinfo().uordblks / 1024), (unsigned)(__ctru_heap_size / 1024));
+            Ctr_Breadcrumb("reading %s", path);
+        }
+#endif
     }
     if (host.size() + 1 > outSize)
         return FALSE;
@@ -1113,17 +1127,6 @@ extern "C" SysFile *Sys_OpenFile(const char *path, int mode)
     FILE *f = OpenHostFile(host, mode == SYS_FILE_WRITE ? "wb" : "rb");
     if (f == NULL)
         return NULL;
-#ifdef __3DS__
-    // Large reads (archives are read whole) with the memory in use then,
-    // to find where a stage's loading peaks.
-    if (mode != SYS_FILE_WRITE && fseek(f, 0, SEEK_END) == 0) {
-        long size = ftell(f);
-        if (size >= 512 * 1024)
-            Sys_Log("file %s: %ld KB, heap %u of %u KB used", path, size / 1024,
-                    (unsigned)(mallinfo().uordblks / 1024), (unsigned)(__ctru_heap_size / 1024));
-        fseek(f, 0, SEEK_SET);
-    }
-#endif
     SysFile *file = new SysFile;
     file->f = f;
     return file;

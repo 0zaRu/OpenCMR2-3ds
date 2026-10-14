@@ -9,8 +9,11 @@
 
 #include <3ds.h>
 
+#include <stdarg.h>
 #include <stdio.h>
 #include <string.h>
+
+#include "port/sys.h"
 
 namespace {
 
@@ -86,6 +89,61 @@ void MapButtons(u32 held, const circlePosition &circle, bool touch, bool down[25
 
 } // namespace
 
+// ---- watchdog ----------------------------------------------------------------
+
+namespace {
+
+volatile u64 s_lastFrame;
+volatile unsigned s_polls;      // event polls since the last frame
+char s_breadcrumb[160] = "starting";
+volatile bool s_watching;
+
+void Watchdog(void *)
+{
+    u64 lastReport = 0;
+    while (s_watching) {
+        svcSleepThread(1000000000LL);
+        u64 now = osGetTime();
+        if (s_lastFrame != 0 && now - s_lastFrame >= 3000 && now - lastReport >= 5000) {
+            char crumb[sizeof(s_breadcrumb)];
+            memcpy(crumb, s_breadcrumb, sizeof(crumb));
+            crumb[sizeof(crumb) - 1] = 0;
+            Sys_Log("watchdog: no frame for %u s, %u event polls; last: %s", (unsigned)((now - s_lastFrame) / 1000),
+                    s_polls, crumb);
+            lastReport = now;
+        }
+    }
+}
+
+} // namespace
+
+void Ctr_StartWatchdog(void)
+{
+    if (s_watching)
+        return;
+    s_watching = true;
+    s_lastFrame = osGetTime();
+    // Above the game's thread (0x30), so it runs while that one is busy.
+    if (threadCreate(Watchdog, NULL, 16 * 1024, 0x28, -2, true) == NULL)
+        s_watching = false;
+}
+
+void Ctr_FrameShown(void)
+{
+    s_lastFrame = osGetTime();
+    s_polls = 0;
+}
+
+void Ctr_Breadcrumb(const char *format, ...)
+{
+    char text[sizeof(s_breadcrumb)];
+    va_list args;
+    va_start(args, format);
+    vsnprintf(text, sizeof(text), format, args);
+    va_end(args);
+    memcpy(s_breadcrumb, text, sizeof(text));
+}
+
 bool Ctr_Init(void)
 {
     osSetSpeedupEnable(true);   // New 3DS: 804 MHz and the L2 cache
@@ -139,6 +197,7 @@ void Ctr_ShowMessage(const char *title, const char *text)
 
 bool Ctr_Update(void)
 {
+    s_polls++;
     if (!aptMainLoop())
         return false;
     hidScanInput();

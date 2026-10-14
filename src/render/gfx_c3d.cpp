@@ -16,6 +16,7 @@
 #include "platform/platform.h"
 #include "port/sys.h"
 #include "render/gfx_internal.h"
+#include "platform/ctr.h"
 
 #include "shaders_pica.h"
 
@@ -293,6 +294,8 @@ struct Executor : GfxExecutor {
     bool inFrame = false;
     u64 lastFrameEnd = 0;
     unsigned frames = 0;
+    unsigned converted = 0;     // textures since the last frame
+    u64 convertMs = 0;
     std::vector<C3D_Tex> retiredTextures;
 
     CtrTexture white;
@@ -512,6 +515,17 @@ struct Executor : GfxExecutor {
 
     // Converts the CPU copy of t (top level) for the GPU.
     bool Convert(GfxTexture *t)
+    {
+        u64 start = osGetTime();
+        Ctr_Breadcrumb("converting a %dx%d texture (format %d), %u since the last frame", t->width, t->height,
+                       t->format, converted);
+        bool done = ConvertLevels(t);
+        converted++;
+        convertMs += osGetTime() - start;
+        return done;
+    }
+
+    bool ConvertLevels(GfxTexture *t)
     {
         CtrTexture *g = Ensure(t);
         if (t->format == GFX_FORMAT_BUMP_DUDVL) {
@@ -1228,7 +1242,15 @@ struct Executor : GfxExecutor {
             return;
         C3D_FrameEnd(0);
         inFrame = false;
+        u64 previous = lastFrameEnd;
         lastFrameEnd = osGetTime();
+        Ctr_FrameShown();
+        // After a load: what it took the renderer.
+        if (previous != 0 && lastFrameEnd - previous > 2000 && converted > 0)
+            Sys_Log("gfx: %.1f s without frames; %u textures converted in %.1f s", (lastFrameEnd - previous) / 1000.0f,
+                    converted, convertMs / 1000.0f);
+        converted = 0;
+        convertMs = 0;
         maxDraws = std::max(maxDraws, drawsThisFrame);
         maxCmdUsage = std::max(maxCmdUsage, C3D_GetCmdBufUsage());
         if (++frames % 600 == 1) {
