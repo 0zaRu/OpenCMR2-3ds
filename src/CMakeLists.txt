@@ -260,6 +260,11 @@ if(NINTENDO_3DS)
     set_target_properties(opencmr2_gfx_scene PROPERTIES SUFFIX .elf)
     target_link_libraries(opencmr2_gfx_scene PRIVATE opencmr2_platform)
     ctr_create_3dsx(opencmr2_gfx_scene SMDH ${CMAKE_CURRENT_BINARY_DIR}/opencmr2.smdh)
+    add_executable(opencmr2_gfx_stress ${PROJECT_SOURCE_DIR}/tests/3ds/gfx_scene.cpp)
+    set_target_properties(opencmr2_gfx_stress PROPERTIES SUFFIX .elf)
+    target_compile_definitions(opencmr2_gfx_stress PRIVATE GFX_STRESS)
+    target_link_libraries(opencmr2_gfx_stress PRIVATE opencmr2_platform)
+    ctr_create_3dsx(opencmr2_gfx_stress SMDH ${CMAKE_CURRENT_BINARY_DIR}/opencmr2.smdh)
 endif()
 
 # Host tests that run game code, as .3dsx files for an emulator or a console

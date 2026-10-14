@@ -11,7 +11,15 @@
 //    one counter-clockwise (culled);
 //  - middle: a white cube lit from the upper left: its front face at 0.52
 //    (133 of 255: ambient 0.19 + diffuse 0.33), turning while L is held;
-//  - bottom: a checkered ground fading into grey fog with distance.
+//  - bottom: a checkered ground fading into grey fog with distance;
+//  - bottom left: a copy of the corners texture made after its CPU copy was
+//    released (red, green, blue, white like the original), while the
+//    original top left has its green quarter turned magenta after release
+//    (both read back from the GPU's copy, as the game's RemapTextureAlpha).
+//
+// Built with GFX_STRESS (opencmr2_gfx_stress.3dsx), each frame also draws
+// 3000 small fogged, lit and textured triangles, each with its own world
+// matrix, about what a stage sends: the command buffer must not overflow.
 
 #include "platform/ctr.h"
 #include "port/gfx.h"
@@ -89,7 +97,49 @@ GfxVertex V(float x, float y, float z, float nx, float ny, float nz, float u, fl
     return t;
 }
 
-void DrawScene(GfxTexture *corners, GfxTexture *checker, float angle)
+void DrawStress(GfxTexture *checker)
+{
+    Gfx_SetTexture(0, checker);
+    Gfx_SetLighting(TRUE);
+    Gfx_SetFog(TRUE);
+    Gfx_SetCullMode(GFX_CULL_NONE);
+    GfxVertex tri[3] = { V(-0.2f, -0.2f, 0, 0, 0, -1, 0, 0), V(0.2f, -0.2f, 0, 0, 0, -1, 1, 0),
+                         V(0, 0.2f, 0, 0, 0, -1, 0.5f, 1) };
+    for (int i = 0; i < 3000; i++) {
+        GfxMatrix world = Identity();
+        world._41 = (float)(i % 60) * 0.5f - 15.0f;
+        world._42 = (float)((i / 60) % 10) * 0.5f - 3.0f;
+        world._43 = 8.0f + (float)(i / 600) * 6.0f;
+        Gfx_SetTransform(GFX_TRANSFORM_WORLD, &world);
+        // Alternating states, as a stage switches between materials.
+        Gfx_SetAlphaBlend((i & 1) != 0);
+        Gfx_SetSrcBlend(GFX_BLEND_SRCALPHA);
+        Gfx_SetDestBlend(GFX_BLEND_INVSRCALPHA);
+        Gfx_DrawPrimitive(GFX_TRIANGLELIST, tri, 3);
+    }
+    Gfx_SetAlphaBlend(FALSE);
+    Gfx_SetFog(FALSE);
+    Gfx_SetLighting(FALSE);
+    Gfx_SetCullMode(GFX_CULL_CCW);
+}
+
+// Turns the green quarter magenta, through a lock as the game changes a
+// texture it loaded earlier.
+void Recolor(GfxTexture *t)
+{
+    GfxLockedRect rect;
+    if (!Gfx_LockTexture(t, 0, 0, &rect))
+        return;
+    for (DWORD y = 0; y < rect.height; y++)
+        for (DWORD x = 0; x < rect.width; x++) {
+            DWORD *p = (DWORD *)((BYTE *)rect.pixels + y * rect.pitch) + x;
+            if ((*p & 0xffffff) == 0x00ff00)
+                *p = 0xffff00ff;
+        }
+    Gfx_UnlockTexture(t, 0, 0);
+}
+
+void DrawScene(GfxTexture *corners, GfxTexture *checker, GfxTexture *copy, float angle)
 {
     Gfx_SetRenderTarget(NULL);
     GfxViewport vp = { 0, 0, 640, 480, 0.0f, 1.0f };
@@ -178,6 +228,9 @@ void DrawScene(GfxTexture *corners, GfxTexture *checker, float angle)
     Gfx_DrawIndexedPrimitive(GFX_TRIANGLELIST, cube, 24, cubeIdx, 36);
     Gfx_SetCullMode(GFX_CULL_CCW);
     Gfx_SetLighting(FALSE);
+#ifdef GFX_STRESS
+    DrawStress(checker);
+#endif
 
     // 2D: textured corners quad, a transparent quad, culling triangles.
     Gfx_SetDepthTest(FALSE);
@@ -188,6 +241,12 @@ void DrawScene(GfxTexture *corners, GfxTexture *checker, float angle)
     GfxTLVertex quad[4] = { TL(20, 20, 0xffffffff, 0, 0), TL(220, 20, 0xffffffff, 1, 0), TL(20, 170, 0xffffffff, 0, 1),
                             TL(220, 170, 0xffffffff, 1, 1) };
     Gfx_DrawPrimitiveTL(GFX_TRIANGLESTRIP, quad, 4);
+    if (copy != NULL) {
+        Gfx_SetTexture(0, copy);
+        GfxTLVertex below[4] = { TL(20, 300, 0xffffffff, 0, 0), TL(220, 300, 0xffffffff, 1, 0),
+                                 TL(20, 450, 0xffffffff, 0, 1), TL(220, 450, 0xffffffff, 1, 1) };
+        Gfx_DrawPrimitiveTL(GFX_TRIANGLESTRIP, below, 4);
+    }
     Gfx_SetTexture(0, NULL);
     Gfx_SetStageAlphaArg1(0, GFX_TA_DIFFUSE);
     Gfx_SetAlphaBlend(TRUE);
@@ -218,9 +277,18 @@ int main(int, char **)
     }
     GfxTexture *corners = MakeTexture(64, Corners, 1);
     GfxTexture *checker = MakeTexture(256, Checker, 9);
+    GfxTexture *copy = NULL;
     float angle = 0.0f;
-    while (Ctr_Update()) {
-        DrawScene(corners, checker, angle);
+    for (int frame = 0; Ctr_Update(); frame++) {
+        // Both after the textures' CPU copies were released (at the first
+        // frames): a copy, then a change of the original.
+        if (frame == 5) {
+            copy = Gfx_CreateTexture(64, 64, GFX_FORMAT_BGRA8, 1, GFX_TEXTURE_DYNAMIC);
+            Gfx_CopyTexture(copy, corners);
+        }
+        if (frame == 10)
+            Recolor(corners);
+        DrawScene(corners, checker, copy, angle);
         // Turns while L is held (still otherwise, for comparisons).
         if (hidKeysHeld() & KEY_L)
             angle += 0.02f;
