@@ -281,4 +281,17 @@ if(NINTENDO_3DS)
     endforeach()
     target_compile_definitions(opencmr2_test_math_tables PRIVATE TEST_ARGS="sdmc:/math-tables.bin")
     target_compile_definitions(opencmr2_test_car_scheduler PRIVATE TEST_NO_ARGUMENTS)
+
+    # The stage probe (needs the game files on the SD card): menus, loading
+    # and a stage with a controlled clock (tests/3ds/stage_probe_main.cpp).
+    add_executable(opencmr2_stage_probe ${PROJECT_SOURCE_DIR}/tests/stage_probe.cpp
+        ${PROJECT_SOURCE_DIR}/tests/3ds/stage_probe_main.cpp)
+    set_target_properties(opencmr2_stage_probe PROPERTIES SUFFIX .elf)
+    set_source_files_properties(${PROJECT_SOURCE_DIR}/tests/stage_probe.cpp TARGET_DIRECTORY opencmr2_stage_probe
+        PROPERTIES COMPILE_DEFINITIONS main=test_main)
+    target_include_directories(opencmr2_stage_probe PRIVATE ${PROJECT_SOURCE_DIR}/game)
+    target_compile_options(opencmr2_stage_probe PRIVATE -fms-extensions -fpermissive -w
+        "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/port/types.h" -D__fastcall= -D__forceinline=inline)
+    target_link_libraries(opencmr2_stage_probe PRIVATE opencmr2_platform)
+    ctr_create_3dsx(opencmr2_stage_probe NOSMDH)
 endif()
