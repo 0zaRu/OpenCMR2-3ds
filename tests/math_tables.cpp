@@ -33,4 +33,5 @@ int main(int argc, char **argv) {
     if (fgetc(file) != EOF || ferror(file)) return 1;
     fclose(file);
     puts("math tables: all 16,896 entries identical to original + SilentPatch");
+    return 0;
 }

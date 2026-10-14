@@ -21,6 +21,9 @@
 #ifndef _WIN32
 #include "opencmr2_icon.h"
 #endif
+#ifdef __3DS__
+#include "platform/ctr.h"
+#endif
 
 namespace {
 
@@ -306,7 +309,21 @@ const char s_defaultSettings[] =
     "; Also look at the Tailscale machines that are online (auto, 1 or 0).\n"
     "; tailscale = auto\n"
     "; Look on the local network.\n"
-    "; broadcast = 1\n";
+    "; broadcast = 1\n"
+#ifdef __3DS__
+    "\n"
+    "[3ds]\n"
+    "; Largest texture side kept, 32 to 1024: textures are halved until they\n"
+    "; fit, which saves memory and time (256 = original sharpness for most).\n"
+    "; texture_max = 128\n"
+    "; 1 = play the intro and country videos (slow on a 3DS / 2DS).\n"
+    "; movies = 0\n"
+    "; 1 = stretch the 4:3 picture over the whole top screen.\n"
+    "; stretch = 0\n"
+    "; 1 = keep the log on the bottom screen.\n"
+    "; console = 1\n"
+#endif
+    ;
 
 std::string MissingGameData(const std::string &dir)
 {
@@ -574,7 +591,14 @@ bool Platform_Init(int argc, char **argv)
     SDL_SetHint(SDL_HINT_ENABLE_SCREEN_KEYBOARD, "0");
     SDL_SetHint(SDL_HINT_ORIENTATIONS, "LandscapeLeft LandscapeRight");
 #endif
+#ifdef __3DS__
+    // libctru runs the screens (citro3d on the top one); SDL is used for the
+    // rest, without its software video.
+    Ctr_Init();
+    if (!SDL_Init(SDL_INIT_EVENTS)) {
+#else
     if (!SDL_Init(SDL_INIT_VIDEO | SDL_INIT_EVENTS)) {
+#endif
         fprintf(stderr, "SDL_Init failed: %s\n", SDL_GetError());
         return false;
     }
@@ -591,6 +615,11 @@ bool Platform_Init(int argc, char **argv)
             return false;
         }
     } else {
+#ifdef __3DS__
+        // sdmc:/3ds/OpenCMR2/, with sdmc:/3ds created first on a fresh card.
+        SDL_CreateDirectory("sdmc:/3ds");
+        SDL_CreateDirectory("sdmc:/3ds/OpenCMR2");
+#endif
         char *pref = SDL_GetPrefPath("", "OpenCMR2");
         s_userDir = pref ? pref : "./";
         SDL_free(pref);
@@ -619,6 +648,10 @@ bool Platform_Init(int argc, char **argv)
     }
 
     std::vector<std::string> candidates;
+#ifdef __3DS__
+    // The PC installation copied to the SD card.
+    candidates.push_back(s_userDir + "Data");
+#endif
     if (!dataDir.empty()) {
         const std::string missing = MissingGameData(WithSlash(dataDir));
         if (!missing.empty()) {
@@ -652,6 +685,20 @@ bool Platform_Init(int argc, char **argv)
             break;
         }
     }
+#ifdef __3DS__
+    if (s_dataDir.empty()) {
+        // No folder dialog: say where the files go.
+        const std::string message = "The game files were not found.\n\n"
+            "Copy the folders of your Colin McRae Rally 2.0 PC installation "
+            "(Game, FrontEnd, Sounds, ...) to:\n\n  " + s_userDir + "Data\n\n"
+            "Missing:" + MissingGameData(s_userDir + "Data/");
+        Sys_Log("%s", message.c_str());
+        Ctr_ShowMessage("OpenCMR2 - Game files", message.c_str());
+        s_setupCanceled = true;
+        Platform_Shutdown();
+        return false;
+    }
+#endif
     if (s_dataDir.empty() && !SelectGameData(settingsFile)) {
         Platform_Shutdown();
         return false;
@@ -673,6 +720,9 @@ void Platform_Shutdown(void)
         s_logFile = NULL;
     }
     SDL_Quit();
+#ifdef __3DS__
+    Ctr_Shutdown();
+#endif
 }
 
 SDL_Window *Platform_GetWindow(void)
@@ -822,6 +872,39 @@ bool TakePendingText(SysEvent *out)
 
 } // namespace
 
+#ifdef __3DS__
+// The console's buttons (platform/ctr.cpp) and the system's request to close.
+static int PollConsole(SysEvent *event)
+{
+    memset(event, 0, sizeof(*event));
+    if (!Ctr_Update()) {
+        event->type = SYS_EVENT_QUIT;
+        return 1;
+    }
+    int dik;
+    bool repeat;
+    if (Ctr_TakeKeyEvent(&dik, &repeat)) {
+        event->type = SYS_EVENT_KEY_DOWN;
+        event->key = dik;
+        event->repeat = repeat;
+        return 1;
+    }
+    return 0;
+}
+
+extern "C" int Sys_PollEvent(SysEvent *event)
+{
+    SDL_PumpEvents();
+    return PollConsole(event);
+}
+
+extern "C" int Sys_WaitEvent(SysEvent *event)
+{
+    while (!PollConsole(event))
+        SDL_Delay(16);
+    return 1;
+}
+#else
 extern "C" int Sys_PollEvent(SysEvent *event)
 {
     SDL_Event e;
@@ -849,6 +932,7 @@ extern "C" int Sys_WaitEvent(SysEvent *event)
     }
     return 0;
 }
+#endif
 
 // ---- window ----------------------------------------------------------------------
 
@@ -856,6 +940,10 @@ extern "C" BOOL Sys_CreateWindow(const char *title, BOOL fullscreen)
 {
     if (s_window != NULL)
         return TRUE;
+#ifdef __3DS__
+    // No window: the renderer draws on the top screen.
+    return TRUE;
+#endif
     // The renderer sizes the window once it knows the resolution.
     SDL_WindowFlags flags = SDL_WINDOW_HIDDEN | SDL_WINDOW_HIGH_PIXEL_DENSITY;
     if (fullscreen)
@@ -895,6 +983,12 @@ extern "C" void Sys_ShowCursor(BOOL show)
 
 extern "C" void Sys_GetDesktopSize(int *width, int *height)
 {
+#ifdef __3DS__
+    // The game's own 640x480, scaled to the top screen by the renderer.
+    *width = 640;
+    *height = 480;
+    return;
+#endif
     SDL_DisplayID display = s_window ? SDL_GetDisplayForWindow(s_window) : SDL_GetPrimaryDisplay();
     const SDL_DisplayMode *mode = SDL_GetDesktopDisplayMode(display);
     *width = mode ? mode->w : 640;
@@ -905,6 +999,11 @@ extern "C" void Sys_GetDesktopSize(int *width, int *height)
 
 extern "C" int Sys_MessageBox(const char *title, const char *text, int buttons)
 {
+#ifdef __3DS__
+    Sys_Log("message box \"%s\": %s", title, text);
+    Ctr_ShowMessage(title, text);
+    return buttons == SYS_MESSAGEBOX_RETRY_CANCEL ? SYS_MESSAGEBOX_RESULT_CANCEL : SYS_MESSAGEBOX_RESULT_OK;
+#endif
     SDL_MessageBoxButtonData okButtons[] = {
         { SDL_MESSAGEBOX_BUTTON_RETURNKEY_DEFAULT | SDL_MESSAGEBOX_BUTTON_ESCAPEKEY_DEFAULT,
           SYS_MESSAGEBOX_RESULT_OK, "OK" },
@@ -940,6 +1039,9 @@ extern "C" void Sys_Log(const char *format, ...)
     va_end(args);
 #ifdef __ANDROID__
     SDL_Log("%s", line);   // logcat: Android apps have no stderr
+#elif defined(__3DS__)
+    if (Platform_GetSettingInt("3ds.console", 1))
+        Ctr_Print(line);
 #else
     fprintf(stderr, "%s\n", line);
 #endif
@@ -957,6 +1059,10 @@ extern "C" void Sys_Fatal(const char *format, ...)
     vsnprintf(line, sizeof(line), format, args);
     va_end(args);
     Sys_Log("fatal: %s", line);
+#ifdef __3DS__
+    Ctr_ShowMessage("OpenCMR2 - Error", line);
+    Platform_Shutdown();
+#endif
     SDL_ShowSimpleMessageBox(SDL_MESSAGEBOX_ERROR, "OpenCMR2", line, s_window);
     exit(1);
 }

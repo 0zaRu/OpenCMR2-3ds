@@ -27,6 +27,8 @@ GfxTexture *s_target;
 std::vector<std::pair<GfxDrawState, GfxTexture *>> s_savedStates;
 std::vector<std::pair<int, int>> s_modes;
 
+void ReleaseTextureCopies();
+
 GfxMatrix Identity()
 {
     GfxMatrix m;
@@ -352,6 +354,7 @@ static void Present(BOOL vsync, bool stretch)
         fprintf(trace, "F %u\n", s_traceFrame++);
     if (Diagnostics::observer)
         Diagnostics::observer->BeginPresent();
+    ReleaseTextureCopies();
     if (s_executor != NULL)
         s_executor->Execute(s_frame, s_textures, s_readback, true, vsync != 0, stretch);
     s_frame.Reset();
@@ -563,9 +566,10 @@ extern "C" void Gfx_SetStageBumpEnvMat(int stage, int index, float value)
 
 extern "C" GfxVertexBuffer *Gfx_CreateVertexBuffer(DWORD vertexCount)
 {
+    // The memory comes with the first lock: the game creates many buffers it
+    // may never fill (draws from an unfilled one are skipped below).
     GfxVertexBuffer *buffer = new GfxVertexBuffer;
-    buffer->vertices.resize(vertexCount);
-    memset(buffer->vertices.data(), 0, vertexCount * sizeof(GfxVertex));
+    buffer->count = vertexCount;
     return buffer;
 }
 
@@ -576,7 +580,11 @@ extern "C" void Gfx_DestroyVertexBuffer(GfxVertexBuffer *buffer)
 
 extern "C" GfxVertex *Gfx_LockVertexBuffer(GfxVertexBuffer *buffer)
 {
-    return buffer != NULL ? buffer->vertices.data() : NULL;
+    if (buffer == NULL)
+        return NULL;
+    if (buffer->vertices.size() != buffer->count)
+        buffer->vertices.assign(buffer->count, GfxVertex());
+    return buffer->vertices.data();
 }
 
 extern "C" void Gfx_UnlockVertexBuffer(GfxVertexBuffer *)
@@ -628,10 +636,36 @@ extern "C" void Gfx_DrawIndexedPrimitiveTL(int primitive, const GfxTLVertex *ver
 
 // ---- textures -------------------------------------------------------------------------
 
+namespace {
+
+// Hands finished textures to an executor that takes them (Upload, the 3DS's)
+// and releases their CPU copies. A texture is finished when it is no longer
+// locked and the game has moved on: another texture is created or a frame is
+// shown. Staging, dynamic and render-target textures keep their copies.
+void ReleaseTextureCopies()
+{
+    if (s_executor == NULL)
+        return;
+    for (GfxTexture *t : s_textures) {
+        if (!t->dirty || t->released || t->keepCopy || t->locks > 0 ||
+            (t->flags & (GFX_TEXTURE_STAGING | GFX_TEXTURE_DYNAMIC | GFX_TEXTURE_RENDER_TARGET | GFX_TEXTURE_CUBE)))
+            continue;
+        if (!s_executor->Upload(t))
+            continue;
+        for (int m = 0; m < t->mipLevels; m++)
+            std::vector<uint8_t>().swap(t->levels[0][m]);
+        t->released = true;
+        t->dirty = false;
+    }
+}
+
+} // namespace
+
 extern "C" GfxTexture *Gfx_CreateTexture(int width, int height, int format, int mipLevels, DWORD flags)
 {
     if (width <= 0 || height <= 0)
         return NULL;
+    ReleaseTextureCopies();
     // Compressed and bump textures keep one level: the original's mip
     // generation (a DirectDraw stretch blit) only worked on plain RGB.
     if (format != GFX_FORMAT_BGRX8 && format != GFX_FORMAT_BGRA8)
@@ -726,6 +760,17 @@ extern "C" BOOL Gfx_LockTexture(GfxTexture *texture, int face, int mip, GfxLocke
         face = texture->face;
         texture = texture->cube;
     }
+    if (texture->released) {
+        // Its copy went to the executor: start again from blank levels, and
+        // keep them from now on.
+        Sys_Log("gfx: %dx%d texture locked after its release", texture->width, texture->height);
+        for (int m = 0; m < texture->mipLevels; m++) {
+            int w = std::max(1, texture->width >> m), h = std::max(1, texture->height >> m);
+            texture->levels[0][m].assign(Gfx_LevelSize(texture->format, w, h, NULL), 0);
+        }
+        texture->released = false;
+        texture->keepCopy = true;
+    }
     if (mip < 0 || mip >= texture->mipLevels || face < 0 || face > 5 || texture->levels[face][mip].empty())
         return FALSE;
     if (texture->renderedTo && s_executor != NULL) {
@@ -734,6 +779,7 @@ extern "C" BOOL Gfx_LockTexture(GfxTexture *texture, int face, int mip, GfxLocke
     }
     int w = std::max(1, texture->width >> mip), h = std::max(1, texture->height >> mip);
     memset(out, 0, sizeof(*out));
+    texture->locks++;
     out->pixels = texture->levels[face][mip].data();
     Gfx_LevelSize(texture->format, w, h, &out->pitch);
     out->width = w;
@@ -744,8 +790,12 @@ extern "C" BOOL Gfx_LockTexture(GfxTexture *texture, int face, int mip, GfxLocke
 
 extern "C" void Gfx_UnlockTexture(GfxTexture *texture, int, int)
 {
-    if (texture != NULL)
-        Root(texture)->dirty = true;
+    if (texture != NULL) {
+        texture = Root(texture);
+        texture->dirty = true;
+        if (texture->locks > 0)
+            texture->locks--;
+    }
 }
 
 namespace {
@@ -795,7 +845,7 @@ extern "C" void Gfx_CopyTexture(GfxTexture *dst, GfxTexture *src)
 {
     dst = Root(dst);
     src = Root(src);
-    if (dst == NULL || src == NULL)
+    if (dst == NULL || src == NULL || src->released || dst->released)
         return;
     if (src->renderedTo && s_executor != NULL) {
         s_executor->ReadTexture(src);
@@ -833,7 +883,8 @@ extern "C" void Gfx_CopyTexture(GfxTexture *dst, GfxTexture *src)
 extern "C" void Gfx_GenerateMipmaps(GfxTexture *texture)
 {
     texture = Root(texture);
-    if (texture == NULL || (texture->format != GFX_FORMAT_BGRX8 && texture->format != GFX_FORMAT_BGRA8))
+    if (texture == NULL || texture->released ||
+        (texture->format != GFX_FORMAT_BGRX8 && texture->format != GFX_FORMAT_BGRA8))
         return;
     for (int m = 1; m < texture->mipLevels; m++) {
         int sw = std::max(1, texture->width >> (m - 1)), sh = std::max(1, texture->height >> (m - 1));

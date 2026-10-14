@@ -28,6 +28,19 @@ static bool ReadMovie(void *context, uint32_t offset, void *dst, uint32_t bytes)
 
 extern "C" Movie *Movie_Open(const char *path, int audioTrack)
 {
+#ifdef __3DS__
+    // Decoding Bink is too slow on a 3DS: unless [3ds] movies = 1, every
+    // movie is an empty one, which the game's loop ends at once.
+    if (!Sys_GetOption("3ds.movies", 0)) {
+        Movie *empty = new (std::nothrow) Movie;
+        if (empty) {
+            empty->info.width = 320;
+            empty->info.height = 240;
+            empty->info.fpsNumerator = empty->info.fpsDenominator = 1;
+        }
+        return empty;
+    }
+#endif
     SysFile *file = Sys_OpenFile(path, SYS_FILE_READ);
     if (!file)
         return nullptr;

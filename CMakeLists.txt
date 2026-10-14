@@ -8,11 +8,19 @@ project(OpenCMR2 LANGUAGES C CXX)
 #    original-game parity checks are tracked in docs/64bit-raw-access.md.
 #  - Android: built by the Gradle project in android/, which passes the NDK
 #    toolchain and the SDL3 source it also takes SDLActivity from.
+#  - 3ds: Nintendo 3DS with devkitARM (GCC) and citro3d, see docs/3DS.md. A
+#    32-bit target like linux-x86, so the game's structures keep their layout.
 
 # The game source needs Clang with GNU-style options: -fms-extensions for the
 # MSVC dialect it was written in, forced includes and the semantics below.
 # On Windows that is clang++ (not clang-cl) targeting the MSVC runtime.
-if(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
+# devkitARM only has GCC, which accepts the game with a few more options
+# (src/CMakeLists.txt).
+if(NINTENDO_3DS)
+    if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+        message(FATAL_ERROR "The Nintendo 3DS build uses devkitARM's GCC; use the 3ds preset")
+    endif()
+elseif(NOT CMAKE_CXX_COMPILER_ID MATCHES "Clang" OR NOT CMAKE_C_COMPILER_ID MATCHES "Clang")
     message(FATAL_ERROR "OpenCMR2 builds with Clang (found ${CMAKE_CXX_COMPILER_ID}); use one of the CMake presets")
 endif()
 if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
@@ -20,7 +28,12 @@ if(CMAKE_CXX_COMPILER_FRONTEND_VARIANT STREQUAL "MSVC")
 endif()
 
 option(OPENCMR2_SANITIZE "Build with AddressSanitizer and UBSan" OFF)
-option(OPENCMR2_VENDORED_SDL "Download and build SDL3 instead of using an installed one" ${ANDROID})
+if(ANDROID OR NINTENDO_3DS)
+    set(OPENCMR2_VENDORED_SDL_DEFAULT ON)
+else()
+    set(OPENCMR2_VENDORED_SDL_DEFAULT OFF)
+endif()
+option(OPENCMR2_VENDORED_SDL "Download and build SDL3 instead of using an installed one" ${OPENCMR2_VENDORED_SDL_DEFAULT})
 
 set(CMAKE_CXX_STANDARD 17)
 set(CMAKE_CXX_STANDARD_REQUIRED ON)
@@ -57,8 +70,14 @@ if(NOT TARGET SDL3::SDL3)
     message(STATUS "OpenCMR2: building SDL3 from source")
     set(OPENCMR2_BUILT_SDL ON)
     include(FetchContent)
-    set(SDL_SHARED ON CACHE BOOL "" FORCE)
-    set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+    if(NINTENDO_3DS)
+        # No dynamic linking on the 3DS.
+        set(SDL_SHARED OFF CACHE BOOL "" FORCE)
+        set(SDL_STATIC ON CACHE BOOL "" FORCE)
+    else()
+        set(SDL_SHARED ON CACHE BOOL "" FORCE)
+        set(SDL_STATIC OFF CACHE BOOL "" FORCE)
+    endif()
     set(SDL_TEST_LIBRARY OFF CACHE BOOL "" FORCE)
     set(SDL_EXAMPLES OFF CACHE BOOL "" FORCE)
     FetchContent_Declare(SDL3
@@ -70,8 +89,8 @@ endif()
 
 add_subdirectory(src)
 
-# The tests run on the build machine; the Android build is the game alone.
-if(NOT ANDROID)
+# The tests run on the build machine; the Android and 3DS builds are the game alone.
+if(NOT ANDROID AND NOT NINTENDO_3DS)
     enable_testing()
     add_subdirectory(tests)
 endif()

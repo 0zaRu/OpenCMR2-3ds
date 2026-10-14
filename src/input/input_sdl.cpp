@@ -3,6 +3,9 @@
 #include "platform/platform.h"
 #include "platform/testing.h"
 #include "port/input.h"
+#ifdef __3DS__
+#include "platform/ctr.h"
+#endif
 
 #include <math.h>
 #include <stdio.h>
@@ -216,6 +219,10 @@ void BuildEffect(const InputEffectParams &p, SDL_HapticEffect *e)
 
 extern "C" int Input_GetJoystickCount(void)
 {
+#ifdef __3DS__
+    // The console's buttons press keyboard keys (platform/ctr.cpp).
+    return 0;
+#endif
     EnsureInit();
     int count = 0;
     SDL_JoystickID *ids = SDL_GetJoysticks(&count);
@@ -395,6 +402,11 @@ extern "C" BOOL Input_ReadKeyboard(InputDevice *device, BYTE keys[256])
     const bool *state = SDL_GetKeyboardState(&count);
 
     memset(keys, 0, 256);
+#ifdef __3DS__
+    for (int dik = 0; dik < 256; dik++)
+        if (Ctr_IsKeyDown(dik))
+            keys[dik] = 0x80;
+#endif
     for (int scancode = 0; scancode < count; scancode++) {
         if (scancode < SDL_SCANCODE_COUNT && s_heldBack[scancode]) {
             if (state[scancode])
@@ -473,10 +485,23 @@ extern "C" BOOL Input_IsKeyDown(int key)
 {
     if (s_testKeyboard)
         return key >= 0 && key < 256 && (s_testKeyboard[key] & 0x80);
+#ifdef __3DS__
+    if (Ctr_IsKeyDown(key))
+        return TRUE;
+#endif
     int count = 0;
     const bool *state = SDL_GetKeyboardState(&count);
     SDL_Scancode scancode = Keys_ToScancode(key);
     return scancode != SDL_SCANCODE_UNKNOWN && scancode < count && state[scancode];
+}
+
+extern "C" void Input_SetDrivingContext(BOOL driving)
+{
+#ifdef __3DS__
+    Ctr_SetDrivingContext(driving != 0);
+#else
+    (void)driving;
+#endif
 }
 
 extern "C" void Input_GetKeyRepeat(DWORD *delay, DWORD *interval)

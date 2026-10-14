@@ -1,4 +1,5 @@
 #include <stddef.h>
+#include "port/input.h"
 #include "FloatToInt.h"
 #include "RaceCallbackStorage.h"
 #include "NetworkLeaderboards.h"
@@ -1005,6 +1006,8 @@ void StageUI_UpdatePauseMenu(void)
     DeviceInfo *pDev;
     Menu *next;
 
+    // PORT: the pause menu is a menu for the platform's button mapping.
+    Input_SetDrivingContext(FALSE);
     CInput::UpdateAllAvailableDevices();
     Input_TranslatePedalsToMenuKeys();
     if (!Graphics_IsRegisteredTimerRunning(&g_unk0x0058ca90.bracketTimer) && !Graphics_IsRegisteredTimerRunning(g_unk0x0058ca8c)) {

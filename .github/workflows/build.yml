@@ -173,9 +173,40 @@ jobs:
           path: dist/*
           if-no-files-found: error
 
+  # Nintendo 3DS: devkitARM's container; makerom and bannertool for the CIA
+  # are built from source at fixed commits.
+  nintendo-3ds:
+    runs-on: ubuntu-24.04
+    container: devkitpro/devkitarm:latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: makerom and bannertool
+        run: |
+          fetch() { git init -q "$1" && git -C "$1" fetch -q --depth 1 "$2" "$3" && git -C "$1" checkout -q FETCH_HEAD; }
+          fetch /tmp/ctr https://github.com/3DSGuy/Project_CTR d52c2b0e788c2d085763d7c5dcc4b2edd9ffb7d8
+          make -C /tmp/ctr/makerom deps -j4 && make -C /tmp/ctr/makerom program -j4
+          fetch /tmp/bannertool https://github.com/diasurgical/bannertool 16d8c5a0ce02a5e06e64ab42275132fca57c04a2
+          git -C /tmp/bannertool submodule update --init --depth 1
+          make -C /tmp/bannertool -j4
+          mkdir -p /tmp/tools3ds
+          cp /tmp/ctr/makerom/bin/makerom /tmp/bannertool/output/linux-x86_64/bannertool /tmp/tools3ds/
+      - run: cmake --preset 3ds -DOPENCMR2_3DS_TOOLS=/tmp/tools3ds
+      - run: cmake --build --preset 3ds
+      - name: Package
+        run: |
+          mkdir -p dist/OpenCMR2-3DS
+          cp build/3ds/src/OpenCMR2.cia build/3ds/src/opencmr2.3dsx dist/OpenCMR2-3DS/
+          cp docs/3DS.md LICENSE dist/OpenCMR2-3DS/
+          cd dist && zip -qr OpenCMR2-3DS.zip OpenCMR2-3DS && rm -r OpenCMR2-3DS
+      - uses: actions/upload-artifact@v4
+        with:
+          name: OpenCMR2-3DS
+          path: dist/*
+          if-no-files-found: error
+
   release:
     if: startsWith(github.ref, 'refs/tags/v')
-    needs: [linux-x86, linux, macos, windows, android]
+    needs: [linux-x86, linux, macos, windows, android, nintendo-3ds]
     runs-on: ubuntu-24.04
     permissions:
       contents: write

@@ -53,6 +53,14 @@
       "displayName": "Windows, x64 (clang++ from LLVM or Visual Studio, MSVC runtime)",
       "architecture": { "value": "x64", "strategy": "external" },
       "condition": { "type": "equals", "lhs": "${hostSystemName}", "rhs": "Windows" }
+    },
+    {
+      "name": "3ds",
+      "displayName": "Nintendo 3DS (devkitARM, see docs/3DS.md)",
+      "generator": "Ninja",
+      "binaryDir": "${sourceDir}/build/${presetName}",
+      "toolchainFile": "$env{DEVKITPRO}/cmake/3DS.cmake",
+      "cacheVariables": { "CMAKE_BUILD_TYPE": "Release" }
     }
   ],
   "buildPresets": [
@@ -61,7 +69,8 @@
     { "name": "linux", "configurePreset": "linux" },
     { "name": "linux-debug", "configurePreset": "linux-debug" },
     { "name": "macos", "configurePreset": "macos" },
-    { "name": "windows-x64", "configurePreset": "windows-x64" }
+    { "name": "windows-x64", "configurePreset": "windows-x64" },
+    { "name": "3ds", "configurePreset": "3ds" }
   ],
   "testPresets": [
     { "name": "linux-x86", "configurePreset": "linux-x86", "output": { "outputOnFailure": true } },

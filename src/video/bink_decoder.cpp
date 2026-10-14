@@ -945,7 +945,7 @@ struct AudioState {
         std::vector<float> c(length);
         c[0] = Float(bits) * root; c[1] = Float(bits) * root;
         std::vector<float> quant(bands.size() - 1);
-        for (float &q : quant) q = std::exp(std::min(bits.Read(8), 95u) * 0.15289164787221953823f) * root;
+        for (float &q : quant) q = std::exp(std::min<uint32_t>(bits.Read(8), 95u) * 0.15289164787221953823f) * root;
         unsigned band = 0, i = 2;
         float q = quant[0];
         static const unsigned runs[] = {2, 3, 4, 5, 6, 8, 9, 10, 11, 12, 13, 14, 15, 16, 32, 64};

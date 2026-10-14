@@ -145,6 +145,10 @@ The compiler flags encode what the decompiled code relies on:
 - `linux-x86-debug`: the same with AddressSanitizer and UBSan.
 - `linux` and `linux-debug`: native Linux x86-64/ARM64, with optional sanitizers.
 - `windows-x64` and `macos`: Windows x64 and macOS Apple silicon.
+- `3ds`: Nintendo 3DS with devkitARM's GCC, a 32-bit target with the
+  original layout like `linux-x86`. It replaces the SDL_GPU executor with a
+  citro3d one (`src/render/gfx_c3d.cpp`) and adds `src/platform/ctr.cpp` for
+  the screens and buttons; see [3DS.md](3DS.md).
 
 All target presets are built, tested and packaged in CI. Linux x86-64 and
 Windows x64 under Wine have real-stage regression coverage; ARM64, macOS and

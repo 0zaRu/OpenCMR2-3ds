@@ -18,20 +18,28 @@ target_compile_options(cmr2_game PRIVATE
     $<$<COMPILE_LANGUAGE:C>:-x c>
     "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/port/types.h"
     "SHELL:-include ${CMAKE_CURRENT_SOURCE_DIR}/port/msvcrt.h"
-    -fms-extensions
-    -Wno-everything
-    -ferror-limit=0)
+    -fms-extensions)
+if(CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    # GCC (devkitARM): the MSVC calling conventions Clang ignores, and member
+    # functions declared static outside their class, which GCC rejects.
+    target_compile_options(cmr2_game PRIVATE -w -D__fastcall= -D__forceinline=inline
+        $<$<COMPILE_LANGUAGE:CXX>:-fpermissive>)
+else()
+    target_compile_options(cmr2_game PRIVATE -Wno-everything -ferror-limit=0)
+endif()
 target_link_libraries(cmr2_game PUBLIC SDL3::SDL3)
 
 # These units used to call variadic sprintf through fixed-argument casts,
 # which breaks the macOS ARM64 ABI. Reject incompatible function casts here
 # even though other warnings in the decompiled game are disabled. Game.cpp
 # still has legacy state callback casts, so it keeps the general warning policy.
-set_source_files_properties(
-    ${GAME_DIR}/InstallInfo.cpp ${GAME_DIR}/Graphics.cpp
-    ${GAME_DIR}/Input.cpp ${GAME_DIR}/Texture.cpp
-    TARGET_DIRECTORY cmr2_game
-    PROPERTIES COMPILE_OPTIONS "-Wcast-function-type-strict;-Werror=cast-function-type-strict")
+if(NOT CMAKE_CXX_COMPILER_ID STREQUAL "GNU")
+    set_source_files_properties(
+        ${GAME_DIR}/InstallInfo.cpp ${GAME_DIR}/Graphics.cpp
+        ${GAME_DIR}/Input.cpp ${GAME_DIR}/Texture.cpp
+        TARGET_DIRECTORY cmr2_game
+        PROPERTIES COMPILE_OPTIONS "-Wcast-function-type-strict;-Werror=cast-function-type-strict")
+endif()
 
 # The original builds these with /QIfist: their float-to-integer conversions
 # (FTOI, game/FloatToInt.h) round to nearest like x87 FISTP instead of
@@ -62,6 +70,9 @@ if(ANDROID)
     # SDLActivity loads libmain.so and calls its SDL_main.
     add_library(opencmr2 SHARED platform/main.cpp)
     set_target_properties(opencmr2 PROPERTIES OUTPUT_NAME main)
+elseif(NINTENDO_3DS)
+    add_executable(opencmr2 platform/main.cpp)
+    set_target_properties(opencmr2 PROPERTIES SUFFIX .elf)
 else()
     add_executable(opencmr2 platform/main.cpp)
 endif()
@@ -72,7 +83,7 @@ if(WIN32)
     add_custom_command(TARGET opencmr2 POST_BUILD
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_RUNTIME_DLLS:opencmr2> $<TARGET_FILE_DIR:opencmr2>
         COMMAND_EXPAND_LISTS)
-elseif(OPENCMR2_BUILT_SDL AND NOT ANDROID)
+elseif(OPENCMR2_BUILT_SDL AND NOT ANDROID AND NOT NINTENDO_3DS)
     # The SDL3 built here goes next to the executable, which looks for it
     # there, so the release archives run without SDL3 installed.
     if(APPLE)
@@ -84,6 +95,7 @@ elseif(OPENCMR2_BUILT_SDL AND NOT ANDROID)
         COMMAND ${CMAKE_COMMAND} -E copy_if_different $<TARGET_SONAME_FILE:SDL3::SDL3> $<TARGET_FILE_DIR:opencmr2>)
 endif()
 
+if(NOT NINTENDO_3DS)
 # ---- shaders (GLSL -> SPIR-V, plus MSL for Metal; embedded) ----------------------
 # SDL_GPU takes SPIR-V on Vulkan (Linux, Windows) and MSL on Metal (macOS).
 # The MSL comes from the same SPIR-V through SPIRV-Cross; the SPIR-V bindings
@@ -144,6 +156,7 @@ add_custom_command(
     VERBATIM
     DEPENDS ${SHADER_FILES} ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
     COMMENT "Embedding shaders")
+endif()
 
 # ---- window icon (embedded) ------------------------------------------------------
 # res/opencmr2.png is the source; the derived icons are regenerated with:
@@ -173,6 +186,9 @@ endif()
 target_link_libraries(opencmr2_platform PUBLIC opencmr2_shortcut)
 
 # ---- network (UDP with ENet, third_party/enet) -------------------------------------
+if(NINTENDO_3DS)
+    target_sources(opencmr2_platform PRIVATE net/net_none.cpp)
+else()
 set(ENET_DIR ${PROJECT_SOURCE_DIR}/third_party/enet)
 add_library(enet STATIC
     ${ENET_DIR}/callbacks.c ${ENET_DIR}/compress.c ${ENET_DIR}/host.c ${ENET_DIR}/list.c
@@ -190,16 +206,74 @@ add_library(opencmr2_net STATIC net/net_session.cpp)
 target_include_directories(opencmr2_net PUBLIC ${CMAKE_CURRENT_SOURCE_DIR})
 find_package(Threads REQUIRED)
 target_link_libraries(opencmr2_net PUBLIC enet Threads::Threads)
+target_sources(opencmr2_platform PRIVATE net/net_api.cpp)
+target_link_libraries(opencmr2_platform PRIVATE opencmr2_net)
+endif()
 
 # ---- platform subsystems ---------------------------------------------------------
 target_sources(opencmr2_platform PRIVATE
     render/gfx_core.cpp
-    render/gfx_gpu.cpp
-    ${SHADER_HEADER}
     ${ICON_HEADER}
     audio/audio_sdl.cpp
     input/input_sdl.cpp
-    video/movie.cpp
-    net/net_api.cpp)
+    video/movie.cpp)
 target_include_directories(opencmr2_platform PRIVATE ${CMAKE_CURRENT_BINARY_DIR}/generated)
-target_link_libraries(opencmr2_platform PRIVATE opencmr2_bink opencmr2_net)
+target_link_libraries(opencmr2_platform PRIVATE opencmr2_bink)
+
+if(NINTENDO_3DS)
+    # citro3d renderer; its vertex shader is assembled by picasso and embedded.
+    set(PICA_SHADER ${CMAKE_CURRENT_SOURCE_DIR}/render/shaders/fixed.v.pica
+                    ${CMAKE_CURRENT_SOURCE_DIR}/render/shaders/fixedtl.v.pica)
+    set(PICA_BINARY ${CMAKE_CURRENT_BINARY_DIR}/shaders/fixed.shbin)
+    set(PICA_HEADER ${CMAKE_CURRENT_BINARY_DIR}/generated/shaders_pica.h)
+    add_custom_command(
+        OUTPUT ${PICA_BINARY}
+        COMMAND ${CMAKE_COMMAND} -E make_directory ${CMAKE_CURRENT_BINARY_DIR}/shaders
+        COMMAND ${CTR_PICASSO_EXE} -o ${PICA_BINARY} ${PICA_SHADER}
+        DEPENDS ${PICA_SHADER}
+        COMMENT "Assembling the PICA shaders")
+    add_custom_command(
+        OUTPUT ${PICA_HEADER}
+        COMMAND ${CMAKE_COMMAND} -DOUTPUT=${PICA_HEADER} -DINPUTS=${PICA_BINARY} -P ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
+        VERBATIM
+        DEPENDS ${PICA_BINARY} ${PROJECT_SOURCE_DIR}/cmake/embed_spirv.cmake
+        COMMENT "Embedding the PICA shader")
+    target_sources(opencmr2_platform PRIVATE platform/ctr.cpp render/gfx_c3d.cpp ${PICA_HEADER})
+    target_link_libraries(opencmr2_platform PUBLIC citro3d ctru m)
+
+    # Homebrew Launcher package (.3dsx with its .smdh) and the installable CIA.
+    set(CTR_RES ${PROJECT_SOURCE_DIR}/res/3ds)
+    ctr_generate_smdh(${CMAKE_CURRENT_BINARY_DIR}/opencmr2.smdh
+        NAME "OpenCMR2"
+        DESCRIPTION "Colin McRae Rally 2.0 (needs the PC game files)"
+        AUTHOR "OpenCMR2"
+        ICON ${CTR_RES}/icon.png)
+    ctr_create_3dsx(opencmr2 SMDH ${CMAKE_CURRENT_BINARY_DIR}/opencmr2.smdh)
+    include(${PROJECT_SOURCE_DIR}/cmake/3ds_cia.cmake)
+else()
+    target_sources(opencmr2_platform PRIVATE render/gfx_gpu.cpp ${SHADER_HEADER})
+endif()
+
+# The renderer's test scene for the 3DS (tests/3ds/gfx_scene.cpp).
+if(NINTENDO_3DS)
+    add_executable(opencmr2_gfx_scene ${PROJECT_SOURCE_DIR}/tests/3ds/gfx_scene.cpp)
+    set_target_properties(opencmr2_gfx_scene PROPERTIES SUFFIX .elf)
+    target_link_libraries(opencmr2_gfx_scene PRIVATE opencmr2_platform)
+    ctr_create_3dsx(opencmr2_gfx_scene SMDH ${CMAKE_CURRENT_BINARY_DIR}/opencmr2.smdh)
+endif()
+
+# Host tests that run game code, as .3dsx files for an emulator or a console
+# (tests/3ds/run_test.cpp): the game's arithmetic built by devkitARM's GCC.
+if(NINTENDO_3DS)
+    foreach(test math_tables car_scheduler)
+        add_executable(opencmr2_test_${test} ${PROJECT_SOURCE_DIR}/tests/${test}.cpp
+            ${PROJECT_SOURCE_DIR}/tests/3ds/run_test.cpp)
+        set_target_properties(opencmr2_test_${test} PROPERTIES SUFFIX .elf)
+        set_source_files_properties(${PROJECT_SOURCE_DIR}/tests/${test}.cpp TARGET_DIRECTORY opencmr2_test_${test}
+            PROPERTIES COMPILE_DEFINITIONS main=test_main)
+        target_link_libraries(opencmr2_test_${test} PRIVATE opencmr2_platform)
+        ctr_create_3dsx(opencmr2_test_${test} NOSMDH)
+    endforeach()
+    target_compile_definitions(opencmr2_test_math_tables PRIVATE TEST_ARGS="sdmc:/math-tables.bin")
+    target_compile_definitions(opencmr2_test_car_scheduler PRIVATE TEST_NO_ARGUMENTS)
+endif()

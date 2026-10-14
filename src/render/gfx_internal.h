@@ -24,11 +24,15 @@ struct GfxTexture {
     std::vector<uint8_t> levels[6][16];
     bool dirty;                 // CPU copy newer than the GPU's
     bool renderedTo;            // the GPU copy is newer (render targets)
+    int locks;                  // Gfx_LockTexture calls not yet unlocked
+    bool released;              // CPU copy released after an Upload
+    bool keepCopy;              // locked again after a release: keep the copy
     void *gpu;                  // executor's object
 };
 
 struct GfxVertexBuffer {
-    std::vector<GfxVertex> vertices;
+    DWORD count = 0;
+    std::vector<GfxVertex> vertices;    // allocated on the first lock
 };
 
 // Bytes of one level, given its size, for a format.
@@ -142,6 +146,9 @@ struct GfxExecutor {
     virtual void DestroyTexture(GfxTexture *texture) = 0;
     // Brings a render target's pixels back into its CPU copy (for locks).
     virtual void ReadTexture(GfxTexture *texture) = 0;
+    // Takes a texture's contents now, so that its CPU copy can be released
+    // (true), for executors short of memory (3DS); see gfx_core.cpp.
+    virtual bool Upload(GfxTexture *) { return false; }
 };
 
 GfxExecutor *Gfx_CreateGpuExecutor(void);

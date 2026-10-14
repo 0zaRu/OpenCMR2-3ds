@@ -88,4 +88,5 @@ int main() {
     Reset(0xfffffff0u);
     Check(Sample(0x18u) == 2 && cars[0].simulationStepsRemaining == 1, "32-bit millisecond wrap");
     puts("scheduler: fixed/variable cadence, mixed rates, zero/multiple steps, cap, rebase and wrap passed");
+    return 0;
 }

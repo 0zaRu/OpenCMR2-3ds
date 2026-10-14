@@ -1,4 +1,5 @@
 #include "port/sys.h"
+#include "port/input.h"
 #include "RaceCallbackStorage.h"
 #include "FloatToInt.h"
 #include "StageBlock.h"
@@ -167,6 +168,8 @@ BOOL CGame::DispatchFrontendResourceState(void)
     m_unk0x00523c5c = GetFrontendResourceMode();
     if (m_unk0x00523c5c != m_unk0x00523c58)
         m_unk0x00523c58 = m_unk0x00523c5c;
+    // PORT: the platform maps handheld buttons to driving or menu keys.
+    Input_SetDrivingContext(m_unk0x00523c5c == 3);
 
     switch (m_unk0x00523c5c)
     {

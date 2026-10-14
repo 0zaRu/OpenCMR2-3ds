@@ -1,0 +1,48 @@
+; Pre-transformed (Direct3D TL) vertices on the PICA200, the counterpart of
+; fixedtl.vert for render/gfx_c3d.cpp: screen pixels of the game's back
+; buffer to the rotated top screen of the 3DS, in the viewport of the game's
+; picture.
+;
+; screen: x, y scale of the rotated axes (from the game's y and x) and their
+; offsets, including Direct3D's half-pixel centres.
+
+.fvec screen
+
+.constf consts(0.0, 1.0, 0.00392156862745, -1.0)
+.alias zeros consts.xxxx
+.alias ones consts.yyyy
+.alias inv255 consts.zzzz
+
+.out outpos position
+.out outclr color
+.out outtc0 texcoord0
+.out outtc1 texcoord1
+
+.alias inpos v0
+.alias inclr v1
+.alias inuv v3
+
+.entry tlmain
+.proc tlmain
+    ; w = 1 / rhw (1 when rhw is 0)
+    mov r0, inpos
+    mov r1.x, ones
+    rcp r1.y, r0.w
+    cmp zeros, eq, eq, r0.w
+    ifc cmp.x
+        mov r1.y, r1.x
+    .end
+    ; rotated axes: x from the game's y, y from the game's x
+    mul r2.x, screen.xxxx, r0.yyyy
+    add r2.x, screen.zzzz, r2.x
+    mul r2.y, screen.yyyy, r0.xxxx
+    add r2.y, screen.wwww, r2.y
+    ; Direct3D depth 0..1 to the PICA's 0..-1
+    mov r2.z, -r0.z
+    mov r2.w, ones
+    mul outpos, r1.yyyy, r2
+    mul outclr, inv255, inclr.zyxw
+    mov outtc0, inuv
+    mov outtc1, inuv
+    end
+.end

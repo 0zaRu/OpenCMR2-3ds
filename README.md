@@ -9,7 +9,7 @@
 OpenCMR2 is a work-in-progress native port of **Colin McRae Rally 2.0** (PC, 2000)
 to modern platforms, built on the [CMR2Decomp](https://github.com/pablocpas/CMR2Decomp)
 decompilation. It runs the original game code natively on Linux, Windows,
-macOS and Android. There is no emulation and no Wine or DirectX wrapper: DirectDraw,
+macOS and Android, and experimentally on the Nintendo 3DS. There is no emulation and no Wine or DirectX wrapper: DirectDraw,
 Direct3D 7, DirectSound, DirectInput, DirectPlay and Bink are replaced with
 SDL3, the SDL GPU API (Vulkan, Metal) and the port's own code.
 
@@ -37,6 +37,7 @@ as it is made.
 | Windows | x86-64 | Plays stages and matches the original physics (tested under Wine) |
 | macOS | ARM64 | Builds and passes the tests, gameplay not yet tested |
 | Android | ARM64, x86-64 | Plays stages with on-screen controls (Android 10 or later, Vulkan) |
+| Nintendo 3DS | ARM11 | Experimental: builds and starts, gameplay not yet tested ([3DS.md](docs/3DS.md)) |
 
 ### Features
 
@@ -95,6 +96,7 @@ Download the package for your platform from
 | Linux 32-bit | `OpenCMR2-Linux-i686.tar.gz` |
 | macOS (Apple silicon) | `OpenCMR2-macOS-arm64.zip` |
 | Android | `OpenCMR2-Android.apk` |
+| Nintendo 3DS | `OpenCMR2-3DS.zip` (`.cia` and `.3dsx`, see [3DS.md](docs/3DS.md)) |
 
 Extract it and run `opencmr2`. On first launch, choose the folder of your PC
 installation. The installation itself, a folder inside it or a parent folder
@@ -155,6 +157,7 @@ in `CMakePresets.json`:
 | `windows-x64` | Windows x64 (`clang++` with the MSVC runtime) |
 | `macos` | macOS, Apple silicon |
 | `linux-x86` | Linux, 32-bit x86 (reference build for the tests) |
+| `3ds` | Nintendo 3DS, with devkitARM (see [3DS.md](docs/3DS.md#building)) |
 
 OpenCMR2 needs SDL 3.4 or later. An installed SDL3 of that version is used;
 otherwise CMake downloads and builds it and places it next to the executable
@@ -261,6 +264,7 @@ the rest of the development workflow are described in
 | [NETWORK.md](docs/NETWORK.md) | Network play setup and protocol |
 | [VIDEO.md](docs/VIDEO.md) | Bink decoder |
 | [WINDOWS.md](docs/WINDOWS.md) | Release packages and cross-building for Windows |
+| [3DS.md](docs/3DS.md) | Nintendo 3DS: installing, controls, limits and building |
 | [64bit-raw-access.md](docs/64bit-raw-access.md) | 64-bit memory access audit |
 
 The full index is in [docs/README.md](docs/README.md).
@@ -282,7 +286,8 @@ The full index is in [docs/README.md](docs/README.md).
 
 OpenCMR2 is licensed under the [GPL-3.0](LICENSE). Bundled third-party code
 keeps its own licence: SDL3 (zlib), ENet (MIT), the Bink decoder (LGPL-2.1)
-and RadialGamePad (GPL-3.0).
+and RadialGamePad (GPL-3.0). The Nintendo 3DS build also links libctru and
+citro3d (zlib).
 
 OpenCMR2 is an unofficial project, not affiliated with or endorsed by
 Codemasters or Electronic Arts. Colin McRae Rally 2.0 is a trademark of its

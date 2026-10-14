@@ -106,6 +106,10 @@ BOOL Input_ReadJoystick(InputDevice *device, InputJoystickState *state);
 /* Whether a key is held right now (GetAsyncKeyState). */
 BOOL Input_IsKeyDown(int key);
 
+/* The game tells whether a stage is being driven (FALSE in the menus, the
+   pause menu included): handheld buttons press different keys in each. */
+void Input_SetDrivingContext(BOOL driving);
+
 /* Keyboard auto-repeat of the system, in milliseconds. */
 void Input_GetKeyRepeat(DWORD *delay, DWORD *interval);
 /* Name of a key (DIK_*) in the current keyboard layout. */

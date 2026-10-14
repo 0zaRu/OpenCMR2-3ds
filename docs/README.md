@@ -14,6 +14,7 @@ These guides describe the maintained workflow and current project scope.
 | [Network play](NETWORK.md) | LAN, VPN and internet setup, protocol and tests. |
 | [Video](VIDEO.md) | Bink decoder scope and validation. |
 | [Releases and Windows builds](WINDOWS.md) | Release packages and cross-building Windows from Linux. |
+| [Nintendo 3DS](3DS.md) | The experimental 3DS port: installing, controls, limits and building. |
 
 Frozen regression inputs and their provenance remain in
 [`tests/reference/`](../tests/reference/). Local build outputs and exploratory
