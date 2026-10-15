@@ -34,9 +34,20 @@ fixed-function pipeline.
 The game keeps its 640x480 picture and draws it at half size, 320x240 in 4:3,
 in the middle of the 400x240 top screen. The menus are drawn at the full
 640x480 and halved smoothly by the display transfer, so their text stays
-readable; the fonts are never shrunk. On a stage the bottom screen shows a
-map of the stage (the route, splits, start and finish, the player's arrow
-and the other cars); elsewhere it shows the log.
+readable; the fonts are never shrunk.
+
+While driving, the screens share the HUD. The top one keeps only the rev
+counter with the gear (and the speed), so that the road is clear. The bottom
+one shows a map of the stage (the route, splits, start and finish, your
+arrow and the other cars), with the rest of the HUD over it at half size:
+stage and split times, laps and position, the co-driver's pace notes and
+messages, and the top screen's frame rate in its corner. The game's own
+circuit minimap is not drawn. In the menus, the results and the pause, the
+bottom screen shows the log.
+
+Sound goes straight to the DSP, mixed by a thread of its own on the
+console's second core. Closing the game from the HOME Menu stops the
+threads, the GPU and the sound in order before the system takes over.
 
 To fit the memory, stage textures are shrunk (to at most 128x128 by default,
 256x256 for the menus') and
@@ -103,7 +114,7 @@ addition to the [general settings](../README.md#configuration):
 | `texture_max` | `128` | Largest texture side on a stage, 8 to 1024. Higher is sharper and needs more memory |
 | `texture_max_menu` | `256` | The same for textures loaded in the menus |
 | `menu_supersample` | `1` | `1` draws the menus at 640x480 and halves them (sharper text); `0` draws them at half size |
-| `map` | `1` | `1` shows the stage map on the bottom screen while driving; `0` keeps the log there |
+| `map` | `1` | `1` shows the stage map and the HUD on the bottom screen while driving; `0` keeps the log there and the whole HUD on top |
 | `movies` | `0` | `1` plays the Bink videos |
 | `stretch` | `0` | `1` stretches the 4:3 picture over the whole top screen |
 | `vsync` | `0` | `1` starts each frame on the screen's refresh: steadier, but the frame rate drops in steps (60, 30, 20, 15) |
@@ -148,8 +159,9 @@ docker run --rm -v "$PWD:/src" -w /src devkitpro/devkitarm \
     sh -c 'cmake --preset 3ds -DOPENCMR2_3DS_TOOLS=/path/to/tools && cmake --build --preset 3ds'
 ```
 
-CMake downloads and builds SDL3 for the 3DS (its audio, threads and files are
-used; its video is not). The results are in `build/3ds/src/`:
+CMake downloads and builds SDL3 for the 3DS (its threads, files and audio
+format conversion are used; its video and audio devices are not: the sound
+goes to the DSP through `ndsp` in `src/audio/audio_sdl.cpp`). The results are in `build/3ds/src/`:
 
 | File | |
 | --- | --- |

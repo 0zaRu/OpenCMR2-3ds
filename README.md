@@ -170,8 +170,10 @@ shows the keyboard:
 | SELECT, touch screen | | Confirm |
 
 The results after a stage, its replay and the pause menu are menus. While
-driving, the bottom screen shows a map of the stage with your car and the
-others; in the menus it shows the log.
+driving, the top screen keeps only the rev counter and the gear; the bottom
+screen shows a map of the stage with your car and the others, the stage and
+split times, position, the co-driver's pace notes and the frame rate. In the
+menus it shows the log.
 
 **Network play** (new on the 3DS, being tested) works over wifi, with other 3DS consoles and with the PC
 version on the same network: choose the game's network mode as on the PC.
