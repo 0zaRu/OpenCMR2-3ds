@@ -297,6 +297,7 @@ struct Executor : GfxExecutor {
     unsigned fpsFrames = 0;
     int textureMaxMenu = 256;
     bool supersample = false, bigFailed = false;
+    bool debugKeepBig = false, debugLinear = false;     // temporary experiments
     DVLB_s *dvlb = nullptr;
     std::vector<uint32_t> shaderCode;       // the DVLB, word-aligned
     shaderProgram_s program3D, programTL, programMin;
@@ -403,7 +404,7 @@ struct Executor : GfxExecutor {
                 Sys_Log("gfx: no VRAM for drawing the menus at full size");
             }
         }
-        if (!menu && big != NULL) {
+        if (!menu && big != NULL && !debugKeepBig) {
             Output(top);
             C3D_RenderTargetDelete(big);
             big = NULL;
@@ -411,6 +412,8 @@ struct Executor : GfxExecutor {
         if (!menu)
             bigFailed = false;
         C3D_RenderTarget *wanted = menu && big != NULL ? big : top;
+        if (debugKeepBig && big != NULL)
+            wanted = menu ? big : top;
         if (wanted != target)
             Output(wanted);
     }
@@ -595,6 +598,8 @@ struct Executor : GfxExecutor {
         if (bottom == NULL)
             Sys_Log("gfx: no VRAM for the bottom screen; the HUD stays on top");
         supersample = Platform_GetSettingInt("3ds.menu_supersample", 1) != 0;
+        debugKeepBig = Platform_GetSettingInt("3ds.debug_keep_big", 0) != 0;
+        debugLinear = Platform_GetSettingInt("3ds.debug_linear_textures", 0) != 0;
         // Before any texture takes the VRAM.
         if (supersample)
             ChooseTarget();
@@ -826,7 +831,7 @@ struct Executor : GfxExecutor {
             params.maxLevel = (u8)maxLevel;
             params.format = format;
             params.type = GPU_TEX_2D;
-            params.onVram = !inFrame;
+            params.onVram = !inFrame && !debugLinear;
             if (!C3D_TexInitWithParams(&g->tex, NULL, params)) {
                 params.onVram = false;
                 if (!C3D_TexInitWithParams(&g->tex, NULL, params)) {
