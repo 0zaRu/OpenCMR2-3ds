@@ -17,6 +17,8 @@
 namespace {
 
 GfxExecutor *s_executor;
+// Hud_SetScreen, Gfx_SetDrawScreen.
+int s_hudScreen, s_drawScreen;
 GfxDrawState s_state;
 bool s_stateDirty = true;
 GfxFrame s_frame;
@@ -141,6 +143,7 @@ void RecordDraw(int primitive, bool transformed, const void *vertices, DWORD ver
     cmd.type = GFX_CMD_DRAW;
     cmd.primitive = primitive;
     cmd.transformed = transformed;
+    cmd.screen = transformed ? (uint8_t)s_drawScreen : (uint8_t)GFX_SCREEN_MAIN;
     size_t stride = transformed ? sizeof(GfxTLVertex) : sizeof(GfxVertex);
     if (indices != NULL) {
         // Only the vertices the indices use: the game passes a whole mesh's
@@ -460,6 +463,16 @@ static void Present(BOOL vsync, bool stretch)
 }
 
 extern "C" void Gfx_Present(BOOL vsync) { Present(vsync, false); }
+extern "C" void Hud_SetScreen(int screen)
+{
+    s_hudScreen = s_executor != NULL && s_executor->HasSecondScreen() ? screen : GFX_SCREEN_MAIN;
+}
+extern "C" int Hud_GetScreen(void) { return s_hudScreen; }
+extern "C" void Gfx_SetDrawScreen(int screen) { s_drawScreen = screen; }
+
+static bool s_raceMode;
+extern "C" void Gfx_SetRaceMode(BOOL race) { s_raceMode = race != FALSE; }
+bool Gfx_IsRaceMode(void) { return s_raceMode; }
 extern "C" BOOL Gfx_CanRenderToTextures(void) { return s_executor == NULL || s_executor->RendersToTextures(); }
 extern "C" void Gfx_PresentStretched(BOOL vsync) { Present(vsync, true); }
 

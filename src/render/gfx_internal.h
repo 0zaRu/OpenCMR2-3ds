@@ -99,6 +99,7 @@ struct GfxCommand {
     // draw
     int primitive;              // list/strip types only (fans are converted)
     bool transformed;           // GfxTLVertex data
+    uint8_t screen;             // GFX_SCREEN_*: 2D for a handheld's second screen
     uint32_t firstVertexByte;   // into the frame's vertex data
     uint32_t vertexCount;
     uint32_t firstIndex;        // into the frame's indices, or ~0 for none
@@ -156,7 +157,12 @@ struct GfxExecutor {
     virtual bool ReadPixels(GfxTexture *, std::vector<uint32_t> &) { return false; }
     // Whether draws into a texture target are carried out.
     virtual bool RendersToTextures() { return true; }
+    // Whether a second screen takes HUD draws now (Hud_SetScreen).
+    virtual bool HasSecondScreen() { return false; }
 };
+
+// Gfx_SetRaceMode's value.
+bool Gfx_IsRaceMode(void);
 
 GfxExecutor *Gfx_CreateGpuExecutor(void);
 GfxExecutor *Gfx_CreateNullExecutor(void);

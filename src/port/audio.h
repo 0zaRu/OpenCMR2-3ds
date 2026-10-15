@@ -29,6 +29,8 @@ typedef struct AudioStream AudioStream;
 /* Opens the output device. channels is 1 or 2. */
 BOOL Audio_Init(int sampleRate, int channels);
 void Audio_Shutdown(void);
+/* At exit: stops the output for good (its thread, the 3DS's DSP). */
+void Audio_Quit(void);
 
 /* A buffer of 8- or 16-bit PCM. */
 AudioBuffer *Audio_CreateBuffer(DWORD sampleRate, int bits, int channels, DWORD bytes);

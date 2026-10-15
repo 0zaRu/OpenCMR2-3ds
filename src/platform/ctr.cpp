@@ -15,6 +15,7 @@
 #include <stdlib.h>
 #include <string.h>
 
+#include "platform/platform.h"
 #include "port/sys.h"
 
 namespace {
@@ -138,12 +139,17 @@ volatile unsigned s_polls;      // event polls since the last frame
 char s_breadcrumbs[8][160] = { "starting" };
 volatile unsigned s_crumbIndex;
 volatile bool s_watching;
+Thread s_watchdog;
 
 void Watchdog(void *)
 {
     u64 lastReport = 0;
     while (s_watching) {
-        svcSleepThread(1000000000LL);
+        // A second in tenths, to stop quickly (Ctr_StopWatchdog).
+        for (int i = 0; i < 10 && s_watching; i++)
+            svcSleepThread(100000000LL);
+        if (!s_watching)
+            break;
         u64 now = osGetTime();
         if (s_lastFrame != 0 && now - s_lastFrame >= 3000 && now - lastReport >= 5000) {
             unsigned newest = s_crumbIndex;
@@ -174,8 +180,19 @@ void Ctr_StartWatchdog(void)
     s_watching = true;
     s_lastFrame = osGetTime();
     // Above the game's thread (0x30), so it runs while that one is busy.
-    if (threadCreate(Watchdog, NULL, 16 * 1024, 0x28, -2, true) == NULL)
+    s_watchdog = threadCreate(Watchdog, NULL, 16 * 1024, 0x28, -2, false);
+    if (s_watchdog == NULL)
         s_watching = false;
+}
+
+void Ctr_StopWatchdog(void)
+{
+    if (s_watchdog == NULL)
+        return;
+    s_watching = false;
+    threadJoin(s_watchdog, U64_MAX);
+    threadFree(s_watchdog);
+    s_watchdog = NULL;
 }
 
 void Ctr_FrameShown(void)
@@ -217,9 +234,6 @@ void Ctr_Shutdown(void)
         free(s_socBuffer);
         s_socBuffer = NULL;
     }
-    // The DSP that SDL's audio opened (a no-op when it did not).
-    ndspChnReset(0);
-    ndspExit();
     if (s_console) {
         s_console = false;
         gfxExit();
@@ -264,6 +278,20 @@ bool Ctr_Update(void)
     s_polls++;
     if (!aptMainLoop())
         return false;
+    // [3ds] debug_quit_after = seconds: quits then, as the HOME Menu's
+    // close does (to test the exit in an emulator).
+    static u64 s_quitAt = ~0ull;
+    if (s_quitAt == ~0ull) {
+        int seconds = Platform_GetSettingInt("3ds.debug_quit_after", 0);
+        s_quitAt = seconds > 0 ? osGetTime() + (u64)seconds * 1000 : 0;
+    }
+    if (s_quitAt != 0 && osGetTime() >= s_quitAt) {
+        static bool s_logged;
+        if (!s_logged)
+            Sys_Log("debug_quit_after: quitting");
+        s_logged = true;
+        return false;
+    }
     hidScanInput();
     circlePosition circle;
     hidCircleRead(&circle);
@@ -330,6 +358,4 @@ void Ctr_SetDrivingContext(bool driving)
     if (driving != s_driving)
         Sys_Log("input: %s keys", driving ? "driving" : "menu");
     s_driving = driving;
-    if (!driving)
-        Ctr_MapHide();
 }

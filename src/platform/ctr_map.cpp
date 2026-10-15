@@ -1,9 +1,9 @@
-// The stage map on the Nintendo 3DS's bottom screen (port/stagemap.h).
+// The stage map for the Nintendo 3DS's bottom screen (port/stagemap.h).
 //
-// The CPU draws it into the screen's framebuffer, without the GPU: the route
-// once per stage into a background image, then a few times a second only
-// the cars, each over the background it covered. The log on the bottom
-// screen pauses while the map is shown ([3ds] map = 0 keeps the log).
+// The CPU draws it into an image that the renderer (render/gfx_c3d.cpp)
+// shows on the bottom screen, under the HUD it moves there: the route once
+// per stage into a background, then a few times a second the cars over it,
+// and the frame rate of the top screen.
 
 #include "platform/ctr.h"
 #include "platform/platform.h"
@@ -12,6 +12,7 @@
 #include <3ds.h>
 
 #include <math.h>
+#include <stdio.h>
 #include <string.h>
 
 #include <algorithm>
@@ -23,48 +24,48 @@ const int s_width = 320, s_height = 240;
 // Updates of the cars: one every this many frames.
 const int s_interval = 4;
 
-const uint16_t s_backColor = 0x18e4, s_routeColor = 0xc618, s_splitColor = 0xfd20, s_startColor = 0x07e0,
-               s_finishColor = 0xf800, s_playerColor = 0xffe0, s_otherColor = 0x5d1f;
+// 0xAARRGGBB, as the game's textures.
+const uint32_t s_backColor = 0xff1c2026, s_routeColor = 0xffc8c8c8, s_splitColor = 0xffffa500,
+               s_startColor = 0xff00e000, s_finishColor = 0xffff2020, s_playerColor = 0xffffff00,
+               s_otherColor = 0xff58a0ff, s_textColor = 0xffffffff;
 
 int s_enabled = -1;             // [3ds] map, read on the first update
-bool s_shown;
+bool s_active;                  // a route and cars this frame
 const void *s_route;            // the route the background was drawn for
 int s_routeCount;
-std::vector<uint16_t> s_background;     // RGB565, landscape rows
+std::vector<uint32_t> s_background;     // landscape rows
+std::vector<uint32_t> s_image;          // background, cars and the frame rate
+bool s_changed;
 // Route to screen: screen = (world - origin) * scale + offset.
 float s_originX, s_originZ, s_scale, s_offsetX, s_offsetY;
 int s_frame;
-// The rectangles the cars were drawn over, to restore.
-struct Box {
-    int x0, y0, x1, y1;
-};
-std::vector<Box> s_drawn;
+float s_fps;
 
-void Plot(int x, int y, uint16_t color)
+void Plot(std::vector<uint32_t> &image, int x, int y, uint32_t color)
 {
     if (x >= 0 && y >= 0 && x < s_width && y < s_height)
-        s_background[y * s_width + x] = color;
+        image[y * s_width + x] = color;
 }
 
-void Disc(int cx, int cy, int r, uint16_t color)
+void Disc(int cx, int cy, int r, uint32_t color)
 {
     for (int y = -r; y <= r; y++)
         for (int x = -r; x <= r; x++)
             if (x * x + y * y <= r * r)
-                Plot(cx + x, cy + y, color);
+                Plot(s_background, cx + x, cy + y, color);
 }
 
 // A line two pixels thick.
-void Line(float x0, float y0, float x1, float y1, uint16_t color)
+void Line(float x0, float y0, float x1, float y1, uint32_t color)
 {
     int steps = (int)std::max(fabsf(x1 - x0), fabsf(y1 - y0)) + 1;
     for (int i = 0; i <= steps; i++) {
         float t = (float)i / steps;
         int x = (int)lroundf(x0 + (x1 - x0) * t), y = (int)lroundf(y0 + (y1 - y0) * t);
-        Plot(x, y, color);
-        Plot(x + 1, y, color);
-        Plot(x, y + 1, color);
-        Plot(x + 1, y + 1, color);
+        Plot(s_background, x, y, color);
+        Plot(s_background, x + 1, y, color);
+        Plot(s_background, x, y + 1, color);
+        Plot(s_background, x + 1, y + 1, color);
     }
 }
 
@@ -87,7 +88,7 @@ void DrawBackground(const int *position, const unsigned char *flags, int count, 
         minZ = std::min(minZ, z);
         maxZ = std::max(maxZ, z);
     }
-    const float margin = 12;
+    const float margin = 14;
     float spanX = std::max(1.0f, maxX - minX), spanZ = std::max(1.0f, maxZ - minZ);
     s_scale = std::min((s_width - 2 * margin) / spanX, (s_height - 2 * margin) / spanZ);
     s_originX = minX;
@@ -117,57 +118,40 @@ void DrawBackground(const int *position, const unsigned char *flags, int count, 
     Disc((int)sx, (int)sy, 4, s_startColor);
 }
 
-// The bottom screen's framebuffer: 240x320, columns of the landscape picture
-// from the bottom up.
-void Put(uint8_t *fb, bool rgb565, int x, int y, uint16_t color)
+// Digits, 'f', 'p', 's' and space in a 3x5 font, rows top down, bit 2 left.
+const uint8_t *Glyph(char c)
 {
-    if (x < 0 || y < 0 || x >= s_width || y >= s_height)
-        return;
-    size_t i = (size_t)x * s_height + (s_height - 1 - y);
-    if (rgb565) {
-        ((uint16_t *)fb)[i] = color;
-    } else {
-        uint8_t *p = fb + i * 3;
-        p[0] = (uint8_t)((color & 0x1f) << 3);
-        p[1] = (uint8_t)(((color >> 5) & 0x3f) << 2);
-        p[2] = (uint8_t)((color >> 11) << 3);
+    static const uint8_t digits[10][5] = {
+        { 7, 5, 5, 5, 7 }, { 2, 6, 2, 2, 7 }, { 7, 1, 7, 4, 7 }, { 7, 1, 7, 1, 7 }, { 5, 5, 7, 1, 1 },
+        { 7, 4, 7, 1, 7 }, { 7, 4, 7, 5, 7 }, { 7, 1, 1, 1, 1 }, { 7, 5, 7, 5, 7 }, { 7, 5, 7, 1, 7 },
+    };
+    static const uint8_t f[5] = { 3, 4, 6, 4, 4 }, p[5] = { 6, 5, 6, 4, 4 }, s[5] = { 3, 4, 2, 1, 6 },
+                         dot[5] = { 0, 0, 0, 0, 2 }, blank[5] = {};
+    if (c >= '0' && c <= '9')
+        return digits[c - '0'];
+    return c == 'f' ? f : c == 'p' ? p : c == 's' ? s : c == '.' ? dot : blank;
+}
+
+// Text at (x, y), each font pixel a 2x2 square, on a dark box.
+void Text(int x, int y, const char *text)
+{
+    int length = (int)strlen(text);
+    for (int py = y - 2; py < y + 12; py++)
+        for (int px = x - 2; px < x + length * 8; px++)
+            Plot(s_image, px, py, 0xff000000);
+    for (int i = 0; text[i]; i++) {
+        const uint8_t *g = Glyph(text[i]);
+        for (int row = 0; row < 5; row++)
+            for (int col = 0; col < 3; col++)
+                if (g[row] & (4 >> col))
+                    for (int d = 0; d < 4; d++)
+                        Plot(s_image, x + i * 8 + col * 2 + (d & 1), y + row * 2 + (d >> 1), s_textColor);
     }
 }
 
-void CopyBox(uint8_t *fb, bool rgb565, const Box &b)
+void DrawImage(const int *cars, int count, int forwardX, int forwardZ)
 {
-    for (int y = std::max(0, b.y0); y <= std::min(s_height - 1, b.y1); y++)
-        for (int x = std::max(0, b.x0); x <= std::min(s_width - 1, b.x1); x++)
-            Put(fb, rgb565, x, y, s_background[y * s_width + x]);
-}
-
-uint8_t *Framebuffer(bool &rgb565)
-{
-    rgb565 = gfxGetScreenFormat(GFX_BOTTOM) == GSP_RGB565_OES;
-    return gfxGetFramebuffer(GFX_BOTTOM, GFX_LEFT, NULL, NULL);
-}
-
-void Flush(uint8_t *fb, bool rgb565)
-{
-    GSPGPU_FlushDataCache(fb, (u32)s_width * s_height * (rgb565 ? 2 : 3));
-}
-
-void ShowAll()
-{
-    bool rgb565;
-    uint8_t *fb = Framebuffer(rgb565);
-    CopyBox(fb, rgb565, { 0, 0, s_width - 1, s_height - 1 });
-    Flush(fb, rgb565);
-    s_drawn.clear();
-}
-
-void DrawCars(const int *cars, int count, int forwardX, int forwardZ)
-{
-    bool rgb565;
-    uint8_t *fb = Framebuffer(rgb565);
-    for (const Box &b : s_drawn)
-        CopyBox(fb, rgb565, b);
-    s_drawn.clear();
+    s_image = s_background;
     // The others first, so that the player's arrow stays on top.
     for (int c = count - 1; c >= 0; c--) {
         float sx, sy;
@@ -177,8 +161,7 @@ void DrawCars(const int *cars, int count, int forwardX, int forwardZ)
             for (int y = -2; y <= 2; y++)
                 for (int x = -2; x <= 2; x++)
                     if (x * x + y * y <= 5)
-                        Put(fb, rgb565, cx + x, cy + y, s_otherColor);
-            s_drawn.push_back({ cx - 2, cy - 2, cx + 2, cy + 2 });
+                        Plot(s_image, cx + x, cy + y, s_otherColor);
             continue;
         }
         // The player: an arrow along the forward axis (screen y is -z).
@@ -197,45 +180,49 @@ void DrawCars(const int *cars, int count, int forwardX, int forwardZ)
                 // Along and across the heading.
                 float a = x * fx + y * fy, b = -x * fy + y * fx;
                 if (a <= r && a >= -r * 0.6f && fabsf(b) <= (r - a) * 0.45f)
-                    Put(fb, rgb565, cx + x, cy + y, s_playerColor);
+                    Plot(s_image, cx + x, cy + y, s_playerColor);
             }
-        s_drawn.push_back({ cx - 8, cy - 8, cx + 8, cy + 8 });
     }
-    Flush(fb, rgb565);
+    // The top screen's frame rate, bottom right.
+    char text[16];
+    snprintf(text, sizeof(text), "%d fps", (int)lroundf(s_fps));
+    Text(s_width - 6 - (int)strlen(text) * 8, s_height - 14, text);
+    s_changed = true;
 }
 
 } // namespace
 
-void Ctr_MapHide(void)
+bool Ctr_MapWanted(void)
 {
-    if (!s_shown)
-        return;
-    s_shown = false;
-    s_drawn.clear();
-    Ctr_PauseConsole(false);
+    if (s_enabled < 0)
+        s_enabled = Platform_GetSettingInt("3ds.map", 1) != 0;
+    return s_enabled && Ctr_IsDriving();
+}
+
+const uint32_t *Ctr_MapImage(bool *changed)
+{
+    *changed = s_changed;
+    s_changed = false;
+    return s_active && !s_image.empty() ? s_image.data() : NULL;
+}
+
+void Ctr_MapSetFps(float fps)
+{
+    s_fps = fps;
 }
 
 extern "C" void StageMap_Update(const int *position, const unsigned char *flags, int routeCount, int stride,
                                 const int *cars, int carCount, int forwardX, int forwardZ)
 {
-    if (s_enabled < 0)
-        s_enabled = Platform_GetSettingInt("3ds.map", 1) != 0;
-    if (!s_enabled || position == NULL || routeCount < 2 || carCount < 1 || !Ctr_IsDriving()) {
-        Ctr_MapHide();
+    s_active = Ctr_MapWanted() && position != NULL && routeCount >= 2 && carCount >= 1;
+    if (!s_active)
         return;
-    }
     if (position != s_route || routeCount != s_routeCount) {
         DrawBackground(position, flags, routeCount, stride);
         s_route = position;
         s_routeCount = routeCount;
-        s_shown = false;
-    }
-    if (!s_shown) {
-        Ctr_PauseConsole(true);
-        ShowAll();
-        s_shown = true;
         s_frame = 0;
     }
     if (s_frame++ % s_interval == 0)
-        DrawCars(cars, carCount, forwardX, forwardZ);
+        DrawImage(cars, carCount, forwardX, forwardZ);
 }

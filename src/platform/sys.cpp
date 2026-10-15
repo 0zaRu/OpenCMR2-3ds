@@ -2,6 +2,8 @@
 
 #include "platform/platform.h"
 #include "platform/testing.h"
+#include "port/audio.h"
+#include "port/gfx.h"
 #include "port/net.h"
 #include "port/sys.h"
 
@@ -736,19 +738,28 @@ bool Platform_Init(int argc, char **argv)
 
 void Platform_Shutdown(void)
 {
+#ifdef __3DS__
+    // In order, so that no thread uses a service after it is closed (the
+    // console hung when the game was closed from the HOME Menu): the
+    // watchdog, the network and the sound threads stop, the GPU finishes
+    // and citro3d goes, then the services and the screens (Ctr_Shutdown).
+    // Not SDL_Quit: SDL's video and audio are not used here.
+    Ctr_StopWatchdog();
+    Net_Shutdown();
+    Audio_Quit();
+    Gfx_Shutdown();
+    Sys_Log("exit");
+    if (s_logFile != NULL) {
+        fclose(s_logFile);
+        s_logFile = NULL;
+    }
+    Ctr_Shutdown();
+#else
     Sys_DestroyWindow();
     if (s_logFile != NULL) {
         fclose(s_logFile);
         s_logFile = NULL;
     }
-#ifdef __3DS__
-    // The network thread stops before Ctr_Shutdown closes the sockets.
-    Net_Shutdown();
-    // Not SDL_Quit: closing SDL's audio device can wait forever for its
-    // thread (see Audio_Shutdown). The system ends the threads with the
-    // program; Ctr_Shutdown releases the DSP.
-    Ctr_Shutdown();
-#else
     SDL_Quit();
 #endif
 }

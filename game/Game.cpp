@@ -171,6 +171,8 @@ BOOL CGame::DispatchFrontendResourceState(void)
     // PORT: the platform maps handheld buttons to driving or menu keys. The
     // results, replay and in-race menus switch the keyboard to menu keys.
     Input_SetDrivingContext(m_unk0x00523c5c == 3 && CGameInfo::m_unk0x0059f8d0 == 0);
+    // PORT: the renderer keeps menu-only work (sharper menus) out of races.
+    Gfx_SetRaceMode(m_unk0x00523c5c == 3);
 
     switch (m_unk0x00523c5c)
     {

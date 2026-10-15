@@ -2866,7 +2866,12 @@ void RallyData_DrawAndHandleCarHUD(int car, short *pRect)
         if (CGameInfo::GetConfiguredGameMode() == 5 || CGameInfo::GetConfiguredGameMode() == 6 ||
             CGameInfo::GetConfiguredGameMode() == 7 || CGameInfo::GetConfiguredGameMode() == 0xb ||
             CGameInfo::GetConfiguredGameMode() == 0xc || (BYTE)RallyData_GetFlag25()) {
+            // PORT: not drawn where the second screen shows the port's map.
+            int screen = Hud_GetScreen();
+            if (screen == GFX_SCREEN_SECOND)
+                Hud_SetScreen(GFX_SCREEN_NONE);
             StageUI_DrawHudRouteMap(car, rect);
+            Hud_SetScreen(screen);
         }
         RallyData_DrawTargetTimeGap(car, rect);
     }
@@ -6361,8 +6366,12 @@ void RallyData_UpdateViewFrameAndDebugOverlay(CallbackStateMachine *param1, int 
         return;
     if ((BYTE)RallyDataState() == 1 && param3 != 0) {
         Dash_Draw(maskedView, g_unk0x00536ad4);
+        // PORT: on a handheld's second screen, the times, position, messages
+        // and pace notes; the rev counter and gear stay on the main one.
+        Hud_SetScreen(GFX_SCREEN_SECOND);
         RallyData_DrawAndHandleCarHUD(maskedView, (short *)g_unk0x00536ad4);
         Race_DrawPlayerCallSlots(maskedView, g_unk0x00536ad4);
+        Hud_SetScreen(GFX_SCREEN_MAIN);
     }
     if ((BYTE)RallyDataState() == 2 && param3 != 0) {
         Dash_Draw(maskedView, g_unk0x00536ad4);

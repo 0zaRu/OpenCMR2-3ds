@@ -283,6 +283,18 @@ struct Executor : GfxExecutor {
     C3D_RenderTarget *big = nullptr;
     C3D_RenderTarget *target = nullptr;     // the frame's
     int scale = 1;                          // its size over the screen's
+    int screenWidth = 400, screenHeight = 240;  // the drawn screen, landscape
+    // The bottom screen while a stage is driven ([3ds] map): the stage map
+    // (platform/ctr_map.cpp) and the HUD the game queues for it
+    // (Hud_SetScreen), at half size.
+    C3D_RenderTarget *bottom = nullptr;
+    bool bottomActive = false, bottomLinked = false, bottomStarted = false;
+    CtrTexture mapTex;
+    GfxTexture mapGfx = {};
+    std::vector<uint32_t> mapPixels;        // 512x256, the image top left
+    std::vector<size_t> hudCommands;        // this Execute's, for the bottom
+    u64 fpsStart = 0;
+    unsigned fpsFrames = 0;
     int textureMaxMenu = 256;
     bool supersample = false, bigFailed = false;
     DVLB_s *dvlb = nullptr;
@@ -383,7 +395,7 @@ struct Executor : GfxExecutor {
     // for it, and freed on a stage, whose textures then get that VRAM.
     void ChooseTarget()
     {
-        bool menu = supersample && !Ctr_IsDriving();
+        bool menu = supersample && !Gfx_IsRaceMode();
         if (menu && big == NULL && !bigFailed) {
             big = C3D_RenderTargetCreate(480, 800, GPU_RB_RGBA8, GPU_RB_DEPTH24_STENCIL8);
             if (big == NULL) {
@@ -415,6 +427,157 @@ struct Executor : GfxExecutor {
         scale = t == big ? 2 : 1;
     }
 
+    // One draw, on the target being drawn (the bottom screen's: its whole
+    // screen is the game's 640x480 for 2D).
+    void DrawOne(bool transformed, int primitive, const GfxDrawState &s, uint8_t *vertices, uint32_t vertexCount,
+                 uint16_t *indices, uint32_t indexCount, bool stretched)
+    {
+        C3D_BufInfo buf;
+        BufInfo_Init(&buf);
+        if (transformed) {
+            Bind(&programTL);
+            SetAttrInfo(&attrTL);
+            SetTLUniforms();
+            BufInfo_Add(&buf, vertices, sizeof(GfxTLVertex), 4, 0x3210);
+            if (screenWidth == 320)
+                SetViewport(0, 0, 320, 240);
+            else
+                SetPictureViewport(stretched);
+        } else {
+            Bind(minimalShader ? &programMin : &program3D);
+            SetAttrInfo(&attr3D);
+            Set3DUniforms(s);
+            BufInfo_Add(&buf, vertices, sizeof(GfxVertex), 6, 0x543210);
+            SetGameViewport(s.viewport, stretched);
+        }
+        C3D_SetBufInfo(&buf);
+        SetCommonState(s, transformed, GPU_WRITE_COLOR);
+        if (indices != NULL)
+            C3D_DrawElements(Primitive(primitive), (int)indexCount, C3D_UNSIGNED_SHORT, indices);
+        else
+            C3D_DrawArrays(Primitive(primitive), 0, (int)vertexCount);
+        drawsThisFrame++;
+        last.draws++;
+        (transformed ? last.drawsTL : last.draws3D)++;
+        last.lit += !transformed && s.lighting;
+        last.fogged += !transformed && s.fog;
+        last.maxVertices = std::max<unsigned>(last.maxVertices, vertexCount);
+        last.maxIndices = std::max<unsigned>(last.maxIndices, indexCount);
+    }
+
+    // ---- the bottom screen ----
+
+    bool HasSecondScreen() override { return bottomActive; }
+
+    // Outside a frame: the bottom screen shows the map and the HUD while a
+    // stage is driven, the log otherwise.
+    void ChooseBottom()
+    {
+        bottomActive = bottom != NULL && Gfx_IsRaceMode() && Ctr_MapWanted();
+        if (bottomActive == bottomLinked)
+            return;
+        if (bottomActive) {
+            Ctr_PauseConsole(true);
+            u32 out = gfxGetScreenFormat(GFX_BOTTOM) == GSP_RGB565_OES ? GX_TRANSFER_FMT_RGB565
+                                                                       : GX_TRANSFER_FMT_RGB8;
+            C3D_RenderTargetSetOutput(bottom, GFX_BOTTOM, GFX_LEFT,
+                                      GX_TRANSFER_FLIP_VERT(0) | GX_TRANSFER_OUT_TILED(0) | GX_TRANSFER_RAW_COPY(0) |
+                                          GX_TRANSFER_IN_FORMAT(GX_TRANSFER_FMT_RGBA8) | GX_TRANSFER_OUT_FORMAT(out) |
+                                          GX_TRANSFER_SCALING(GX_TRANSFER_SCALE_NO));
+        } else {
+            C3D_RenderTargetSetOutput(NULL, GFX_BOTTOM, GFX_LEFT, 0);
+            Ctr_PauseConsole(false);
+        }
+        bottomLinked = bottomActive;
+    }
+
+    // The map image as a texture, when it changed; false when there is none.
+    bool UpdateMapTexture()
+    {
+        bool changed;
+        const uint32_t *image = Ctr_MapImage(&changed);
+        if (image == NULL)
+            return false;
+        if (!mapTex.valid) {
+            C3D_TexInitParams params = {};
+            params.width = 512;
+            params.height = 256;
+            params.format = GPU_RGB565;
+            params.type = GPU_TEX_2D;
+            params.onVram = false;
+            if (!C3D_TexInitWithParams(&mapTex.tex, NULL, params))
+                return false;
+            C3D_TexSetFilter(&mapTex.tex, GPU_LINEAR, GPU_LINEAR);
+            mapTex.valid = true;
+            changed = true;
+            mapGfx.width = 512;
+            mapGfx.height = 256;
+            mapGfx.gpu = &mapTex;
+        }
+        if (!changed)
+            return true;
+        mapPixels.assign(512 * 256, 0xff000000);
+        for (int y = 0; y < 240; y++)
+            memcpy(&mapPixels[(size_t)y * 512], image + y * 320, 320 * sizeof(uint32_t));
+        UploadLevel(mapTex.tex, 0, mapPixels.data(), 512, 256, GPU_RGB565);
+        C3D_TexFlush(&mapTex.tex);
+        return true;
+    }
+
+    // The bottom screen's part of an Execute: on the frame's first, the map;
+    // then the HUD draws queued for it.
+    void DrawBottom(GfxFrame &frame, uint8_t *vertices, uint16_t *indices)
+    {
+        if (!bottomActive || (bottomStarted && hudCommands.empty()))
+            return;
+        C3D_FrameDrawOn(bottom);
+        screenWidth = 320;
+        screenHeight = 240;
+        int topScale = scale;
+        scale = 1;
+        sent.valid = false;
+        if (!bottomStarted) {
+            bottomStarted = true;
+            C3D_RenderTargetClear(bottom, C3D_CLEAR_ALL, 0x000000ff, 0xffffffff);
+            if (UpdateMapTexture()) {
+                GfxTLVertex *v = (GfxTLVertex *)Allocate(4 * sizeof(GfxTLVertex));
+                if (v != NULL) {
+                    float xs[4] = { 0, 640, 0, 640 }, ys[4] = { 0, 0, 480, 480 };
+                    float us[4] = { 0, 320 / 512.0f, 0, 320 / 512.0f }, vs[4] = { 0, 0, 240 / 256.0f, 240 / 256.0f };
+                    for (int i = 0; i < 4; i++)
+                        v[i] = { xs[i] - 0.5f, ys[i] - 0.5f, 0.5f, 1.0f, 0xffffffff, 0, us[i], vs[i] };
+                    GSPGPU_FlushDataCache(v, 4 * sizeof(GfxTLVertex));
+                    GfxDrawState st;
+                    st.depthTest = false;
+                    st.depthWrite = false;
+                    st.cull = GFX_CULL_NONE;
+                    st.alphaBlend = false;
+                    st.alphaTest = false;
+                    st.fog = false;
+                    st.stages[0].colorOp = GFX_TOP_SELECTARG1;
+                    st.stages[0].alphaOp = GFX_TOP_SELECTARG1;
+                    st.stages[0].texture = &mapGfx;
+                    st.stages[0].minFilter = st.stages[0].magFilter = GFX_FILTER_LINEAR;
+                    st.stages[0].address = GFX_ADDRESS_CLAMP;
+                    st.stages[1].colorOp = GFX_TOP_DISABLE;
+                    st.stages[1].texture = NULL;
+                    DrawOne(true, GFX_TRIANGLESTRIP, st, (uint8_t *)v, 4, NULL, 0, false);
+                }
+            }
+        }
+        for (size_t i : hudCommands) {
+            const GfxCommand &c = frame.commands[i];
+            DrawOne(true, c.primitive, frame.states[c.state], vertices + c.firstVertexByte, c.vertexCount,
+                    c.firstIndex != ~0u ? indices + c.firstIndex : NULL, c.indexCount, false);
+        }
+        hudCommands.clear();
+        C3D_FrameDrawOn(target);
+        screenWidth = 400;
+        screenHeight = 240;
+        scale = topScale;
+        sent.valid = false;
+    }
+
     bool Init()
     {
         if (!C3D_Init(0x400000)) {
@@ -427,6 +590,10 @@ struct Executor : GfxExecutor {
             return false;
         }
         Output(top);
+        // The bottom screen's target, before textures take the VRAM.
+        bottom = C3D_RenderTargetCreate(240, 320, GPU_RB_RGBA8, GPU_RB_DEPTH16);
+        if (bottom == NULL)
+            Sys_Log("gfx: no VRAM for the bottom screen; the HUD stays on top");
         supersample = Platform_GetSettingInt("3ds.menu_supersample", 1) != 0;
         // Before any texture takes the VRAM.
         if (supersample)
@@ -627,7 +794,7 @@ struct Executor : GfxExecutor {
 
         // Halve until it fits texture_max (texture_max_menu for the menus',
         // 1024 for the fonts); at least 8 (the PICA's minimum).
-        int limit = t->keepSize ? 1024 : Ctr_IsDriving() ? textureMax : textureMaxMenu;
+        int limit = t->keepSize ? 1024 : Gfx_IsRaceMode() ? textureMax : textureMaxMenu;
         int w = t->width, h = t->height;
         while (w > limit || h > limit) {
             w = std::max(1, w / 2);
@@ -848,8 +1015,8 @@ struct Executor : GfxExecutor {
     // A landscape rectangle as the rotated framebuffer's viewport.
     void SetViewport(float lx, float ly, float lw, float lh)
     {
-        const int fw = 240 * scale, fh = 400 * scale;
-        int x = (int)lroundf((240 - (ly + lh)) * scale), y = (int)lroundf((400 - (lx + lw)) * scale);
+        const int fw = screenHeight * scale, fh = screenWidth * scale;
+        int x = (int)lroundf((screenHeight - (ly + lh)) * scale), y = (int)lroundf((screenWidth - (lx + lw)) * scale);
         int w = (int)lroundf(lh * scale), h = (int)lroundf(lw * scale);
         // Within the framebuffer: the GPU would draw outside its memory.
         if (x < 0) { w += x; x = 0; }
@@ -1274,6 +1441,9 @@ struct Executor : GfxExecutor {
         u64 start = osGetTime(), startTicks = svcGetSystemTick();
         bool reported = false;
         ChooseTarget();
+        ChooseBottom();
+        bottomStarted = false;
+        hudCommands.clear();
         // At most one frame a refresh (60 fps); with vsync, each on one.
         if (vsync || C3D_FrameCounter(0) == lastRefresh)
             C3D_FrameSync();
@@ -1358,36 +1528,16 @@ struct Executor : GfxExecutor {
                 continue;
             if (c.firstIndex != ~0u && indices == NULL)
                 continue;
-            const GfxDrawState &s = frame.states[c.state];
-            C3D_BufInfo buf;
-            BufInfo_Init(&buf);
-            if (c.transformed) {
-                Bind(&programTL);
-                SetAttrInfo(&attrTL);
-                SetTLUniforms();
-                BufInfo_Add(&buf, vertices + c.firstVertexByte, sizeof(GfxTLVertex), 4, 0x3210);
-                SetPictureViewport(stretched);
-            } else {
-                Bind(minimalShader ? &programMin : &program3D);
-                SetAttrInfo(&attr3D);
-                Set3DUniforms(s);
-                BufInfo_Add(&buf, vertices + c.firstVertexByte, sizeof(GfxVertex), 6, 0x543210);
-                SetGameViewport(s.viewport, stretched);
+            // The HUD for the bottom screen waits for its pass (DrawBottom).
+            if (c.transformed && bottomActive && c.screen != GFX_SCREEN_MAIN) {
+                if (c.screen == GFX_SCREEN_SECOND)
+                    hudCommands.push_back((size_t)(&c - frame.commands.data()));
+                continue;
             }
-            C3D_SetBufInfo(&buf);
-            SetCommonState(s, c.transformed, GPU_WRITE_COLOR);
-            if (c.firstIndex != ~0u)
-                C3D_DrawElements(Primitive(c.primitive), (int)c.indexCount, C3D_UNSIGNED_SHORT, indices + c.firstIndex);
-            else
-                C3D_DrawArrays(Primitive(c.primitive), 0, (int)c.vertexCount);
-            drawsThisFrame++;
-            last.draws++;
-            (c.transformed ? last.drawsTL : last.draws3D)++;
-            last.lit += !c.transformed && s.lighting;
-            last.fogged += !c.transformed && s.fog;
-            last.maxVertices = std::max<unsigned>(last.maxVertices, c.vertexCount);
-            last.maxIndices = std::max<unsigned>(last.maxIndices, c.indexCount);
+            DrawOne(c.transformed, c.primitive, frame.states[c.state], vertices + c.firstVertexByte, c.vertexCount,
+                    c.firstIndex != ~0u ? indices + c.firstIndex : NULL, c.indexCount, stretched);
         }
+        DrawBottom(frame, vertices, indices);
 
         if (!present) {
             executeEnd = svcGetSystemTick();
@@ -1403,6 +1553,16 @@ struct Executor : GfxExecutor {
         u64 previous = lastFrameEnd;
         lastFrameEnd = osGetTime();
         Ctr_FrameShown();
+        // The frame rate the bottom screen shows, every half second.
+        fpsFrames++;
+        if (fpsStart == 0 || lastFrameEnd - fpsStart > 2000) {
+            fpsStart = lastFrameEnd;
+            fpsFrames = 0;
+        } else if (lastFrameEnd - fpsStart >= 500) {
+            Ctr_MapSetFps(fpsFrames * 1000.0f / (lastFrameEnd - fpsStart));
+            fpsStart = lastFrameEnd;
+            fpsFrames = 0;
+        }
         // After a load: what it took the renderer.
         if (previous != 0 && lastFrameEnd - previous > 2000 && converted > 0)
             Sys_Log("gfx: %.1f s without frames; %u textures converted in %.1f s", (lastFrameEnd - previous) / 1000.0f,

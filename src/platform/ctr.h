@@ -4,6 +4,8 @@
 #ifndef OPENCMR2_CTR_H
 #define OPENCMR2_CTR_H
 
+#include <stdint.h>
+
 // Speeds up the CPU on a New 3DS, starts the screens and the bottom-screen log.
 bool Ctr_Init(void);
 void Ctr_Shutdown(void);
@@ -27,14 +29,20 @@ bool Ctr_TakeText(int *character);
 void Ctr_SetDrivingContext(bool driving);
 bool Ctr_IsDriving(void);
 
-// The stage map (platform/ctr_map.cpp) takes the bottom screen while a stage
-// is driven: the log pauses (and is cleared when it comes back).
+// The bottom screen's log pauses while the renderer shows the stage map
+// and the HUD there (and is cleared when it comes back).
 void Ctr_PauseConsole(bool paused);
-void Ctr_MapHide(void);
+// The stage map (platform/ctr_map.cpp): whether it is wanted now ([3ds] map
+// and driving), its image (320x240 0xAARRGGBB landscape rows, NULL before a
+// route; changed: since the last call) and the frame rate it shows.
+bool Ctr_MapWanted(void);
+const uint32_t *Ctr_MapImage(bool *changed);
+void Ctr_MapSetFps(float fps);
 
 // The watchdog: when no frame has been shown for a few seconds, the log
 // gets what the game was last doing (the breadcrumb), every few seconds.
 void Ctr_StartWatchdog(void);
+void Ctr_StopWatchdog(void);
 void Ctr_FrameShown(void);
 void Ctr_Breadcrumb(const char *format, ...);
 

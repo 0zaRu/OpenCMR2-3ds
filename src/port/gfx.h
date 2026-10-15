@@ -232,6 +232,24 @@ void Gfx_GetDefaultDisplayMode(int *width, int *height);
 /* Whether drawing into textures shows (not on the 3DS: car reflections that
    render the world into a cube map are then skipped). */
 BOOL Gfx_CanRenderToTextures(void);
+/* The game is in a race (stage loading, driving, its results, replay and
+   pause) rather than the frontend menus. */
+void Gfx_SetRaceMode(BOOL race);
+
+/* A handheld's second screen (the 3DS's bottom one) for the HUD: 2D queued
+   between Hud_SetScreen(GFX_SCREEN_SECOND) and Hud_SetScreen(GFX_SCREEN_MAIN)
+   is drawn there, at half size, and GFX_SCREEN_NONE's not at all, while the
+   renderer has such a screen; otherwise everything stays on the main one.
+   The 2D layers keep the screen of what they queue and set it for their
+   draws with Gfx_SetDrawScreen. */
+enum GfxScreen {
+    GFX_SCREEN_MAIN = 0,
+    GFX_SCREEN_SECOND = 1,
+    GFX_SCREEN_NONE = 2
+};
+void Hud_SetScreen(int screen);
+int Hud_GetScreen(void);
+void Gfx_SetDrawScreen(int screen);
 
 /* A frame is BeginScene...EndScene blocks (any number) and one Present. */
 void Gfx_BeginScene(void);

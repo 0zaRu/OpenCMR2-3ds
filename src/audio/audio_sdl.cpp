@@ -9,6 +9,10 @@
 #include <stdlib.h>
 #include <string.h>
 
+#ifdef __3DS__
+#include <3ds.h>
+#endif
+
 #include <vector>
 #include <algorithm>
 
@@ -108,11 +112,9 @@ void MixBuffer(AudioBuffer *b, float *out, int frames)
     }
 }
 
-void SDLCALL Feed(void *, SDL_AudioStream *stream, int additional, int)
+// Mixes the playing buffers and movies into s_mix (frames, stereo, clamped).
+void Mix(int frames)
 {
-    int frames = additional / (int)(2 * sizeof(float));
-    if (frames <= 0)
-        return;
     s_mix.assign((size_t)frames * 2, 0.0f);
     s_movieMix.resize((size_t)frames * 2);
     SDL_LockMutex(s_lock);
@@ -129,8 +131,97 @@ void SDLCALL Feed(void *, SDL_AudioStream *stream, int additional, int)
     SDL_UnlockMutex(s_lock);
     for (float &v : s_mix)
         v = v > 1.0f ? 1.0f : (v < -1.0f ? -1.0f : v);
+}
+
+void SDLCALL Feed(void *, SDL_AudioStream *stream, int additional, int)
+{
+    int frames = additional / (int)(2 * sizeof(float));
+    if (frames <= 0)
+        return;
+    Mix(frames);
     SDL_PutAudioStreamData(stream, s_mix.data(), frames * 2 * (int)sizeof(float));
 }
+
+#ifdef __3DS__
+// The Nintendo 3DS's output: the DSP (ndsp) instead of SDL's device, whose
+// thread could not be stopped (closing it waited forever on the DSP), so the
+// console hung when the game was closed from the HOME Menu. A thread of our
+// own, on the second core when the system gives it, mixes into a ring of
+// 16-bit wave buffers and stops on Audio_Quit.
+const int s_waveFrames = 512, s_waveCount = 4;
+ndspWaveBuf s_waves[s_waveCount];
+int16_t *s_waveData;
+Thread s_mixThread;
+LightEvent s_waveDone;
+volatile bool s_mixing;
+
+void WaveDone(void *)
+{
+    LightEvent_Signal(&s_waveDone);
+}
+
+void MixThread(void *)
+{
+    while (s_mixing) {
+        for (ndspWaveBuf &w : s_waves) {
+            if (w.status != NDSP_WBUF_FREE && w.status != NDSP_WBUF_DONE)
+                continue;
+            Mix(s_waveFrames);
+            int16_t *out = w.data_pcm16;
+            for (int i = 0; i < s_waveFrames * 2; i++)
+                out[i] = (int16_t)lrintf(s_mix[i] * 32767.0f);
+            DSP_FlushDataCache(out, s_waveFrames * 2 * sizeof(int16_t));
+            ndspChnWaveBufAdd(0, &w);
+        }
+        LightEvent_Wait(&s_waveDone);
+    }
+}
+
+bool StartOutput()
+{
+    if (R_FAILED(ndspInit())) {
+        Sys_Log("audio: DSP init failed (sd:/3ds/dspfirm.cdc missing?): no sound");
+        return false;
+    }
+    s_waveData = (int16_t *)linearAlloc(s_waveFrames * s_waveCount * 2 * sizeof(int16_t));
+    if (s_waveData == NULL) {
+        ndspExit();
+        return false;
+    }
+    memset(s_waveData, 0, s_waveFrames * s_waveCount * 2 * sizeof(int16_t));
+    ndspSetOutputMode(NDSP_OUTPUT_STEREO);
+    ndspChnReset(0);
+    ndspChnSetInterp(0, NDSP_INTERP_LINEAR);
+    ndspChnSetRate(0, (float)s_outputRate);
+    ndspChnSetFormat(0, NDSP_FORMAT_STEREO_PCM16);
+    float mix[12] = { 1.0f, 1.0f };
+    ndspChnSetMix(0, mix);
+    memset(s_waves, 0, sizeof(s_waves));
+    for (int i = 0; i < s_waveCount; i++) {
+        s_waves[i].data_pcm16 = s_waveData + i * s_waveFrames * 2;
+        s_waves[i].nsamples = s_waveFrames;
+        s_waves[i].status = NDSP_WBUF_FREE;
+    }
+    LightEvent_Init(&s_waveDone, RESET_ONESHOT);
+    ndspSetCallback(WaveDone, NULL);
+    s_mixing = true;
+    // Above the game's priority; the second core when it can be had (on an
+    // Old 3DS it is the system's, lent for up to 30% of its time).
+    APT_SetAppCpuTimeLimit(30);
+    s_mixThread = threadCreate(MixThread, NULL, 32 * 1024, 0x18, 1, false);
+    if (s_mixThread == NULL)
+        s_mixThread = threadCreate(MixThread, NULL, 32 * 1024, 0x2f, -2, false);
+    if (s_mixThread == NULL) {
+        s_mixing = false;
+        ndspSetCallback(NULL, NULL);
+        ndspExit();
+        linearFree(s_waveData);
+        s_waveData = NULL;
+        return false;
+    }
+    return true;
+}
+#endif
 
 struct Lock {
     Lock() { if (s_lock) SDL_LockMutex(s_lock); }
@@ -141,6 +232,14 @@ struct Lock {
 
 extern "C" BOOL Audio_Init(int sampleRate, int channels)
 {
+#ifdef __3DS__
+    if (s_mixing)
+        return TRUE;
+    if (s_lock == NULL)
+        s_lock = SDL_CreateMutex();
+    s_outputRate = sampleRate > 0 ? sampleRate : 44100;
+    return StartOutput();
+#endif
     if (s_stream != NULL)
         return TRUE;
     if (!SDL_InitSubSystem(SDL_INIT_AUDIO)) {
@@ -164,8 +263,13 @@ extern "C" AudioStream *Audio_CreateStream(DWORD sampleRate, int channels)
     if (!sampleRate || (channels != 1 && channels != 2))
         return NULL;
     // Boot movies can precede the game's sound initialisation.
+#ifdef __3DS__
+    if (!s_mixing && !Audio_Init(44100, 2))
+        return NULL;
+#else
     if (!s_stream && !Audio_Init(44100, 2))
         return NULL;
+#endif
     SDL_AudioSpec input = { SDL_AUDIO_F32, channels, (int)sampleRate };
     SDL_AudioSpec output = { SDL_AUDIO_F32, 2, s_outputRate };
     SDL_AudioStream *converter = SDL_CreateAudioStream(&input, &output);
@@ -208,12 +312,8 @@ extern "C" void Audio_ReleaseStream(AudioStream *stream)
 extern "C" void Audio_Shutdown(void)
 {
 #ifdef __3DS__
-    // SDL's 3DS audio thread can wait forever for the DSP while its device
-    // closes (it is woken only after the close waits for it), which froze
-    // the game between the menus and a stage, where the game restarts its
-    // sound. The device stays open and silent; Audio_Init reuses it.
-    if (s_stream != NULL)
-        SDL_ClearAudioStream(s_stream);
+    // The game restarts its sound between the menus and a stage: the
+    // output keeps running (silent until buffers play); Audio_Quit stops it.
     return;
 #endif
     if (s_stream != NULL) {
@@ -221,6 +321,26 @@ extern "C" void Audio_Shutdown(void)
         s_stream = NULL;
     }
     // Buffers the game did not release keep their data until exit.
+}
+
+extern "C" void Audio_Quit(void)
+{
+#ifdef __3DS__
+    if (!s_mixing)
+        return;
+    s_mixing = false;
+    LightEvent_Signal(&s_waveDone);
+    threadJoin(s_mixThread, U64_MAX);
+    threadFree(s_mixThread);
+    s_mixThread = NULL;
+    ndspSetCallback(NULL, NULL);
+    ndspChnReset(0);
+    ndspExit();
+    linearFree(s_waveData);
+    s_waveData = NULL;
+#else
+    Audio_Shutdown();
+#endif
 }
 
 extern "C" AudioBuffer *Audio_CreateBuffer(DWORD sampleRate, int bits, int channels, DWORD bytes)

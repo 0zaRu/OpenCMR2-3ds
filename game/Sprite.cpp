@@ -18,6 +18,8 @@ Tri2D g_tri2DLayer1[TRI2D_LAYER_MAX];
 Tri2D g_tri2DLayer2[TRI2D_LAYER_MAX];
 Tri2D g_tri2DLayer3[TRI2D_LAYER_MAX];
 Tri2D g_tri2DLayer4[TRI2D_LAYER_MAX];
+// PORT: the screen (port/gfx.h) of each queued 2D triangle, per layer.
+static BYTE s_tri2DScreen[4][TRI2D_LAYER_MAX];
 int g_tri2DEnabled;
 unsigned int g_tri2DCount1;
 unsigned int g_tri2DCount2;
@@ -173,9 +175,12 @@ void Sprite_DrawLayer(int layer)
     Gfx_SetStageMagFilter(0, GFX_FILTER_POINT);
     for (n = 0; n < count; n++) {
         CGraphics::ApplyTextureStageChange(0, pSprite[n].pTexture);
+        // PORT: on the screen it was queued for (port/gfx.h).
+        Gfx_SetDrawScreen(pSprite[n].pad[0]);
         Gfx_DrawPrimitiveTL(GFX_TRIANGLESTRIP, (GfxTLVertex *)&pVert[n * 4], 4);
         CGame::m_unk0x0059ce20 += 2;
     }
+    Gfx_SetDrawScreen(GFX_SCREEN_MAIN);
     Gfx_SetStageMinFilter(0, GFX_FILTER_LINEAR);
     Gfx_SetStageMagFilter(0, GFX_FILTER_LINEAR);
     Graphics_InvalidateTextureStageCache();
@@ -278,6 +283,8 @@ void Tri2D_Queue(int *pA, int *pB, int *pC, BYTE *pColour, int layer)
             g_tri2DCount1++;
             break;
         }
+        // PORT: the screen of the HUD element being queued (port/gfx.h).
+        s_tri2DScreen[layer >= 2 && layer <= 4 ? layer - 1 : 0][n] = (BYTE)Hud_GetScreen();
     }
 }
 
@@ -289,6 +296,7 @@ void Tri2D_Queue(int *pA, int *pB, int *pC, BYTE *pColour, int layer)
     count++;                                                                    \
     p->src = *pSrc;                                                             \
     p->dst = *pDst;                                                             \
+    p->pad[0] = (BYTE)Hud_GetScreen(); /* PORT: the HUD element's screen */      \
     if (pUv2 != NULL) {                                                         \
         p->uv2 = *pUv2;                                                         \
     } else {                                                                    \
@@ -550,6 +558,23 @@ void Line2D_Draw(void)
     g_line2DCount = 0;
 }
 
+// PORT: draws a layer's triangles in runs of the same screen (port/gfx.h).
+static void Tri2D_DrawTagged(Tri2D *pLayer, unsigned int count, int layerIndex)
+{
+    unsigned int start = 0;
+    unsigned int end;
+
+    while (start < count) {
+        end = start + 1;
+        while (end < count && s_tri2DScreen[layerIndex][end] == s_tri2DScreen[layerIndex][start])
+            end++;
+        Gfx_SetDrawScreen(s_tri2DScreen[layerIndex][start]);
+        Gfx_DrawPrimitiveTL(GFX_TRIANGLELIST, (GfxTLVertex *)(pLayer + start), (end - start) * 3);
+        start = end;
+    }
+    Gfx_SetDrawScreen(GFX_SCREEN_MAIN);
+}
+
 // Draws and empties one layer (1..4) of queued 2D triangles.
 // FUNCTION: CMR2 0x004bb850
 void Tri2D_DrawLayer(int layer)
@@ -559,7 +584,7 @@ void Tri2D_DrawLayer(int layer)
     case 2:
         if (g_tri2DCount2 > 0u) {
             CGraphics::ApplyTextureStageChange(0, 0);
-            Gfx_DrawPrimitiveTL(GFX_TRIANGLELIST, (GfxTLVertex *)g_tri2DLayer2, g_tri2DCount2 * 3);
+            Tri2D_DrawTagged(g_tri2DLayer2, g_tri2DCount2, 1); // PORT: per screen
             CGame::m_unk0x0059ce20 += g_tri2DCount2;
             g_tri2DCount2 = 0;
         }
@@ -567,7 +592,7 @@ void Tri2D_DrawLayer(int layer)
     case 3:
         if (g_tri2DCount3 > 0u) {
             CGraphics::ApplyTextureStageChange(0, 0);
-            Gfx_DrawPrimitiveTL(GFX_TRIANGLELIST, (GfxTLVertex *)g_tri2DLayer3, g_tri2DCount3 * 3);
+            Tri2D_DrawTagged(g_tri2DLayer3, g_tri2DCount3, 2); // PORT: per screen
             CGame::m_unk0x0059ce20 += g_tri2DCount3;
             g_tri2DCount3 = 0;
         }
@@ -575,7 +600,7 @@ void Tri2D_DrawLayer(int layer)
     case 4:
         if (g_tri2DCount4 > 0u) {
             CGraphics::ApplyTextureStageChange(0, 0);
-            Gfx_DrawPrimitiveTL(GFX_TRIANGLELIST, (GfxTLVertex *)g_tri2DLayer4, g_tri2DCount4 * 3);
+            Tri2D_DrawTagged(g_tri2DLayer4, g_tri2DCount4, 3); // PORT: per screen
             CGame::m_unk0x0059ce20 += g_tri2DCount4;
             g_tri2DCount4 = 0;
         }
@@ -583,7 +608,7 @@ void Tri2D_DrawLayer(int layer)
     default:
         if (g_tri2DCount1 > 0u) {
             CGraphics::ApplyTextureStageChange(0, 0);
-            Gfx_DrawPrimitiveTL(GFX_TRIANGLELIST, (GfxTLVertex *)g_tri2DLayer1, g_tri2DCount1 * 3);
+            Tri2D_DrawTagged(g_tri2DLayer1, g_tri2DCount1, 0); // PORT: per screen
             CGame::m_unk0x0059ce20 += g_tri2DCount1;
             g_tri2DCount1 = 0;
         }
