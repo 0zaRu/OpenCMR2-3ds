@@ -69,6 +69,15 @@ are built in as well:
 
 ## Nintendo 3DS
 
+<p align="center">
+  <img src="docs/media/3ds-stage.gif" width="260" alt="A stage on the 3DS: the rev counter on the top screen, the map, times and position on the bottom one">
+  <img src="docs/media/3ds-stage.png" width="260" alt="Both screens on a stage">
+  <img src="docs/media/3ds-menu.png" width="260" alt="The language menu on the 3DS">
+</p>
+
+*Captured in the Azahar emulator (Old 3DS): a stage with the HUD shared by
+both screens, and a menu drawn at full resolution.*
+
 The whole game runs on the console: the same game code, built for its 32-bit
 ARM11, with its own renderer on the PICA200 GPU. It works on the Old 3DS /
 2DS and on the New 3DS / New 2DS XL (faster, with more memory).
