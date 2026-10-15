@@ -831,7 +831,9 @@ struct Executor : GfxExecutor {
             params.maxLevel = (u8)maxLevel;
             params.format = format;
             params.type = GPU_TEX_2D;
-            params.onVram = !inFrame && !debugLinear;
+            // Not in VRAM while the menus' big target is there: textures put
+            // in VRAM then came out corrupted on the next stage (rally).
+            params.onVram = !inFrame && !debugLinear && big == NULL;
             if (!C3D_TexInitWithParams(&g->tex, NULL, params)) {
                 params.onVram = false;
                 if (!C3D_TexInitWithParams(&g->tex, NULL, params)) {
